@@ -1,0 +1,21 @@
+spring:
+  # 개발 db 설정 - docker mysql
+  # datasource:
+
+  jpa:
+    hibernate:
+      ddl-auto: update # prod 환경에서 반드시 validate or none 으로 수정
+
+    show-sql: true # jpa가 실행한 sql문 콘솔에 출력
+
+    properties:
+      hibernate:
+        format_sql: true
+        highlight_sql: true
+        use_sql_comments: true
+
+# 로그 향상
+logging:
+  level:
+    org.hibernate.orm.jdbc.bind: TRACE
+    org.hibernate.orm.jdbc.extract: TRACE

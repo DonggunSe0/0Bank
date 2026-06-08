@@ -1,0 +1,25 @@
+spring:
+  # 운영 DB 설정 - ec2 instance
+  # datasource:
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # 운영 환경에서는 db 자동 업데이트 금지
+
+    show-sql: false
+
+    properties:
+      hibernate:
+        format_sql: false
+        highlight_sql: false
+        use_sql_comments: false
+
+# 운영 환경에서는 로그 출력을 최소화
+logging:
+  level:
+    com.team10: INFO
+    org.hibernate.SQL: INFO
+    org.hibernate.orm.jdbc.bind: INFO
+    org.hibernate.orm.jdbc.extract: INFO
+    org.springframework.transaction.interceptor: INFO
+

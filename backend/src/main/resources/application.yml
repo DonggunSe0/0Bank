@@ -1,3 +1,22 @@
+server:
+  port: 8080
+
 spring:
+  config:
+    import: optional:application-secret.yml # application-secret import
   application:
     name: backend
+  profiles:
+    default: dev # 기본 프로파일 dev로 설정 -> 운영 환경에서는 prod로 변경 [ dockerfile ]
+
+  # 로그 향상
+  output:
+    ansi:
+      enabled: always
+
+  main:
+    banner-mode: console
+
+# Swagger default MediaType 지정
+springdoc:
+  default-produces-media-type: application/json;charset=UTF-8
