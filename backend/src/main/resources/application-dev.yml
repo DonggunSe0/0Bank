@@ -1,6 +1,8 @@
 spring:
-  # 개발 db 설정 - docker mysql
-  # datasource:
+  datasource:
+    url: jdbc:mysql://localhost:13306/my_project_db
+    username: app
+    password: app1234
 
   jpa:
     hibernate:
