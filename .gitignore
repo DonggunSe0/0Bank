@@ -90,3 +90,5 @@ backend/.gradle-home/
 
 **/.tfvars
 **/secrets.tf
+
+node_modules/
