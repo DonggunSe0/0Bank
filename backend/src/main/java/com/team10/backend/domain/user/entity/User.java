@@ -4,6 +4,7 @@ import com.team10.backend.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,5 +25,11 @@ public class User extends BaseEntity {
     private String name;
 
     @Column(nullable = false, length = 20)
-    private String phone;
+    private String phoneNumber;
+
+    @Column(nullable = false)
+    private LocalDate birthDate;
+
+    @Column(nullable = false)
+    private Boolean identityVerified;
 }

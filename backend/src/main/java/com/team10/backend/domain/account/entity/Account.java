@@ -28,6 +28,9 @@ public class Account extends BaseEntity {
     @Column(nullable = false, unique = true, length = 30)
     private String accountNumber;
 
+    @Column(length = 50)
+    private String nickname;
+
     @Column(nullable = false)
     private Long balance;
 

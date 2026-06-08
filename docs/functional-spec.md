@@ -366,7 +366,7 @@ Team10 Banking MVP에서 구현할 최소 핵심 기능의 범위, 사용자 흐
 | relatedAccountNumber | String | N | 상대 계좌번호 |
 | transferId | Long | N | 송금 ID |
 | type | TransactionType | Y | `DEPOSIT`, `TRANSFER_IN`, `TRANSFER_OUT` |
-| direction | String | Y | `IN`, `OUT` |
+| direction | TransactionDirection | Y | `IN`, `OUT` |
 | amount | Long | Y | 거래 금액 |
 | balanceAfter | Long | Y | 거래 후 잔액 |
 | memo | String | N | 메모 |
