@@ -5,18 +5,12 @@ import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.domain.transaction.type.TransactionType;
 import com.team10.backend.domain.transfer.entity.Transfer;
 import com.team10.backend.global.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 
 @Getter
 @Entity
@@ -44,6 +38,9 @@ public class TransactionHistory extends BaseEntity {
     private Long amount; // 거래액
 
     @Column(nullable = false)
+    private Long balanceBefore; // 거래 전 잔액
+
+    @Column(nullable = false)
     private Long balanceAfter; // 거래 후 잔액
 
     @Column(length = 30, nullable = true)
@@ -57,4 +54,80 @@ public class TransactionHistory extends BaseEntity {
 
     @Column(nullable = false)
     private LocalDateTime transactedAt; // mvp 수준에서는 createdAt 으로 대체 가능하나 추후 예약 이체 등의 기능 염두 시 필요
+
+    public static TransactionHistory createDeposit(
+            Account account,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = null;
+        history.type = TransactionType.DEPOSIT;
+        history.direction = TransactionDirection.IN;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = null;
+        history.counterpartyName = null;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
+
+    public static TransactionHistory createTransferOut(
+            Account account,
+            Transfer transfer,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String counterpartyAccountNumber,
+            String counterpartyName,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = transfer;
+        history.type = TransactionType.TRANSFER;
+        history.direction = TransactionDirection.OUT;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = counterpartyAccountNumber;
+        history.counterpartyName = counterpartyName;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
+
+    public static TransactionHistory createTransferIn(
+            Account account,
+            Transfer transfer,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String counterpartyAccountNumber,
+            String counterpartyName,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = transfer;
+        history.type = TransactionType.TRANSFER;
+        history.direction = TransactionDirection.IN;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = counterpartyAccountNumber;
+        history.counterpartyName = counterpartyName;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
+
 }

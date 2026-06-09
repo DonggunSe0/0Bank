@@ -38,4 +38,31 @@ public class Transfer extends BaseEntity {
 
     @Column(length = 255)
     private String memo;
+
+    public Transfer(Account senderAccount, Account receiverAccount, Long amount, TransferStatus status, String memo){
+        this.senderAccount = senderAccount;
+        this.receiverAccount = receiverAccount;
+        this.status = status;
+        this.amount = amount;
+        this.memo = memo;
+    }
+
+    public static Transfer success(Account senderAccount, Account receiverAccount, Long amount, String memo){
+        return new Transfer(
+                senderAccount,
+                receiverAccount,
+                amount,
+                TransferStatus.SUCCESS,
+                memo
+        );
+    }
+    public static Transfer failed(Account senderAccount, Account receiverAccount, Long amount, String memo){
+        return new Transfer(
+                senderAccount,
+                receiverAccount,
+                amount,
+                TransferStatus.FAILED,
+                memo
+        );
+    }
 }
