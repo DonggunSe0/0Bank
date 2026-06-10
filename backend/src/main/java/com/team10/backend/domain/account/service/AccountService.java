@@ -41,8 +41,8 @@ public class AccountService {
         Account account = Account.create(
                 user,
                 accountNumber,
-                request.getNickname(),
-                request.getAccountType()
+                request.nickname(),
+                request.accountType()
         );
 
         Account savedAccount = accountRepository.save(account);

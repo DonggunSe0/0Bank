@@ -66,12 +66,12 @@ class AccountServiceTest {
 
         AccountRes response = accountService.createAccount(1L, request);
 
-        assertThat(response.getId()).isEqualTo(1L);
-        assertThat(response.getNickname()).isEqualTo("생활비 계좌");
-        assertThat(response.getAccountType()).isEqualTo(AccountType.DEPOSIT);
-        assertThat(response.getBalance()).isZero();
-        assertThat(response.getStatus()).isEqualTo(AccountStatus.ACTIVE);
-        assertThat(response.getAccountNumber()).hasSize(12);
+        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.nickname()).isEqualTo("생활비 계좌");
+        assertThat(response.accountType()).isEqualTo(AccountType.DEPOSIT);
+        assertThat(response.balance()).isZero();
+        assertThat(response.status()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(response.accountNumber()).hasSize(12);
 
         verify(accountRepository).save(any(Account.class));
     }
@@ -112,11 +112,11 @@ class AccountServiceTest {
         List<AccountSummaryRes> responses = accountService.getAccounts(1L);
 
         assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(1L);
-        assertThat(responses.get(0).getAccountNumber()).isEqualTo("100200300001");
-        assertThat(responses.get(0).getNickname()).isEqualTo("생활비 계좌");
-        assertThat(responses.get(0).getBalance()).isZero();
-        assertThat(responses.get(0).getStatus()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(responses.get(0).id()).isEqualTo(1L);
+        assertThat(responses.get(0).accountNumber()).isEqualTo("100200300001");
+        assertThat(responses.get(0).nickname()).isEqualTo("생활비 계좌");
+        assertThat(responses.get(0).balance()).isZero();
+        assertThat(responses.get(0).status()).isEqualTo(AccountStatus.ACTIVE);
     }
 
     @Test
@@ -128,12 +128,12 @@ class AccountServiceTest {
 
         AccountRes response = accountService.getAccount(1L, 1L);
 
-        assertThat(response.getId()).isEqualTo(1L);
-        assertThat(response.getAccountNumber()).isEqualTo("100200300001");
-        assertThat(response.getNickname()).isEqualTo("생활비 계좌");
-        assertThat(response.getAccountType()).isEqualTo(AccountType.DEPOSIT);
-        assertThat(response.getBalance()).isZero();
-        assertThat(response.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.accountNumber()).isEqualTo("100200300001");
+        assertThat(response.nickname()).isEqualTo("생활비 계좌");
+        assertThat(response.accountType()).isEqualTo(AccountType.DEPOSIT);
+        assertThat(response.balance()).isZero();
+        assertThat(response.status()).isEqualTo(AccountStatus.ACTIVE);
     }
 
     @Test
@@ -148,10 +148,7 @@ class AccountServiceTest {
     }
 
     private AccountCreateReq createAccountCreateReq(String nickname, AccountType accountType) {
-        AccountCreateReq request = new AccountCreateReq();
-        ReflectionTestUtils.setField(request, "nickname", nickname);
-        ReflectionTestUtils.setField(request, "accountType", accountType);
-        return request;
+        return new AccountCreateReq(nickname, accountType);
     }
 
     private User createUser(Long id, Boolean identityVerified) {
