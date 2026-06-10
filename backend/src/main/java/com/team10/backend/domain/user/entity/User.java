@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -32,4 +33,31 @@ public class User extends BaseEntity {
 
     @Column(nullable = false)
     private Boolean identityVerified;
+
+    @Builder
+    private User(String email, String password, String name,
+                 String phoneNumber, LocalDate birthDate) {
+        this.email = email;
+        this.password = password;
+        this.name = name;
+        this.phoneNumber = phoneNumber;
+        this.birthDate = birthDate;
+        this.identityVerified = false;
+    }
+
+    public static User create(String email, String hashedPassword, String name,
+                              String phoneNumber, LocalDate birthDate) {
+        return User.builder()
+                .email(email)
+                .password(hashedPassword)
+                .name(name)
+                .phoneNumber(phoneNumber)
+                .birthDate(birthDate)
+                .build();
+    }
+
+    /** 본인인증 최종 완료 처리 */
+    public void completeIdentityVerification() {
+        this.identityVerified = true;
+    }
 }
