@@ -60,7 +60,7 @@
 | IDENTITY_VERIFICATION_REQUIRED | 403 | 본인인증이 필요합니다. | 계좌 개설/송금 전 인증 필요 |
 | INSUFFICIENT_BALANCE | 409 | 잔액이 부족합니다. | 송금 잔액 부족 |
 | TRANSFER_FAILED | 409 | 송금 처리에 실패했습니다. | 송금 처리 실패 |
-| TRANSACTION_HISTORY_NOT_FOUND | 404 | 거래내역을 찾을 수 없습니다. | 거래내역 없음 |
+| INVALID_PERIOD | 400 | 조회 기간이 올바르지 않습니다. | 시작일이 종료일보다 늦음 |
 | INTERNAL_SERVER_ERROR | 500 | 서버 내부 오류가 발생했습니다. | 서버 오류 |
 
 ## 4. Auth/User API
@@ -411,7 +411,7 @@ Authorization: Bearer {accessToken}
 
 ## 7. Transaction API
 
-## 7.1 거래내역 다건 조회
+## 7.1 거래내역 조회
 
 ```http
 GET /api/accounts/{accountId}/transactions
@@ -428,22 +428,20 @@ Authorization: Bearer {accessToken}
 
 | 이름 | 타입 | 필수 | 기본값 | 설명 |
 | --- | --- | --- | --- | --- |
-| userId | Long | Y | 없음 | 요청 사용자 ID, MVP 임시 파라미터 |
 | startDate | LocalDate | N | 없음 | 조회 시작일, `YYYY-MM-DD` |
 | endDate | LocalDate | N | 없음 | 조회 종료일, `YYYY-MM-DD` |
-| direction | TransactionDirection | N | 없음 | `IN`, `OUT` |
+| type | TransactionType | N | 없음 | `DEPOSIT`, `TRANSFER_IN`, `TRANSFER_OUT` |
+| direction | String | N | 없음 | `IN`, `OUT` |
 | minAmount | Long | N | 없음 | 최소 금액 |
 | maxAmount | Long | N | 없음 | 최대 금액 |
-| counterpartyName | String | N | 없음 | 거래 상대 이름, 최대 30자 |
-| page | Integer | N | 0 | 페이지 번호, 0 이상 |
-| sortDirection | Sort.Direction | N | `DESC` | `ASC`, `DESC` |
-
-> 페이지 크기는 `20`건으로 고정하며, 정렬 컬럼은 `transactedAt`만 사용한다.
+| page | Integer | N | 0 | 페이지 번호 |
+| size | Integer | N | 20 | 페이지 크기 |
+| sort | String | N | `transactedAt,desc` | 정렬 |
 
 ### Example Request
 
 ```http
-GET /api/accounts/1/transactions?userId=1&startDate=2026-06-01&endDate=2026-06-08&direction=OUT&minAmount=1000&maxAmount=100000&counterpartyName=홍길동&page=0&sortDirection=DESC
+GET /api/accounts/1/transactions?startDate=2026-06-01&endDate=2026-06-08&type=TRANSFER_OUT&page=0&size=20
 Authorization: Bearer {accessToken}
 ```
 
@@ -453,87 +451,44 @@ Authorization: Bearer {accessToken}
 {
   "content": [
     {
-      "transactionHistoryId": 3,
-      "counterpartyName": "홍길동",
+      "id": 3,
+      "accountId": 1,
+      "type": "TRANSFER_OUT",
+      "direction": "OUT",
       "amount": 50000,
       "balanceAfter": 50000,
-      "transactedAt": "2026-06-08T16:10:00",
-      "direction": "OUT"
+      "relatedAccountNumber": "100200300002",
+      "memo": "점심값",
+      "transactedAt": "2026-06-08T16:10:00"
     },
     {
-      "transactionHistoryId": 1,
-      "counterpartyName": null,
+      "id": 1,
+      "accountId": 1,
+      "type": "DEPOSIT",
+      "direction": "IN",
       "amount": 100000,
       "balanceAfter": 100000,
-      "transactedAt": "2026-06-08T16:00:00",
-      "direction": "IN"
+      "relatedAccountNumber": null,
+      "memo": "초기 입금",
+      "transactedAt": "2026-06-08T16:00:00"
     }
   ],
+  "page": 0,
   "size": 20,
-  "number": 0,
   "totalElements": 2,
   "totalPages": 1,
   "first": true,
-  "last": true,
-  "numberOfElements": 2,
-  "empty": false
+  "last": true
 }
 ```
 
 ### Error
 
 - `400 INVALID_INPUT_VALUE`
+- `400 INVALID_PERIOD`
 - `401 UNAUTHORIZED`
 - `403 ACCOUNT_ACCESS_DENIED`
-
-## 7.2 거래내역 단건 조회
-
-```http
-GET /api/accounts/{accountId}/transactions/{transactionId}
-Authorization: Bearer {accessToken}
-```
-
-### Path Parameters
-
-| 이름 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| accountId | Long | Y | 계좌 ID |
-| transactionId | Long | Y | 거래내역 ID |
-
-### Query Parameters
-
-| 이름 | 타입 | 필수 | 기본값 | 설명 |
-| --- | --- | --- | --- | --- |
-| userId | Long | Y | 없음 | 요청 사용자 ID, MVP 임시 파라미터 |
-
-### Example Request
-
-```http
-GET /api/accounts/1/transactions/3?userId=1
-Authorization: Bearer {accessToken}
-```
-
-### Response `200 OK`
-
-```json
-{
-  "transactionHistoryId": 3,
-  "type": "TRANSFER",
-  "direction": "OUT",
-  "amount": 50000,
-  "balanceAfter": 50000,
-  "counterpartyName": "홍길동",
-  "memo": "점심값",
-  "transactedAt": "2026-06-08T16:10:00"
-}
-```
-
-### Error
-
-- `400 INVALID_INPUT_VALUE`
-- `401 UNAUTHORIZED`
-- `403 ACCOUNT_ACCESS_DENIED`
-- `404 TRANSACTION_HISTORY_NOT_FOUND`
+- `404 ACCOUNT_NOT_FOUND`
 
 ## 8. 구현 순서 권장안
 
@@ -541,7 +496,7 @@ Authorization: Bearer {accessToken}
 2. User/Auth: 회원가입, 로그인, 내 정보 조회, 본인인증
 3. Account: 계좌 개설, 목록/상세 조회
 4. Transfer: 입금, 송금, 잔액 갱신 트랜잭션
-5. Transaction: 거래내역 저장/다건 조회/단건 조회/필터링
+5. Transaction: 거래내역 저장/조회/필터링
 6. Swagger 문서화와 통합 테스트
 
 ## 9. Swagger 태그 권장
@@ -552,4 +507,4 @@ Authorization: Bearer {accessToken}
 | User | 내 정보/본인인증 |
 | Account | 계좌 개설/조회 |
 | Transfer | 입금/송금 |
-| Transaction | 거래내역 다건/단건 조회 |
+| Transaction | 거래내역 조회 |

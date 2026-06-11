@@ -16,8 +16,26 @@ spring:
         highlight_sql: true
         use_sql_comments: true
 
-# 로그 향상
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+ocr:
+  google-vision-key-path: ${GCP_KEY_PATH:classpath:gcp-key.json}
+
+jwt:
+  secret: ${JWT_SECRET:moneystory-dev-secret-key-must-be-at-least-32-characters-long!}
+  access-token-expiration-seconds: 3600      # 1시간
+  refresh-token-expiration-seconds: 604800   # 7일
+
 logging:
   level:
     org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.jdbc.extract: TRACE
+    com.team10.backend.domain.user.ocr: DEBUG

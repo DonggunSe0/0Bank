@@ -24,8 +24,7 @@
 | Account | 내 계좌 상세 조회 | GET | `/api/accounts/{accountId}` | Y | accountId | account detail |
 | Transfer | 입금 | POST | `/api/transfers/deposit` | Y | accountId, amount, memo | transactionId, balanceAfter |
 | Transfer | 계좌 간 송금 | POST | `/api/transfers` | Y | senderAccountId, receiverAccountNumber, amount, memo | transferId, status, senderBalanceAfter |
-| Transaction | 거래내역 다건 조회 | GET | `/api/accounts/{accountId}/transactions` | Y | accountId, filters, page, sortDirection | transaction page |
-| Transaction | 거래내역 단건 조회 | GET | `/api/accounts/{accountId}/transactions/{transactionId}` | Y | accountId, transactionId | transaction detail |
+| Transaction | 거래내역 조회 | GET | `/api/accounts/{accountId}/transactions` | Y | accountId, filters, page, size | transaction page |
 
 ## 3. Auth API
 
@@ -298,16 +297,16 @@
 
 ## 7. Transaction API
 
-### 7.1 거래내역 다건 조회
+### 7.1 거래내역 조회
 
 | 항목 | 내용 |
 | --- | --- |
 | Method | GET |
 | URL | `/api/accounts/{accountId}/transactions` |
 | 인증 | 필요 |
-| 설명 | 본인 계좌의 거래내역을 필터링과 페이징 조건으로 조회한다. |
+| 설명 | 본인 계좌의 거래내역을 최신순으로 조회한다. |
 | 성공 Status | `200 OK` |
-| 주요 Error | `400 INVALID_INPUT_VALUE`, `403 ACCOUNT_ACCESS_DENIED` |
+| 주요 Error | `400 INVALID_INPUT_VALUE`, `400 INVALID_PERIOD`, `403 ACCOUNT_ACCESS_DENIED`, `404 ACCOUNT_NOT_FOUND` |
 
 #### Path Parameters
 
@@ -319,73 +318,35 @@
 
 | 필드 | 타입 | 필수 | 기본값 | 검증/설명 | 예시 |
 | --- | --- | --- | --- | --- | --- |
-| userId | Long | Y | 없음 | 요청 사용자 ID, MVP 임시 파라미터 | `1` |
 | startDate | LocalDate | N | 없음 | 조회 시작일 | `2026-06-01` |
 | endDate | LocalDate | N | 없음 | 조회 종료일, startDate 이상 | `2026-06-08` |
-| direction | TransactionDirection | N | 없음 | `IN`, `OUT` | `OUT` |
+| type | TransactionType | N | 없음 | `DEPOSIT`, `TRANSFER_IN`, `TRANSFER_OUT` | `TRANSFER_OUT` |
+| direction | String | N | 없음 | `IN`, `OUT` | `OUT` |
 | minAmount | Long | N | 없음 | 최소 금액 | `1000` |
 | maxAmount | Long | N | 없음 | 최대 금액, minAmount 이상 | `100000` |
-| counterpartyName | String | N | 없음 | 거래 상대 이름, 최대 30자 | `홍길동` |
 | page | Integer | N | `0` | 0 이상 | `0` |
-| sortDirection | Sort.Direction | N | `DESC` | `ASC`, `DESC` | `DESC` |
-
-> 페이지 크기는 `20`건으로 고정하며, 정렬 컬럼은 `transactedAt`만 사용한다.
+| size | Integer | N | `20` | 1 이상, 최대 100 권장 | `20` |
+| sort | String | N | `transactedAt,desc` | 정렬 조건 | `transactedAt,desc` |
 
 #### Response Body
 
 | 필드 | 타입 | 설명 | 예시 |
 | --- | --- | --- | --- |
-| content[].transactionHistoryId | Long | 거래내역 ID | `3` |
-| content[].counterpartyName | String | 거래 상대 이름 | `홍길동` |
+| content[].id | Long | 거래내역 ID | `3` |
+| content[].accountId | Long | 계좌 ID | `1` |
+| content[].type | TransactionType | 거래 유형 | `TRANSFER_OUT` |
+| content[].direction | String | 입출금 방향 | `OUT` |
 | content[].amount | Long | 거래 금액 | `50000` |
 | content[].balanceAfter | Long | 거래 후 잔액 | `50000` |
+| content[].relatedAccountNumber | String | 상대 계좌번호 | `100200300002` |
+| content[].memo | String | 메모 | `점심값` |
 | content[].transactedAt | LocalDateTime | 거래일시 | `2026-06-08T16:10:00` |
-| content[].direction | TransactionDirection | 입출금 방향 | `OUT` |
+| page | Integer | 현재 페이지 | `0` |
 | size | Integer | 페이지 크기 | `20` |
-| number | Integer | 현재 페이지 | `0` |
 | totalElements | Long | 전체 건수 | `2` |
 | totalPages | Integer | 전체 페이지 수 | `1` |
 | first | Boolean | 첫 페이지 여부 | `true` |
 | last | Boolean | 마지막 페이지 여부 | `true` |
-| numberOfElements | Integer | 현재 페이지 요소 수 | `2` |
-| empty | Boolean | 빈 페이지 여부 | `false` |
-
-### 7.2 거래내역 단건 조회
-
-| 항목 | 내용 |
-| --- | --- |
-| Method | GET |
-| URL | `/api/accounts/{accountId}/transactions/{transactionId}` |
-| 인증 | 필요 |
-| 설명 | 본인 계좌에 속한 특정 거래내역의 상세 정보를 조회한다. |
-| 성공 Status | `200 OK` |
-| 주요 Error | `400 INVALID_INPUT_VALUE`, `403 ACCOUNT_ACCESS_DENIED`, `404 TRANSACTION_HISTORY_NOT_FOUND` |
-
-#### Path Parameters
-
-| 필드 | 타입 | 필수 | 설명 | 예시 |
-| --- | --- | --- | --- | --- |
-| accountId | Long | Y | 계좌 ID | `1` |
-| transactionId | Long | Y | 거래내역 ID | `3` |
-
-#### Query Parameters
-
-| 필드 | 타입 | 필수 | 기본값 | 검증/설명 | 예시 |
-| --- | --- | --- | --- | --- | --- |
-| userId | Long | Y | 없음 | 요청 사용자 ID, MVP 임시 파라미터 | `1` |
-
-#### Response Body
-
-| 필드 | 타입 | 설명 | 예시 |
-| --- | --- | --- | --- |
-| transactionHistoryId | Long | 거래내역 ID | `3` |
-| type | TransactionType | 거래 유형 | `TRANSFER` |
-| direction | TransactionDirection | 입출금 방향 | `OUT` |
-| amount | Long | 거래 금액 | `50000` |
-| balanceAfter | Long | 거래 후 잔액 | `50000` |
-| counterpartyName | String | 거래 상대 이름 | `홍길동` |
-| memo | String | 메모 | `점심값` |
-| transactedAt | LocalDateTime | 거래일시 | `2026-06-08T16:10:00` |
 
 ## 8. Enum 정의
 
@@ -399,20 +360,13 @@
 
 ### 8.2 TransactionType
 
-| 값 | 설명 |
-| --- | --- |
-| DEPOSIT | 직접 입금 |
-| TRANSFER | 계좌 이체 |
-| PAYMENT | 결제 |
+| 값 | 방향 | 설명 |
+| --- | --- | --- |
+| DEPOSIT | IN | 직접 입금 |
+| TRANSFER_IN | IN | 송금 수취 |
+| TRANSFER_OUT | OUT | 송금 출금 |
 
-### 8.3 TransactionDirection
-
-| 값 | 설명 |
-| --- | --- |
-| IN | 입금 |
-| OUT | 출금 |
-
-### 8.4 TransferStatus
+### 8.3 TransferStatus
 
 | 값 | 설명 |
 | --- | --- |
@@ -432,10 +386,10 @@
 | IDENTITY_ALREADY_VERIFIED | 409 | 이미 본인인증이 완료되었습니다. | 본인인증 |
 | IDENTITY_VERIFICATION_FAILED | 400 | 본인인증에 실패했습니다. | 본인인증 |
 | IDENTITY_VERIFICATION_REQUIRED | 403 | 본인인증이 필요합니다. | 계좌 개설, 송금 |
-| ACCOUNT_NOT_FOUND | 404 | 계좌를 찾을 수 없습니다. | 계좌/입금/송금 |
+| ACCOUNT_NOT_FOUND | 404 | 계좌를 찾을 수 없습니다. | 계좌/입금/송금/거래내역 |
 | ACCOUNT_ACCESS_DENIED | 403 | 계좌 접근 권한이 없습니다. | 계좌/입금/송금/거래내역 |
 | ACCOUNT_NOT_ACTIVE | 409 | 활성 계좌가 아닙니다. | 입금/송금 |
 | INSUFFICIENT_BALANCE | 409 | 잔액이 부족합니다. | 송금 |
 | TRANSFER_FAILED | 409 | 송금 처리에 실패했습니다. | 송금 |
-| TRANSACTION_HISTORY_NOT_FOUND | 404 | 거래내역을 찾을 수 없습니다. | 거래내역 단건 조회 |
+| INVALID_PERIOD | 400 | 조회 기간이 올바르지 않습니다. | 거래내역 조회 |
 | INTERNAL_SERVER_ERROR | 500 | 서버 내부 오류가 발생했습니다. | 전체 |

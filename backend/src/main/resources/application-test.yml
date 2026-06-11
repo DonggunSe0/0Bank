@@ -6,3 +6,16 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: test-secret-key-for-unit-testing-only-minimum32chars
+  access-token-expiration-seconds: 3600
+  refresh-token-expiration-seconds: 604800
+
+ocr:
+  google-vision-key-path: classpath:dummy-key.json
