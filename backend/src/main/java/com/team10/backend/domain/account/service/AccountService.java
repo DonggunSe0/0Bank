@@ -1,11 +1,13 @@
 package com.team10.backend.domain.account.service;
 
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
+import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.res.AccountRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
+import com.team10.backend.domain.account.type.AccountStatus;
 import com.team10.backend.domain.account.util.AccountNumberGenerator;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.exception.BusinessException;
@@ -50,8 +52,44 @@ public class AccountService {
         return toAccountRes(savedAccount);
     }
 
+    @Transactional
+    public AccountRes updateNickname(Long userId, Long accountId, AccountNicknameUpdateReq request) {
+        Account account = accountRepository.findByIdAndUserId(accountId, userId)
+                .orElseThrow(() -> new
+                        BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (!account.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        account.updateNickname(request.nickname());
+
+        return toAccountRes(account);
+    }
+
+
+    @Transactional
+    public AccountRes closeAccount(Long userId, Long accountId) {
+        Account account = accountRepository.findByIdAndUserIdForUpdate(accountId, userId)
+                .orElseThrow(() -> new
+                        BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (!account.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        if (!account.getBalance().equals(0L)) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_BALANCE_NOT_ZERO);
+        }
+
+        account.close();
+
+        return toAccountRes(account);
+    }
+
+
     public List<AccountSummaryRes> getAccounts(Long userId) {
-        return accountRepository.findAllByUserId(userId).stream()
+        return accountRepository.findAllByUserIdAndStatusNot(userId, AccountStatus.CLOSED).stream()
                 .map(this::toAccountSummaryRes)
                 .toList();
     }

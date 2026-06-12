@@ -1,6 +1,7 @@
 package com.team10.backend.domain.account.repository;
 
 import com.team10.backend.domain.account.entity.Account;
+import com.team10.backend.domain.account.type.AccountStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -12,6 +13,8 @@ import java.util.Optional;
 public interface AccountRepository extends JpaRepository<Account, Long> {
 
     List<Account> findAllByUserId(Long userId);
+
+    List<Account> findAllByUserIdAndStatusNot(Long userId, AccountStatus status);
 
     Optional<Account> findByIdAndUserId(Long accountId, Long userId);
 
