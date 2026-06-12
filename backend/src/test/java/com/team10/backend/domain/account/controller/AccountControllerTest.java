@@ -5,12 +5,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
+import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.res.AccountRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.service.AccountService;
@@ -80,6 +82,62 @@ class AccountControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+
+
+    @Test
+    @DisplayName("계좌 별칭 수정 API는 userId, accountId, 요청 본문을 받아 계좌 상세를 반환한다")
+    void updateNickname() throws Exception {
+        AccountNicknameUpdateReq request = new AccountNicknameUpdateReq("급여 계좌");
+        AccountRes response = new AccountRes(
+                1L,
+                "100200300001",
+                "급여 계좌",
+                AccountType.DEPOSIT,
+                0L,
+                AccountStatus.ACTIVE,
+                LocalDateTime.of(2026, 6, 8, 15, 45),
+                LocalDateTime.of(2026, 6, 8, 16, 0)
+        );
+
+        when(accountService.updateNickname(eq(1L), eq(1L), any(AccountNicknameUpdateReq.class))).thenReturn(response);
+
+        mockMvc.perform(patch("/api/v1/accounts/{accountId}/nickname", 1L)
+                        .param("userId", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.nickname").value("급여 계좌"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        verify(accountService).updateNickname(eq(1L), eq(1L), any(AccountNicknameUpdateReq.class));
+    }
+
+    @Test
+    @DisplayName("계좌 해지 API는 userId와 accountId를 받아 CLOSED 상태의 계좌 상세를 반환한다")
+    void closeAccount() throws Exception {
+        AccountRes response = new AccountRes(
+                1L,
+                "100200300001",
+                "생활비 계좌",
+                AccountType.DEPOSIT,
+                0L,
+                AccountStatus.CLOSED,
+                LocalDateTime.of(2026, 6, 8, 15, 45),
+                LocalDateTime.of(2026, 6, 8, 16, 0)
+        );
+
+        when(accountService.closeAccount(1L, 1L)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/accounts/{accountId}/close", 1L)
+                        .param("userId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.status").value("CLOSED"));
+
+        verify(accountService).closeAccount(1L, 1L);
     }
 
     @Test

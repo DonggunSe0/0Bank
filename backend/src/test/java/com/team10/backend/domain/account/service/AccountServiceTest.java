@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
+import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.res.AccountRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.entity.Account;
@@ -107,7 +108,7 @@ class AccountServiceTest {
     void getAccounts() {
         Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
 
-        when(accountRepository.findAllByUserId(1L)).thenReturn(List.of(account));
+        when(accountRepository.findAllByUserIdAndStatusNot(1L, AccountStatus.CLOSED)).thenReturn(List.of(account));
 
         List<AccountSummaryRes> responses = accountService.getAccounts(1L);
 
@@ -117,6 +118,94 @@ class AccountServiceTest {
         assertThat(responses.get(0).nickname()).isEqualTo("생활비 계좌");
         assertThat(responses.get(0).balance()).isZero();
         assertThat(responses.get(0).status()).isEqualTo(AccountStatus.ACTIVE);
+    }
+
+
+
+    @Test
+    @DisplayName("사용자 ID와 계좌 ID로 내 계좌 별칭을 수정한다")
+    void updateNickname() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        AccountNicknameUpdateReq request = new AccountNicknameUpdateReq("급여 계좌");
+
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(account));
+
+        AccountRes response = accountService.updateNickname(1L, 1L, request);
+
+        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.nickname()).isEqualTo("급여 계좌");
+        assertThat(response.status()).isEqualTo(AccountStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("내 계좌가 아니거나 존재하지 않는 계좌는 별칭 수정에 실패한다")
+    void updateNicknameWithNotFoundAccount() {
+        AccountNicknameUpdateReq request = new AccountNicknameUpdateReq("급여 계좌");
+
+        when(accountRepository.findByIdAndUserId(999L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.updateNickname(1L, 999L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND);
+    }
+
+
+
+    @Test
+    @DisplayName("ACTIVE 상태가 아닌 계좌는 별칭을 수정할 수 없다")
+    void updateNicknameWithNotActiveStatus() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "status", AccountStatus.CLOSED);
+        AccountNicknameUpdateReq request = new AccountNicknameUpdateReq("급여 계좌");
+
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.updateNickname(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+    @Test
+    @DisplayName("잔액이 0원인 ACTIVE 계좌를 해지한다")
+    void closeAccount() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        AccountRes response = accountService.closeAccount(1L, 1L);
+
+        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.status()).isEqualTo(AccountStatus.CLOSED);
+    }
+
+    @Test
+    @DisplayName("ACTIVE 상태가 아닌 계좌는 해지할 수 없다")
+    void closeAccountWithNotActiveStatus() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "status", AccountStatus.CLOSED);
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+    @Test
+    @DisplayName("잔액이 0원이 아닌 계좌는 해지할 수 없다")
+    void closeAccountWithBalanceNotZero() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "balance", 1000L);
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_BALANCE_NOT_ZERO);
     }
 
     @Test

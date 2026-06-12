@@ -1,6 +1,7 @@
 package com.team10.backend.domain.account.controller;
 
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
+import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.res.AccountRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.service.AccountService;
@@ -27,6 +28,27 @@ public class AccountController {
     ) {
         AccountRes response = accountService.createAccount(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PatchMapping("/{accountId}/nickname")
+    public ResponseEntity<AccountRes> updateNickname(
+            // TODO: 인증 도메인 연동 후 @RequestParam userId를 @AuthenticationPrincipal 기반으로 교체
+            @RequestParam Long userId,
+            @PathVariable Long accountId,
+            @Valid @RequestBody AccountNicknameUpdateReq request
+    ){
+        AccountRes response = accountService.updateNickname(userId, accountId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{accountId}/close")
+    public ResponseEntity<AccountRes> closeAccount(
+            // TODO: 인증 도메인 연동 후 @RequestParam userId를 @AuthenticationPrincipal 기반으로 교체
+            @RequestParam Long userId,
+            @PathVariable Long accountId
+    ){
+        AccountRes response = accountService.closeAccount(userId, accountId);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping

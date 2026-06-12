@@ -54,6 +54,14 @@ public class Account extends BaseEntity {
         return account;
     }
 
+    public void updateNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void close() {
+        this.status = AccountStatus.CLOSED;
+    }
+
     public void deposit(Long amount) {
         this.balance += amount;
     }

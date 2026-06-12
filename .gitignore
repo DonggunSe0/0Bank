@@ -92,3 +92,6 @@ backend/.gradle-home/
 **/secrets.tf
 
 node_modules/
+
+# QueryDSL generated sources
+backend/src/main/generated/
