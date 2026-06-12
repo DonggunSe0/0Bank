@@ -61,6 +61,9 @@ public class UserProfile extends BaseEntity {
         this.ageGroup = ageGroup;
         this.region = region;
         this.occupationStatus = occupationStatus;
-        this.financialInterests = financialInterests != null ? financialInterests : new HashSet<>();
+        this.financialInterests.clear();
+        if (financialInterests != null) {
+            this.financialInterests.addAll(financialInterests);
+        }
     }
 }

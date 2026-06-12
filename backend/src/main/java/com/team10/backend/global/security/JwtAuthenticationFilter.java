@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token)) {
             try {
                 // 로그아웃 엔드포인트는 만료된 토큰도 허용
-                boolean isLogout = "/api/v1/auth/logout".equals(request.getRequestURI());
+                boolean isLogout = "/api/v1/auth/logout".equals(request.getServletPath());
                 Long userId = isLogout
                         ? jwtProvider.parseUserIdIgnoreExpiry(token)
                         : jwtProvider.parseUserId(token);
