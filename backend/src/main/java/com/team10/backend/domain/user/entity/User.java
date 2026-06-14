@@ -69,6 +69,11 @@ public class User extends BaseEntity {
         this.identityVerified = true;
     }
 
+    /** 비밀번호 변경 */
+    public void changePassword(String encodedNewPassword) {
+        this.password = encodedNewPassword;
+    }
+
     /** 회원 탈퇴 처리 */
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;

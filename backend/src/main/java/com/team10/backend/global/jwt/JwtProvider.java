@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * JWT Access Token 생성 및 파싱 컴포넌트.
@@ -19,6 +20,7 @@ import java.util.Date;
  * {
  *   "sub":   "1",           // userId (String)
  *   "email": "a@b.com",
+ *   "jti":   "uuid-v4",    // 토큰 고유 ID (블랙리스트용)
  *   "iat":   ...,
  *   "exp":   ...            // iat + 1h
  * }
@@ -61,6 +63,7 @@ public class JwtProvider {
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("email", email)
+                .id(UUID.randomUUID().toString())   // jti — 블랙리스트 식별자
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)
@@ -89,6 +92,43 @@ public class JwtProvider {
         return Long.parseLong(
                 parseClaims(token, true).getSubject()
         );
+    }
+
+    /**
+     * userId와 jti를 한 번의 파싱으로 함께 반환한다.
+     *
+     * <p>JWT 파싱은 서명 검증 + base64 디코딩을 수반하므로,
+     * userId와 jti가 모두 필요한 경우 두 번 파싱하는 대신 이 메서드를 사용한다.
+     *
+     * @param ignoreExpiry true이면 만료된 토큰도 허용 (서명만 검증)
+     * @throws JwtException 서명 불일치 또는 ignoreExpiry=false이고 만료 시
+     */
+    public TokenClaims parseTokenClaims(String token, boolean ignoreExpiry) {
+        Claims claims = parseClaims(token, ignoreExpiry);
+        return new TokenClaims(Long.parseLong(claims.getSubject()), claims.getId());
+    }
+
+    /** userId와 jti를 담는 파싱 결과 레코드. */
+    public record TokenClaims(Long userId, String jti) {}
+
+    /**
+     * 토큰에서 jti(JWT ID)를 추출한다. 만료된 토큰도 허용한다.
+     *
+     * @throws JwtException 서명 불일치 시
+     */
+    public String extractJti(String token) {
+        return parseClaims(token, true).getId();
+    }
+
+    /**
+     * 토큰의 잔여 유효 시간(초)을 반환한다. 이미 만료됐으면 0을 반환한다.
+     *
+     * @throws JwtException 서명 불일치 시
+     */
+    public long getRemainingExpirySeconds(String token) {
+        Date expiry = parseClaims(token, true).getExpiration();
+        long remaining = (expiry.getTime() - System.currentTimeMillis()) / 1000L;
+        return Math.max(remaining, 0L);
     }
 
     private Claims parseClaims(String token, boolean ignoreExpiry) {

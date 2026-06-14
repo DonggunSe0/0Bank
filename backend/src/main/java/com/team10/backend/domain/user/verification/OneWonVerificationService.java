@@ -13,12 +13,17 @@ import java.time.Duration;
  *
  * <h2>흐름</h2>
  * <pre>
- * 1. generateAndStore(verificationId) → 4자리 코드 생성 → Redis TTL 10분 저장 → 코드 반환
- * 2. verify(verificationId, inputCode) → EXPIRED / MISMATCH / MATCHED 반환
+ * 1. generateAndStore(verificationId, userId) → 하루 요청 한도 체크 → 4자리 코드 생성 → Redis TTL 10분 저장 → 코드 반환
+ * 2. verify(verificationId, inputCode) → EXPIRED / MISMATCH / MATCHED / LOCKED 반환
  *    └─ MATCHED 시 Redis 키 즉시 삭제 (재사용 방지)
  * </pre>
  *
- * <p>Redis 키: {@code identity:one-won:{verificationId}}
+ * <h2>Redis 키 전략</h2>
+ * <pre>
+ * identity:one-won:{verificationId}         → 인증 코드 (TTL 10분)
+ * identity:one-won:attempt:{verificationId} → 세션 내 실패 횟수 (TTL 10분)
+ * identity:one-won:daily:{userId}           → 하루 송금 요청 횟수 (TTL 24시간)
+ * </pre>
  */
 @Slf4j
 @Service
@@ -27,21 +32,46 @@ public class OneWonVerificationService {
 
     public enum VerifyResult { MATCHED, MISMATCH, EXPIRED, LOCKED }
 
-    private static final String KEY_PREFIX = "identity:one-won:";
+    private static final String KEY_PREFIX     = "identity:one-won:";
     private static final String ATTEMPT_PREFIX = "identity:one-won:attempt:";
-    private static final Duration TTL = Duration.ofMinutes(10);
-    private static final int MAX_ATTEMPTS = 5;
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String DAILY_PREFIX   = "identity:one-won:daily:";
+    private static final Duration TTL          = Duration.ofMinutes(10);
+    private static final Duration DAILY_TTL    = Duration.ofDays(1);
+    private static final int MAX_ATTEMPTS      = 5;
+    private static final int MAX_DAILY         = 10;
+    private static final SecureRandom RANDOM   = new SecureRandom();
 
     private final StringRedisTemplate redisTemplate;
 
     /**
-     * 4자리 인증코드를 생성하고 Redis에 저장한다 (TTL 10분).
+     * 하루 요청 한도를 확인하고 4자리 인증코드를 생성하여 Redis에 저장한다 (TTL 10분).
+     *
+     * <p>userId 기준으로 하루 최대 {@value MAX_DAILY}회 요청 가능.
+     * 한도 초과 시 {@link com.team10.backend.domain.user.exception.UserErrorCode#ONE_WON_DAILY_LIMIT_EXCEEDED} 예외를 던진다.
+     *
+     * @param verificationId 인증 세션 ID
+     * @param userId         요청 사용자 ID (하루 한도 카운팅 기준)
+     * @return 생성된 4자리 인증 코드
      */
-    public String generateAndStore(Long verificationId) {
+    public String generateAndStore(Long verificationId, Long userId) {
+        // 하루 요청 횟수 원자적 증가 후 한도 체크
+        String dailyKey = DAILY_PREFIX + userId;
+        Long daily = redisTemplate.opsForValue().increment(dailyKey);
+        if (daily == 1) {
+            // 첫 요청 시 TTL 설정 (이미 존재하는 키에는 setIfAbsent 대신 INCR==1 조건으로 설정)
+            redisTemplate.expire(dailyKey, DAILY_TTL);
+        }
+        if (daily > MAX_DAILY) {
+            redisTemplate.opsForValue().decrement(dailyKey); // 한도 초과분 되돌리기
+            log.warn("[1원 인증] 하루 요청 한도 초과 — userId={}, daily={}", userId, daily);
+            throw new com.team10.backend.global.exception.BusinessException(
+                    com.team10.backend.domain.user.exception.UserErrorCode.ONE_WON_DAILY_LIMIT_EXCEEDED);
+        }
+
         String code = String.format("%04d", RANDOM.nextInt(10000));
         redisTemplate.opsForValue().set(KEY_PREFIX + verificationId, code, TTL);
-        log.info("[1원 인증] 코드 생성 및 저장 — verificationId={}, code={}, TTL=10분", verificationId, code);
+        log.info("[1원 인증] 코드 생성 및 저장 — verificationId={}, userId={}, daily={}/{}, TTL=10분",
+                verificationId, userId, daily, MAX_DAILY);
         return code;
     }
 

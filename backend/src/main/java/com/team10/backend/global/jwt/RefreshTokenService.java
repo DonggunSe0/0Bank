@@ -56,14 +56,20 @@ public class RefreshTokenService {
     }
 
     /**
-     * Refresh Token이 Redis의 값과 일치하는지 검증한다.
+     * Refresh Token Rotation 전용 원자적 검증.
+     *
+     * <p>Redis에서 토큰을 가져오는 동시에 즉시 삭제(GETDEL)한다.
+     * 동시에 두 요청이 같은 RT로 재발급을 시도해도 하나만 성공하는 것을 보장한다.
+     *
+     * <p>이 메서드 호출 후에는 반드시 새 RT를 발급해야 한다 ({@link #issue}).
+     * 검증 실패 시 토큰이 삭제되었으므로 사용자는 재로그인이 필요하다.
      *
      * @param userId 사용자 PK
      * @param token  클라이언트가 제출한 Refresh Token
      * @return 일치 여부 (만료됐거나 불일치 시 false)
      */
-    public boolean validate(Long userId, String token) {
-        String stored = redisTemplate.opsForValue().get(KEY_PREFIX + userId);
+    public boolean validateAndConsume(Long userId, String token) {
+        String stored = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + userId);
         return token != null && token.equals(stored);
     }
 

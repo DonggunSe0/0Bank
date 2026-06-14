@@ -37,6 +37,16 @@ jwt:
   access-token-expiration-seconds: 3600      # 1시간
   refresh-token-expiration-seconds: 604800   # 7일
 
+codef:
+  client-id: ${CODEF_CLIENT_ID:b631fd83-1aab-44a1-b3bd-f861179cdf47}
+  client-secret: ${CODEF_CLIENT_SECRET:8e76891f-ff10-4a83-ba0c-ec4b2cbd8943}
+  public-key: ${CODEF_PUBLIC_KEY:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzvtHhUxMWqCSoQhLpjjPocR3/Dt2ryZx8pu6Z5jCYhkwKg5AktRXP+1VbixKh8OfVHaDhPZ8Daqpf3pi5zS/feyJZ9Nd8Qzdll6PZbl7opKbFy2QKH85aOwaMGdu6Zdq1fEXOOYTMkGBvPtGoF20lxNM0FdcZEFEFDilcfQkQ/q2mq78+ItjY6DUrIIHPYzKQh3M70cab7X6pvK0eBWIFTbtwBx5hvV0ftYZWWUxnGgK1IOjxOUqNpJrfz2YiN/NyybHXhdR/4fsLmiC2J7wymBTTC/q/4XVhLj6FM//svFigXBNDLl9uBi1LTeCiQQky+0xVy3J2KC3hBCPSSP1mQIDAQAB}  # 콘솔에서 전체 키 복사
+
+portone:
+  api-secret: ${PORTONE_API_SECRET:moneybuddy}
+  store-id: ${PORTONE_STORE_ID:store-bb65e821-eeb0-4a12-bd80-4e036a770949}
+  channel-key: ${PORTONE_CHANNEL_KEY:channel-key-bcd683d9-77a5-406d-866e-7262a8df00d0}
+
 logging:
   level:
     org.hibernate.orm.jdbc.bind: TRACE

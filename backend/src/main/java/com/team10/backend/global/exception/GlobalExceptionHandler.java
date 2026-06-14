@@ -4,35 +4,22 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * 전역 예외 처리기.
+ *
+ * <p>Spring Security 필터 체인(AuthenticationException, AccessDeniedException)에서 발생하는
+ * 예외는 DispatcherServlet 이전에 처리되므로 여기서 잡히지 않는다.
+ * 해당 예외는 {@link com.team10.backend.global.security.JwtAuthenticationEntryPoint} 와
+ * {@link com.team10.backend.global.security.JwtAccessDeniedHandler} 에서 처리한다.
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-    // Spring Security — 토큰 없음 또는 유효하지 않음 (401)
-    @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ErrorResponse> handleAuthentication(AuthenticationException e) {
-        log.warn("[SECURITY] 인증 실패: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(ErrorResponse.from(GlobalErrorCode.UNAUTHORIZED));
-    }
-
-    // Spring Security — 권한 없음 (403)
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException e) {
-        log.warn("[SECURITY] 접근 거부: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(ErrorResponse.from(GlobalErrorCode.FORBIDDEN));
-    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusiness(BusinessException e) {

@@ -1,5 +1,6 @@
 package com.team10.backend.domain.user.controller;
 
+import com.team10.backend.domain.user.dto.req.ChangePasswordReq;
 import com.team10.backend.domain.user.dto.req.ConsentUpdateReq;
 import com.team10.backend.domain.user.dto.req.OneWonStartReq;
 import com.team10.backend.domain.user.dto.req.OneWonVerifyReq;
@@ -41,6 +42,19 @@ public class UserController {
     @Operation(summary = "내 정보 조회")
     public ResponseEntity<UserRes> getMe(@AuthenticationPrincipal Long userId) {
         return ResponseEntity.ok(userService.getMe(userId));
+    }
+
+    @PatchMapping("/me/password")
+    @Operation(
+            summary = "비밀번호 변경",
+            description = "현재 비밀번호 검증 후 변경합니다. 변경 즉시 기존 Refresh Token이 무효화되어 재로그인이 필요합니다."
+    )
+    public ResponseEntity<Void> changePassword(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody ChangePasswordReq request
+    ) {
+        userService.changePassword(userId, request);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/me")

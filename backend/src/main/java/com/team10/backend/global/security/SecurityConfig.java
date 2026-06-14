@@ -1,6 +1,7 @@
 package com.team10.backend.global.security;
 
 import com.team10.backend.global.jwt.JwtProvider;
+import com.team10.backend.global.jwt.TokenBlocklistService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +26,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtProvider jwtProvider;
+    private final TokenBlocklistService tokenBlocklistService;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
 
     /** 허용할 Origin 목록. 환경변수 CORS_ALLOWED_ORIGINS로 주입, 기본값은 로컬 개발 서버. */
     @Value("${cors.allowed-origins:http://localhost:3000}")
@@ -37,7 +41,7 @@ public class SecurityConfig {
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter(jwtProvider);
+        return new JwtAuthenticationFilter(jwtProvider, tokenBlocklistService);
     }
 
     @Bean
@@ -72,6 +76,9 @@ public class SecurityConfig {
                         // H2 Console (개발용)
                         .requestMatchers("/h2-console/**").permitAll()
 
+                        // Spring 내부 에러 포워딩 — 막히면 실제 예외가 401/403으로 둔갑함
+                        .requestMatchers("/error").permitAll()
+
                         // 로그아웃은 만료 토큰도 허용 → 필터에서 직접 처리, 여기선 authenticated
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
 
@@ -82,6 +89,12 @@ public class SecurityConfig {
                 // H2 Console iframe 허용
                 .headers(headers ->
                         headers.frameOptions(frame -> frame.sameOrigin()))
+
+                // 인증/인가 예외 처리 — 필터 체인에서 직접 JSON 응답 (GlobalExceptionHandler 미적용 영역)
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint)   // 401
+                        .accessDeniedHandler(accessDeniedHandler)              // 403
+                )
 
                 // JWT 필터를 UsernamePasswordAuthenticationFilter 앞에 삽입
                 .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);

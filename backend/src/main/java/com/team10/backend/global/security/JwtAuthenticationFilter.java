@@ -1,6 +1,7 @@
 package com.team10.backend.global.security;
 
 import com.team10.backend.global.jwt.JwtProvider;
+import com.team10.backend.global.jwt.TokenBlocklistService;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,12 +26,15 @@ import java.util.List;
  *
  * <p>토큰이 없거나 유효하지 않으면 SecurityContext를 비워 두고 다음 필터로 진행한다.
  * 인증이 필요한 엔드포인트는 {@code SecurityConfig}의 permitAll/authenticated 규칙이 차단한다.
+ *
+ * <p>로그아웃된 AT는 {@link TokenBlocklistService}의 블랙리스트로 차단한다.
  */
 @Slf4j
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
+    private final TokenBlocklistService tokenBlocklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -42,10 +46,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token)) {
             try {
                 // 로그아웃 엔드포인트는 만료된 토큰도 허용
+                // parseTokenClaims()로 한 번만 파싱해 userId + jti 동시에 추출 (이중 HMAC 검증 방지)
                 boolean isLogout = "/api/v1/auth/logout".equals(request.getServletPath());
-                Long userId = isLogout
-                        ? jwtProvider.parseUserIdIgnoreExpiry(token)
-                        : jwtProvider.parseUserId(token);
+                JwtProvider.TokenClaims claims = jwtProvider.parseTokenClaims(token, isLogout);
+                Long userId = claims.userId();
+
+                // 블랙리스트 체크 — 로그아웃된 AT 차단
+                String jti = claims.jti();
+                if (tokenBlocklistService.isBlocked(jti)) {
+                    log.debug("블랙리스트 AT 요청 차단 — jti={}", jti);
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userId, null, List.of());
