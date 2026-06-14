@@ -63,7 +63,6 @@ public class OcrService {
         try {
             // ── 1단계: Google Vision OCR (트랜잭션 밖) ──────────────────────
             String rawText = visionImageClient.extractText(imageBytes);
-            log.debug("[OCR] 추출 원문 — verificationId={}\n{}", verificationId, rawText);
 
             Optional<IdCardOcrResult> parsed = idCardParser.parse(rawText);
 

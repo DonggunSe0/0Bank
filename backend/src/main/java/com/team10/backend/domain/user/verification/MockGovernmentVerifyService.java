@@ -3,7 +3,6 @@ package com.team10.backend.domain.user.verification;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -69,28 +68,34 @@ public class MockGovernmentVerifyService {
      * @throws GovernmentVerifyTimeoutException 행안부 응답 타임아웃 시
      */
     public GovernmentVerifyResult verify(String name, String residentNumber, String issueDate) {
-        log.info("[GOV-MOCK] 진위 확인 요청 — residentNumber={}, issueDate={}", residentNumber, issueDate);
+        log.info("[GOV-MOCK] 진위 확인 요청 — residentNumber={}, issueDate={}", mask(residentNumber), issueDate);
 
         // 타임아웃 시나리오: 인터럽트 가능 슬립으로 실제 네트워크 지연 모사
         if (TIMEOUT_IDS.contains(residentNumber)) {
-            log.warn("[GOV-MOCK] 타임아웃 시나리오 트리거 — residentNumber={}", residentNumber);
+            log.warn("[GOV-MOCK] 타임아웃 시나리오 트리거 — residentNumber={}", mask(residentNumber));
             simulateTimeout(residentNumber);
         }
 
         // 발급일자 불일치 시나리오
         if (ISSUE_DATE_MISMATCH_IDS.contains(residentNumber)) {
-            log.warn("[GOV-MOCK] 발급일자 불일치 — residentNumber={}", residentNumber);
+            log.warn("[GOV-MOCK] 발급일자 불일치 — residentNumber={}", mask(residentNumber));
             return GovernmentVerifyResult.ISSUE_DATE_MISMATCH;
         }
 
         // 존재하지 않는 명의 시나리오
         if (IDENTITY_NOT_FOUND_IDS.contains(residentNumber)) {
-            log.warn("[GOV-MOCK] 존재하지 않는 명의 — residentNumber={}", residentNumber);
+            log.warn("[GOV-MOCK] 존재하지 않는 명의 — residentNumber={}", mask(residentNumber));
             return GovernmentVerifyResult.IDENTITY_NOT_FOUND;
         }
 
-        log.info("[GOV-MOCK] 진위 확인 성공 — residentNumber={}", residentNumber);
+        log.info("[GOV-MOCK] 진위 확인 성공 — residentNumber={}", mask(residentNumber));
         return GovernmentVerifyResult.VERIFIED;
+    }
+
+    /** 주민등록번호 마스킹: 앞 6자리만 표시, 나머지는 * 처리 (개인정보 보호) */
+    private String mask(String residentNumber) {
+        if (residentNumber == null || residentNumber.length() < 6) return "***";
+        return residentNumber.substring(0, 6) + "-*******";
     }
 
     private void simulateTimeout(String residentNumber) {
@@ -98,7 +103,7 @@ public class MockGovernmentVerifyService {
             Thread.sleep(TIMEOUT_DELAY_MS);
             // 슬립 후에도 타임아웃으로 처리
             throw new GovernmentVerifyTimeoutException(
-                    "행안부 외부 API 응답 초과 (mock " + TIMEOUT_DELAY_MS + "ms): residentNumber=" + residentNumber
+                    "행안부 외부 API 응답 초과 (mock " + TIMEOUT_DELAY_MS + "ms): residentNumber=" + mask(residentNumber)
             );
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

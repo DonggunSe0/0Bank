@@ -1,4 +1,4 @@
-package com.team10.backend.global.portone;
+package com.team10.backend.domain.user.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

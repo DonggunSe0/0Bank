@@ -1,4 +1,4 @@
-package com.team10.backend.global.portone;
+package com.team10.backend.domain.user.client;
 
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.global.exception.BusinessException;

@@ -1,7 +1,8 @@
-package com.team10.backend.domain.user.verification;
+package com.team10.backend.domain.user.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.user.exception.UserErrorCode;
+import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.global.exception.BusinessException;
 import io.codef.api.EasyCodef;
 import io.codef.api.EasyCodefServiceType;
@@ -30,7 +31,7 @@ import java.util.Map;
  *   data.authCode   : 인증코드 (inPrintType=9이면 inPrintContent 그대로 반환)
  * </pre>
  *
- * <p>{@code @Primary}로 {@link MockBankTransferService} 대신 자동 주입된다.
+ * <p>{@code @Primary}로 {@link com.team10.backend.domain.user.verification.MockBankTransferService} 대신 자동 주입된다.
  * 운영 전환 시 {@link EasyCodefServiceType#API}로 변경하고 정식 클라이언트 정보로 교체한다.
  */
 @Slf4j

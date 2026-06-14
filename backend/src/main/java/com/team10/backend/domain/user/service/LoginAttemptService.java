@@ -5,9 +5,11 @@ import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * 로그인 실패 횟수를 Redis로 관리하는 서비스.
@@ -34,6 +36,17 @@ public class LoginAttemptService {
     private static final int MAX_FAIL_COUNT = 5;
     private static final Duration LOCK_DURATION = Duration.ofMinutes(30);
 
+    /**
+     * INCR + EXPIRE 원자적 실행 Lua 스크립트.
+     * 두 명령 사이에 서버가 죽어도 TTL이 반드시 설정된다.
+     */
+    private static final RedisScript<Long> INCR_AND_EXPIRE = RedisScript.of(
+            "local v = redis.call('INCR', KEYS[1])\n" +
+            "redis.call('EXPIRE', KEYS[1], ARGV[1])\n" +
+            "return v",
+            Long.class
+    );
+
     private final StringRedisTemplate redisTemplate;
 
     /**
@@ -59,8 +72,11 @@ public class LoginAttemptService {
      */
     public void recordFailure(String email) {
         String key = FAIL_KEY_PREFIX + email;
-        Long count = redisTemplate.opsForValue().increment(key);
-        redisTemplate.expire(key, LOCK_DURATION);
+        Long count = redisTemplate.execute(
+                INCR_AND_EXPIRE,
+                List.of(key),
+                String.valueOf(LOCK_DURATION.toSeconds())
+        );
         log.warn("[LoginAttempt] 실패 기록 — email={}, failCount={}", email, count);
     }
 
