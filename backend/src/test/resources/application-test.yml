@@ -1,0 +1,46 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
+cors:
+  allowed-origins: http://localhost:3000
+
+jwt:
+  secret: test-secret-key-must-be-at-least-32-characters-long!
+  access-token-expiration-seconds: 3600
+  refresh-token-expiration-seconds: 604800
+
+ocr:
+  google-vision-key-path: classpath:gcp-key.json
+
+portone:
+  api-secret: test-portone-secret
+  store-id: test-store-id
+  channel-key: test-channel-key
+
+codef:
+  client-id: test-client-id
+  client-secret: test-client-secret
+  public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzvtHhUxMWqCSoQhLpjjPocR3/Dt2ryZx8pu6Z5jCYhkwKg5AktRXP+1VbixKh8OfVHaDhPZ8Daqpf3pi5zS/feyJZ9Nd8Qzdll6PZbl7opKbFy2QKH85aOwaMGdu6Zdq1fEXOOYTMkGBvPtGoF20lxNM0FdcZEFEFDilcfQkQ/q2mq78+ItjY6DUrIIHPYzKQh3M70cab7X6pvK0eBWIFTbtwBx5hvV0ftYZWWUxnGgK1IOjxOUqNpJrfz2YiN/NyybHXhdR/4fsLmiC2J7wymBTTC/q/4XVhLj6FM//svFigXBNDLl9uBi1LTeCiQQky+0xVy3J2KC3hBCPSSP1mQIDAQAB
