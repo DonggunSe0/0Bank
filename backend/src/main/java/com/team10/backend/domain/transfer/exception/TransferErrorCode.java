@@ -1,4 +1,4 @@
-package com.team10.backend.domain.transfer.errorcode;
+package com.team10.backend.domain.transfer.exception;
 
 
 import com.team10.backend.global.exception.ErrorCode;

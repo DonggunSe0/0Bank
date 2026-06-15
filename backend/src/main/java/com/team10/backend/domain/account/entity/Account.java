@@ -2,7 +2,7 @@ package com.team10.backend.domain.account.entity;
 
 import com.team10.backend.domain.account.type.AccountStatus;
 import com.team10.backend.domain.account.type.AccountType;
-import com.team10.backend.domain.transfer.errorcode.TransferErrorCode;
+import com.team10.backend.domain.transfer.exception.TransferErrorCode;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.entity.BaseEntity;
 import com.team10.backend.global.exception.BusinessException;

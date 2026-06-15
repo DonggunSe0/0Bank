@@ -1,6 +1,5 @@
 package com.team10.backend.domain.transfer.event;
 
-import com.team10.backend.domain.transfer.service.TransferFailureRecorder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;

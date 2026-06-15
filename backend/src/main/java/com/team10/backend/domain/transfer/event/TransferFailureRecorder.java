@@ -1,4 +1,4 @@
-package com.team10.backend.domain.transfer.service;
+package com.team10.backend.domain.transfer.event;
 
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.transfer.entity.Transfer;
