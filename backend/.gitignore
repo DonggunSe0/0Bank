@@ -36,10 +36,4 @@ out/
 ### VS Code ###
 .vscode/
 
-### Google Cloud credentials ###
-src/main/resources/*.json
-
-### Secrets — 자격증명 포함 파일, 절대 커밋하지 않음 ###
-src/main/resources/application-dev.yml
-src/main/resources/application-prod.yml
-src/main/resources/application-secret.yml
+### Secrets — 루트 .gitignore에서 통합 관리 ###

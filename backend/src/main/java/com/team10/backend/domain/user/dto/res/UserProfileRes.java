@@ -14,9 +14,9 @@ public record UserProfileRes(
         OccupationStatus occupationStatus,
         Set<FinancialInterest> financialInterests
 ) {
-    public static UserProfileRes from(UserProfile profile) {
+    public static UserProfileRes from(Long userId, UserProfile profile) {
         return new UserProfileRes(
-                profile.getUser().getId(),
+                userId,
                 profile.getAgeGroup(),
                 profile.getRegion(),
                 profile.getOccupationStatus(),

@@ -9,6 +9,7 @@ import com.team10.backend.domain.user.dto.res.UserRes;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.service.UserService;
 import com.team10.backend.global.exception.BusinessException;
+import com.team10.backend.global.exception.GlobalErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -90,8 +91,11 @@ public class AuthController {
     @Operation(summary = "로그아웃", description = "Redis의 Refresh Token을 삭제하고 RT 쿠키를 만료시킵니다. AT는 블랙리스트에 등록됩니다.")
     public ResponseEntity<Void> logout(
             @AuthenticationPrincipal Long userId,
-            @RequestHeader("Authorization") String authHeader
+            @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
         String accessToken = authHeader.substring(7); // "Bearer " 제거
         userService.logout(userId, accessToken);
         ResponseCookie expiredCookie = expireRtCookie();

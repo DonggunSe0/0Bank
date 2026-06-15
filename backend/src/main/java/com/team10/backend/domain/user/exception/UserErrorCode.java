@@ -32,6 +32,7 @@ public enum UserErrorCode implements ErrorCode {
     IDENTITY_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "본인인증에 실패했습니다. 다시 시도해주세요."),
     IDENTITY_VERIFICATION_NAME_MISMATCH(HttpStatus.BAD_REQUEST, "본인인증 정보와 입력한 이름이 일치하지 않습니다."),
     ONE_WON_TRANSFER_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "1원 송금 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
+    CONSENT_NOT_FOUND(HttpStatus.NOT_FOUND, "약관 동의 내역을 찾을 수 없습니다."),
     ;
 
     private final HttpStatus status;

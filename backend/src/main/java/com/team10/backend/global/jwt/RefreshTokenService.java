@@ -4,9 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,6 +33,22 @@ import java.util.UUID;
 public class RefreshTokenService {
 
     private static final String KEY_PREFIX = "refresh:";
+
+    /**
+     * 값이 일치할 때만 원자적으로 삭제하는 Lua 스크립트.
+     * 불일치 시 키를 삭제하지 않으므로 잘못된 RT 제출이 올바른 RT를 무효화하지 않는다.
+     * 반환값: 1 = 일치 후 삭제, 0 = 불일치 또는 키 없음
+     */
+    private static final RedisScript<Long> GET_AND_DELETE_IF_MATCH = RedisScript.of(
+            "local stored = redis.call('GET', KEYS[1])\n" +
+            "if stored == ARGV[1] then\n" +
+            "  redis.call('DEL', KEYS[1])\n" +
+            "  return 1\n" +
+            "else\n" +
+            "  return 0\n" +
+            "end",
+            Long.class
+    );
 
     @Value("${jwt.refresh-token-expiration-seconds}")
     private long refreshTokenExpirationSeconds;
@@ -58,19 +76,22 @@ public class RefreshTokenService {
     /**
      * Refresh Token Rotation 전용 원자적 검증.
      *
-     * <p>Redis에서 토큰을 가져오는 동시에 즉시 삭제(GETDEL)한다.
-     * 동시에 두 요청이 같은 RT로 재발급을 시도해도 하나만 성공하는 것을 보장한다.
-     *
-     * <p>이 메서드 호출 후에는 반드시 새 RT를 발급해야 한다 ({@link #issue}).
-     * 검증 실패 시 토큰이 삭제되었으므로 사용자는 재로그인이 필요하다.
+     * <p>Lua 스크립트로 GET + 일치 시에만 DEL을 원자적으로 실행한다.
+     * 동시에 두 요청이 같은 RT로 재발급을 시도해도 하나만 성공한다 (race condition 방지).
+     * 불일치 토큰 제출 시 Redis의 올바른 RT는 보존된다.
      *
      * @param userId 사용자 PK
      * @param token  클라이언트가 제출한 Refresh Token
      * @return 일치 여부 (만료됐거나 불일치 시 false)
      */
     public boolean validateAndConsume(Long userId, String token) {
-        String stored = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + userId);
-        return token != null && token.equals(stored);
+        if (token == null) return false;
+        Long result = redisTemplate.execute(
+                GET_AND_DELETE_IF_MATCH,
+                List.of(KEY_PREFIX + userId),
+                token
+        );
+        return Long.valueOf(1L).equals(result);
     }
 
     /**

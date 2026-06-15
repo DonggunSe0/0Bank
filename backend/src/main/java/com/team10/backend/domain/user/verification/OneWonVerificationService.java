@@ -1,5 +1,8 @@
 package com.team10.backend.domain.user.verification;
 
+import com.team10.backend.domain.user.exception.UserErrorCode;
+import com.team10.backend.global.exception.BusinessException;
+import com.team10.backend.global.exception.GlobalErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -86,14 +89,11 @@ public class OneWonVerificationService {
                 String.valueOf(DAILY_TTL.toSeconds())
         );
         if (daily == null) {
-            throw new com.team10.backend.global.exception.BusinessException(
-                    com.team10.backend.global.exception.GlobalErrorCode.INTERNAL_SERVER_ERROR);
+            throw new BusinessException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
         }
         if (daily > MAX_DAILY) {
-            redisTemplate.opsForValue().decrement(dailyKey); // 한도 초과분 되돌리기
             log.warn("[1원 인증] 하루 요청 한도 초과 — userId={}, daily={}", userId, daily);
-            throw new com.team10.backend.global.exception.BusinessException(
-                    com.team10.backend.domain.user.exception.UserErrorCode.ONE_WON_DAILY_LIMIT_EXCEEDED);
+            throw new BusinessException(UserErrorCode.ONE_WON_DAILY_LIMIT_EXCEEDED);
         }
 
         String code = String.format("%04d", RANDOM.nextInt(10000));
@@ -113,6 +113,15 @@ public class OneWonVerificationService {
      *   <li>코드 일치 → Redis 키 삭제 후 {@link VerifyResult#MATCHED}</li>
      * </ul>
      */
+    /**
+     * 송금 실패 시 호출 — Redis에 저장된 인증 코드를 삭제한다.
+     * daily 카운터는 유지되므로 다음 재시도 시 카운터가 추가 소모된다.
+     */
+    public void deleteCode(Long verificationId) {
+        redisTemplate.delete(KEY_PREFIX + verificationId);
+        log.warn("[1원 인증] 송금 실패로 코드 삭제 — verificationId={}", verificationId);
+    }
+
     public VerifyResult verify(Long verificationId, String inputCode) {
         String key = KEY_PREFIX + verificationId;
         String attemptKey = ATTEMPT_PREFIX + verificationId;

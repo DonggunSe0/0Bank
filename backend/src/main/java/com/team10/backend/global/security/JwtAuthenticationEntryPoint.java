@@ -20,15 +20,14 @@ import java.nio.charset.StandardCharsets;
  * <p>JWT 토큰이 없거나 유효하지 않을 때 스프링 시큐리티 필터 체인에서 직접 호출된다.
  * DispatcherServlet까지 가지 않으므로 GlobalExceptionHandler로는 처리할 수 없다.
  *
- * <p>ObjectMapper를 DI받지 않고 static 인스턴스를 사용한다.
- * Security 컨텍스트 초기화가 JacksonAutoConfiguration보다 먼저 실행되어
- * ObjectMapper 빈 주입 타이밍이 엇갈리는 문제를 방지하기 위함이다.
+ * <p>ErrorResponse는 String 필드만 포함하므로 JavaTimeModule 불필요 —
+ * Spring Boot 4.x (Jackson 3.x) 빈과의 버전 충돌을 피해 로컬 인스턴스를 사용한다.
  */
 @Slf4j
 @Component
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Override
     public void commence(
@@ -43,6 +42,6 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write(objectMapper.writeValueAsString(body));
+        response.getWriter().write(OBJECT_MAPPER.writeValueAsString(body));
     }
 }

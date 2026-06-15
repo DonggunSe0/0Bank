@@ -9,6 +9,7 @@ import com.team10.backend.domain.user.dto.res.OcrAcceptedRes;
 import com.team10.backend.domain.user.dto.res.OneWonStartRes;
 import com.team10.backend.domain.user.dto.res.OneWonVerifyRes;
 import com.team10.backend.domain.user.dto.res.UserRes;
+import com.team10.backend.domain.user.service.IdentityVerificationService;
 import com.team10.backend.domain.user.service.UserConsentService;
 import com.team10.backend.domain.user.service.UserProfileService;
 import com.team10.backend.domain.user.service.UserService;
@@ -35,6 +36,7 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final IdentityVerificationService identityVerificationService;
     private final UserConsentService userConsentService;
     private final UserProfileService userProfileService;
 
@@ -122,7 +124,7 @@ public class UserController {
             @Parameter(description = "신분증 이미지 (jpg/png, 최대 10MB)")
             @RequestPart("idCardImage") MultipartFile idCardImage
     ) {
-        OcrAcceptedRes response = userService.submitIdCardOcr(userId, idCardImage);
+        OcrAcceptedRes response = identityVerificationService.submitIdCardOcr(userId, idCardImage);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
@@ -136,7 +138,7 @@ public class UserController {
             @Valid @RequestBody OneWonStartReq request
     ) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(userService.startOneWonVerification(userId, request));
+                .body(identityVerificationService.startOneWonVerification(userId, request));
     }
 
     @PostMapping("/me/identity-verification/one-won/verify")
@@ -148,6 +150,6 @@ public class UserController {
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody OneWonVerifyReq request
     ) {
-        return ResponseEntity.ok(userService.verifyOneWonCode(userId, request));
+        return ResponseEntity.ok(identityVerificationService.verifyOneWonCode(userId, request));
     }
 }

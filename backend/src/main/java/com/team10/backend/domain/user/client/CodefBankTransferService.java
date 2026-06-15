@@ -14,6 +14,10 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 
+// NOTE: easycodef-java 라이브러리가 Jackson 2.x(com.fasterxml)에 의존하므로
+//       응답 파싱도 동일 버전의 ObjectMapper를 로컬 인스턴스로 사용한다.
+//       Spring Boot 4.x가 자동 등록하는 ObjectMapper는 Jackson 3.x(tools.jackson)라 주입 불가.
+
 /**
  * CODEF API 기반 1원 계좌인증 서비스.
  *
@@ -43,8 +47,9 @@ public class CodefBankTransferService implements BankTransferService {
     /** inPrintType=9: 고객사 직접 입력 — inPrintContent에 지정한 코드를 입금자명으로 사용 */
     private static final String IN_PRINT_TYPE_CUSTOM = "9";
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final EasyCodef easyCodef;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CodefBankTransferService(
             @Value("${codef.client-id}") String clientId,
@@ -82,8 +87,14 @@ public class CodefBankTransferService implements BankTransferService {
 
             log.debug("[CODEF] 1원 이체 응답 — {}", response);
 
-            Map<?, ?> responseMap = objectMapper.readValue(response, Map.class);
+            Map<?, ?> responseMap = OBJECT_MAPPER.readValue(response, Map.class);
+            if (responseMap == null) {
+                throw new BusinessException(UserErrorCode.ONE_WON_TRANSFER_FAILED);
+            }
             Map<?, ?> result = (Map<?, ?>) responseMap.get("result");
+            if (result == null) {
+                throw new BusinessException(UserErrorCode.ONE_WON_TRANSFER_FAILED);
+            }
             String code = (String) result.get("code");
 
             if (!"CF-00000".equals(code)) {

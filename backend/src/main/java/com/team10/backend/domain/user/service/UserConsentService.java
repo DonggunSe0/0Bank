@@ -54,7 +54,7 @@ public class UserConsentService {
     public ConsentRes updateMarketing(Long userId, ConsentUpdateReq request) {
         UserConsent consent = userConsentRepository
                 .findByUserIdAndTermsType(userId, TermsType.MARKETING)
-                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(UserErrorCode.CONSENT_NOT_FOUND));
         consent.update(request.marketingAgreed());
         return ConsentRes.from(consent);
     }

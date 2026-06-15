@@ -37,13 +37,13 @@ public class UserProfileService {
                 request.financialInterests()
         );
 
-        return UserProfileRes.from(userProfileRepository.save(profile));
+        return UserProfileRes.from(userId, userProfileRepository.save(profile));
     }
 
     public UserProfileRes get(Long userId) {
         UserProfile profile = userProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.PROFILE_NOT_FOUND));
-        return UserProfileRes.from(profile);
+        return UserProfileRes.from(userId, profile);
     }
 
     @Transactional
@@ -58,6 +58,6 @@ public class UserProfileService {
                 request.financialInterests()
         );
 
-        return UserProfileRes.from(profile);
+        return UserProfileRes.from(userId, profile);
     }
 }
