@@ -113,16 +113,16 @@ public class UserService {
                     return new BusinessException(UserErrorCode.INVALID_CREDENTIALS);
                 });
 
-        // 계정 상태 검증 — 비밀번호 검증 전에 수행하여 휴면/탈퇴 계정에 실패 카운터가 쌓이지 않도록 함
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            loginAttemptService.recordFailure(request.email());
+            throw new BusinessException(UserErrorCode.INVALID_CREDENTIALS);
+        }
+
+        // 계정 상태 검증은 비밀번호 검증이 완료된 후에 수행하여 정보 노출을 방지합니다.
         switch (user.getStatus()) {
             case DORMANT   -> throw new BusinessException(UserErrorCode.DORMANT_ACCOUNT);
             case WITHDRAWN -> throw new BusinessException(UserErrorCode.WITHDRAWN_ACCOUNT);
             default        -> { /* ACTIVE — 정상 진행 */ }
-        }
-
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            loginAttemptService.recordFailure(request.email());
-            throw new BusinessException(UserErrorCode.INVALID_CREDENTIALS);
         }
 
         loginAttemptService.clearFailures(request.email());
