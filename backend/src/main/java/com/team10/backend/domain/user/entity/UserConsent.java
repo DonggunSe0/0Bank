@@ -36,11 +36,7 @@ public class UserConsent extends BaseEntity {
         consent.user = user;
         consent.termsType = termsType;
         consent.agreed = agreed;
-<<<<<<< HEAD
-        consent.agreedAt = agreed ? LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul")) : null;
-=======
         consent.agreedAt = agreed ? LocalDateTime.now(ZoneId.of("Asia/Seoul")) : null;
->>>>>>> 983cac6 (fix: pr 리뷰 반영 — 보안 수정 및 안정성 개선)
         return consent;
     }
 
