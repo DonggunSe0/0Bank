@@ -7,7 +7,7 @@ import com.team10.backend.domain.transaction.repository.TransactionHistoryReposi
 import com.team10.backend.domain.transfer.dto.res.DepositRes;
 import com.team10.backend.domain.transfer.dto.res.TransferRes;
 import com.team10.backend.domain.transfer.entity.Transfer;
-import com.team10.backend.domain.transfer.errorcode.TransferErrorCode;
+import com.team10.backend.domain.transfer.exception.TransferErrorCode;
 import com.team10.backend.domain.transfer.event.TransferFailedEvent;
 import com.team10.backend.domain.transfer.repository.TransferRepository;
 import com.team10.backend.global.exception.BusinessException;
@@ -64,17 +64,7 @@ public class TransferService {
 
         TransactionHistory savedHistory = transactionHistoryRepository.save(transactionHistory);
 
-        // DepositRes 반환
-        return new DepositRes(
-                savedHistory.getId(),           // 거래내역ID
-                account.getId(),                // 입금 대상 계좌ID
-                savedHistory.getType(),         // 거래유형 (입금)
-                savedHistory.getAmount(),       // 입금액
-                savedHistory.getBalanceBefore(),// 입금 전 잔액
-                savedHistory.getBalanceAfter(), // 입금 후 잔액
-                savedHistory.getMemo(),         // 입금 메모
-                savedHistory.getTransactedAt()  // 거래 발생 시각
-        );
+        return DepositRes.from(savedHistory);
     }
 
     @Transactional
@@ -146,18 +136,7 @@ public class TransferService {
         transactionHistoryRepository.save(senderHistory);
         transactionHistoryRepository.save(receiverHistory);
 
-        // TransferRes 반환
-        return new TransferRes(
-                transfer.getId(),
-                transfer.getStatus(),
-                senderAccount.getId(),
-                senderAccount.getAccountNumber(),
-                receiverAccount.getAccountNumber(),
-                amount,
-                senderAccount.getBalance(),
-                memo,
-                transferredAt
-        );
+        return TransferRes.from(transfer, transferredAt);
     }
 
     private LockedTransferAccounts lockTransferAccounts(
