@@ -1,9 +1,4 @@
 spring:
-  datasource:
-    url: jdbc:mysql://localhost:13306/my_project_db
-    username: app
-    password: app1234
-
   jpa:
     hibernate:
       ddl-auto: update # prod 환경에서 반드시 validate or none 으로 수정
@@ -21,34 +16,13 @@ spring:
       max-file-size: 10MB
       max-request-size: 11MB
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
-
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
-
-ocr:
-  google-vision-key-path: ${GCP_KEY_PATH:classpath:gcp-key.json}
-
-jwt:
-  secret: ${JWT_SECRET:moneystory-dev-secret-key-must-be-at-least-32-characters-long!}
-  access-token-expiration-seconds: 3600      # 1시간
-  refresh-token-expiration-seconds: 604800   # 7일
-
-codef:
-  client-id: ${CODEF_CLIENT_ID}
-  client-secret: ${CODEF_CLIENT_SECRET}
-  public-key: ${CODEF_PUBLIC_KEY}
-
-portone:
-  api-secret: ${PORTONE_API_SECRET}
-  store-id: ${PORTONE_STORE_ID}
-  channel-key: ${PORTONE_CHANNEL_KEY}
 
 logging:
   level:
     org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.jdbc.extract: TRACE
     com.team10.backend.domain.user.ocr: DEBUG
+  file:
+    name: logs/app.log

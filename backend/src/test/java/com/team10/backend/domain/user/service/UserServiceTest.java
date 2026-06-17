@@ -419,10 +419,26 @@ class UserServiceTest {
             when(passwordEncoder.matches("OldPass1!", "encoded_password")).thenReturn(true);
             when(passwordEncoder.encode("NewPass1!")).thenReturn("new_encoded");
 
-            userService.changePassword(1L, req);
+            userService.changePassword(1L, req, null);
 
             assertThat(activeUser.getPassword()).isEqualTo("new_encoded");
             verify(refreshTokenService).delete(1L);
+        }
+
+        @Test
+        @DisplayName("AT 블랙리스트 등록 — Authorization 헤더 전달 시")
+        void blacklistsAccessToken() {
+            ChangePasswordReq req = new ChangePasswordReq("OldPass1!", "NewPass1!");
+
+            when(userRepository.findById(1L)).thenReturn(Optional.of(activeUser));
+            when(passwordEncoder.matches("OldPass1!", "encoded_password")).thenReturn(true);
+            when(passwordEncoder.encode("NewPass1!")).thenReturn("new_encoded");
+            when(jwtProvider.extractJti("access-token")).thenReturn("jti-123");
+            when(jwtProvider.getRemainingExpirySeconds("access-token")).thenReturn(3600L);
+
+            userService.changePassword(1L, req, "Bearer access-token");
+
+            verify(tokenBlocklistService).block("jti-123", 3600L);
         }
 
         @Test
@@ -432,7 +448,7 @@ class UserServiceTest {
 
             when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> userService.changePassword(99L, req))
+            assertThatThrownBy(() -> userService.changePassword(99L, req, null))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.USER_NOT_FOUND);
         }
@@ -445,7 +461,7 @@ class UserServiceTest {
             when(userRepository.findById(1L)).thenReturn(Optional.of(activeUser));
             when(passwordEncoder.matches("WrongOld1!", "encoded_password")).thenReturn(false);
 
-            assertThatThrownBy(() -> userService.changePassword(1L, req))
+            assertThatThrownBy(() -> userService.changePassword(1L, req, null))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.INVALID_CURRENT_PASSWORD);
         }

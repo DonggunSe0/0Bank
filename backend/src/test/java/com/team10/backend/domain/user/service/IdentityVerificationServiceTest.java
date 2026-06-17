@@ -15,6 +15,7 @@ import com.team10.backend.domain.user.type.VerificationStatus;
 import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.domain.user.verification.OneWonVerificationService;
 import com.team10.backend.domain.user.verification.OneWonVerificationService.VerifyResult;
+import com.team10.backend.domain.user.verification.VerificationSessionRecorder;
 import com.team10.backend.global.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.lang.reflect.Constructor;
@@ -38,6 +40,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -53,6 +56,7 @@ class IdentityVerificationServiceTest {
     @Mock OcrService ocrService;
     @Mock BankTransferService bankTransferService;
     @Mock OneWonVerificationService oneWonVerificationService;
+    @Mock VerificationSessionRecorder verificationSessionRecorder;
     @Mock PlatformTransactionManager txManager;
     @Mock StringRedisTemplate redisTemplate;
 
@@ -173,6 +177,40 @@ class IdentityVerificationServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.IDENTITY_ALREADY_VERIFIED);
         }
+
+        @Test
+        @DisplayName("스레드풀 포화로 OCR 작업 거부 → FAILED로 별도 트랜잭션 기록")
+        void ocrRejectedDueToPoolSaturation() {
+            MockMultipartFile image = jpegFile(1024);
+
+            when(redisTemplate.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+                    .thenReturn(1L);
+            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+            when(identityVerificationRepository.save(any())).thenAnswer(inv -> {
+                IdentityVerification v = inv.getArgument(0);
+                ReflectionTestUtils.setField(v, "id", 10L);
+                return v;
+            });
+            doThrow(new RejectedExecutionException("queue full"))
+                    .when(ocrService).processAsync(any(), eq(10L));
+
+            try (MockedStatic<TransactionSynchronizationManager> tsm =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                tsm.when(() -> TransactionSynchronizationManager.registerSynchronization(any()))
+                        .then(inv -> {
+                            TransactionSynchronization sync = inv.getArgument(0);
+                            sync.afterCommit(); // 실제 커밋 후 콜백을 즉시 실행하여 거부 처리 분기 검증
+                            return null;
+                        });
+
+                OcrAcceptedRes res = service.submitIdCardOcr(1L, image);
+
+                // 응답 자체는 접수 시점 상태(OCR_PENDING) 그대로 반환 — 거부는 비동기 처리 단계에서 발생
+                assertThat(res.status()).isEqualTo(VerificationStatus.OCR_PENDING);
+            }
+
+            verify(verificationSessionRecorder).markFailedInNewTransaction(eq(10L), anyString());
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -190,6 +228,7 @@ class IdentityVerificationServiceTest {
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
             OneWonStartReq req = new OneWonStartReq("12345678901", "090"); // 카카오뱅크 (점검 없음)
 
+            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.of(verification));
             when(oneWonVerificationService.generateAndStore(10L, 1L)).thenReturn("1234");
@@ -201,6 +240,7 @@ class IdentityVerificationServiceTest {
 
             assertThat(res.status()).isEqualTo(VerificationStatus.ONE_WON_PENDING);
             verify(bankTransferService).sendOneWon("090", "12345678901", "1234");
+            verify(oneWonVerificationService).releaseStartLock(1L);
         }
 
         @Test
@@ -210,6 +250,7 @@ class IdentityVerificationServiceTest {
                     createVerification(10L, user, VerificationStatus.OCR_PENDING);
             OneWonStartReq req = new OneWonStartReq("12345678901", "004");
 
+            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.of(verification));
 
@@ -223,6 +264,7 @@ class IdentityVerificationServiceTest {
         void sessionNotFound() {
             OneWonStartReq req = new OneWonStartReq("12345678901", "004");
 
+            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.empty());
 
@@ -238,6 +280,7 @@ class IdentityVerificationServiceTest {
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
             OneWonStartReq req = new OneWonStartReq("12345678901", "999");
 
+            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.of(verification));
 
@@ -253,6 +296,7 @@ class IdentityVerificationServiceTest {
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
             OneWonStartReq req = new OneWonStartReq("12345678901", "004"); // 국민은행 23:30~00:30
 
+            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.of(verification));
 
@@ -273,6 +317,7 @@ class IdentityVerificationServiceTest {
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
             OneWonStartReq req = new OneWonStartReq("12345678901", "090");
 
+            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.of(verification));
             when(oneWonVerificationService.generateAndStore(10L, 1L)).thenReturn("1234");

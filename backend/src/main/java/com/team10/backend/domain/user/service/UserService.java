@@ -143,16 +143,7 @@ public class UserService {
         refreshTokenService.delete(userId);
 
         // AT 블랙리스트 등록 — 탈퇴 즉시 기존 토큰 무효화
-        String accessToken = JwtProvider.resolveBearerToken(authHeader);
-        if (accessToken != null) {
-            try {
-                String jti = jwtProvider.extractJti(accessToken);
-                long remainingSeconds = jwtProvider.getRemainingExpirySeconds(accessToken);
-                tokenBlocklistService.block(jti, remainingSeconds);
-            } catch (Exception e) {
-                log.warn("[Withdraw] AT 블랙리스트 등록 실패 (무시) — userId={}, error={}", userId, e.getMessage());
-            }
-        }
+        blacklistAccessToken(JwtProvider.resolveBearerToken(authHeader), userId, "Withdraw");
     }
 
     public TokenRefreshRes refresh(TokenRefreshReq request, String refreshToken) {
@@ -178,7 +169,7 @@ public class UserService {
     }
 
     @Transactional
-    public void changePassword(Long userId, ChangePasswordReq request) {
+    public void changePassword(Long userId, ChangePasswordReq request, String authHeader) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 
@@ -190,18 +181,26 @@ public class UserService {
 
         // 비밀번호 변경 즉시 기존 RT 무효화 — 탈취된 세션 강제 종료
         refreshTokenService.delete(userId);
+
+        // 현재 AT도 블랙리스트 등록 — RT만 지우면 탈취자가 AT 만료 전까지 계속 접근 가능
+        blacklistAccessToken(JwtProvider.resolveBearerToken(authHeader), userId, "ChangePassword");
     }
 
     public void logout(Long userId, String accessToken) {
         refreshTokenService.delete(userId);
+        // AT 파싱 실패해도 RT는 이미 삭제됐으므로 로그아웃 자체는 성공 처리
+        blacklistAccessToken(accessToken, userId, "Logout");
+    }
 
+    /** AT를 블랙리스트에 등록한다 (파싱 실패 등은 무시 — 호출부의 본 동작은 이미 끝난 상태) */
+    private void blacklistAccessToken(String accessToken, Long userId, String context) {
+        if (accessToken == null) return;
         try {
             String jti = jwtProvider.extractJti(accessToken);
             long remainingSeconds = jwtProvider.getRemainingExpirySeconds(accessToken);
             tokenBlocklistService.block(jti, remainingSeconds);
         } catch (Exception e) {
-            // AT 파싱 실패해도 RT는 이미 삭제됐으므로 로그아웃 자체는 성공 처리
-            log.warn("[Logout] AT 블랙리스트 등록 실패 (무시) — userId={}, error={}", userId, e.getMessage());
+            log.warn("[{}] AT 블랙리스트 등록 실패 (무시) — userId={}, error={}", context, userId, e.getMessage());
         }
     }
 
