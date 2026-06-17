@@ -33,7 +33,7 @@ class TransferControllerTest {
 
     @Test
     @DisplayName("입금 요청을 서비스에 위임하고 200 OK 응답을 반환한다")
-    void deposit_delegatesToServiceAndReturnsOk() {
+    void topUp_delegatesToServiceAndReturnsOk() {
         DepositReq request = new DepositReq(1L, 100_000L, "초기 입금");
         DepositRes response = new DepositRes(
                 10L,
@@ -45,13 +45,13 @@ class TransferControllerTest {
                 "초기 입금",
                 LocalDateTime.of(2026, 6, 9, 10, 0)
         );
-        when(transferService.topUp(1L, 100_000L, "초기 입금")).thenReturn(response);
+        when(transferService.topUp(1L, 1L, 100_000L, "초기 입금")).thenReturn(response);
 
-        ResponseEntity<DepositRes> result = transferController.deposit(request);
+        ResponseEntity<DepositRes> result = transferController.topUp(1L, request);
 
         assertEquals(200, result.getStatusCode().value());
         assertSame(response, result.getBody());
-        verify(transferService).topUp(1L, 100_000L, "초기 입금");
+        verify(transferService).topUp(1L, 1L, 100_000L, "초기 입금");
     }
 
     @Test
@@ -69,12 +69,12 @@ class TransferControllerTest {
                 "점심값",
                 LocalDateTime.of(2026, 6, 9, 10, 10)
         );
-        when(transferService.transfer(1L, "100200300002", 50_000L, "점심값")).thenReturn(response);
+        when(transferService.transfer(1L, "test-idempotency-key", 1L, "100200300002", 50_000L, "점심값")).thenReturn(response);
 
-        ResponseEntity<TransferRes> result = transferController.transfer(request);
+        ResponseEntity<TransferRes> result = transferController.transfer(1L, "test-idempotency-key", request);
 
         assertEquals(200, result.getStatusCode().value());
         assertSame(response, result.getBody());
-        verify(transferService).transfer(1L, "100200300002", 50_000L, "점심값");
+        verify(transferService).transfer(1L, "test-idempotency-key", 1L, "100200300002", 50_000L, "점심값");
     }
 }

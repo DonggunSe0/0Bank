@@ -10,8 +10,11 @@ import com.team10.backend.domain.transaction.type.TransactionType;
 import com.team10.backend.domain.transfer.dto.res.DepositRes;
 import com.team10.backend.domain.transfer.dto.res.TransferRes;
 import com.team10.backend.domain.transfer.entity.Transfer;
+import com.team10.backend.domain.transfer.entity.TransferIdempotency;
 import com.team10.backend.domain.transfer.exception.TransferErrorCode;
+import com.team10.backend.domain.transfer.repository.TransferIdempotencyRepository;
 import com.team10.backend.domain.transfer.repository.TransferRepository;
+import com.team10.backend.domain.transfer.type.IdempotencyStatus;
 import com.team10.backend.domain.transfer.type.TransferStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.exception.BusinessException;
@@ -57,6 +60,9 @@ class TransferServiceIntegrationTest {
     private TransferRepository transferRepository;
 
     @Autowired
+    private TransferIdempotencyRepository transferIdempotencyRepository;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Autowired
@@ -65,9 +71,10 @@ class TransferServiceIntegrationTest {
     @Test
     @DisplayName("입금 성공 시 실제 DB에 잔액과 입금 거래내역이 저장된다")
     void deposit_success_persistsBalanceAndDepositHistory() {
-        Account account = saveAccount(saveUser("sender@example.com", "홍길동"), "100200300001", 10_000L);
+        User user = saveUser("sender@example.com", "홍길동");
+        Account account = saveAccount(user, "100200300001", 10_000L);
 
-        DepositRes response = transferService.topUp(account.getId(), 5_000L, "입금 메모");
+        DepositRes response = transferService.topUp(user.getId(), account.getId(), 5_000L, "입금 메모");
         flushAndClear();
 
         Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
@@ -96,7 +103,7 @@ class TransferServiceIntegrationTest {
         Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
         Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
 
-        TransferRes response = transferService.transfer(senderAccount.getId(), "100200300002", 50_000L, "점심값");
+        TransferRes response = transferService.transfer(sender.getId(), "transfer-success-key", senderAccount.getId(), "100200300002", 50_000L, "점심값");
         flushAndClear();
 
         Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
@@ -144,13 +151,104 @@ class TransferServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("송금 금액이 유효하지 않으면 DB 변경 없이 INVALID_INPUT_VALUE 예외를 발생시킨다")
-    void transfer_invalidAmount_doesNotPersistAnything() {
-        Account account = saveAccount(saveUser("sender@example.com", "홍길동"), "100200300001", 10_000L);
+    @DisplayName("같은 멱등성 키와 같은 요청으로 재시도하면 송금을 중복 처리하지 않고 최초 응답을 반환한다")
+    void transfer_sameIdempotencyKeyAndSameRequest_returnsStoredResponseWithoutDuplicateTransfer() {
+        User sender = saveUser("sender@example.com", "송금자");
+        User receiver = saveUser("receiver@example.com", "수취자");
+        Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
+        Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
+
+        TransferRes firstResponse = transferService.transfer(
+                sender.getId(),
+                "same-request-key",
+                senderAccount.getId(),
+                receiverAccount.getAccountNumber(),
+                50_000L,
+                "점심값"
+        );
+
+        transferService.transfer(
+                sender.getId(),
+                "after-first-key",
+                senderAccount.getId(),
+                receiverAccount.getAccountNumber(),
+                20_000L,
+                "후속 송금"
+        );
+
+        TransferRes retryResponse = transferService.transfer(
+                sender.getId(),
+                "same-request-key",
+                senderAccount.getId(),
+                receiverAccount.getAccountNumber(),
+                50_000L,
+                "점심값"
+        );
+        flushAndClear();
+
+        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
+        TransferIdempotency idempotency = transferIdempotencyRepository
+                .findByUser_IdAndIdempotencyKey(sender.getId(), "same-request-key")
+                .orElseThrow();
+
+        assertEquals(firstResponse, retryResponse);
+        assertEquals(30_000L, savedSenderAccount.getBalance());
+        assertEquals(2, transferRepository.count());
+        assertEquals(4, transactionHistoryRepository.count());
+        assertEquals(IdempotencyStatus.SUCCESS, idempotency.getStatus());
+        assertNotNull(idempotency.getResponseBody());
+        assertNotNull(idempotency.getCompletedAt());
+    }
+
+    @Test
+    @DisplayName("같은 멱등성 키로 다른 요청이 들어오면 송금을 처리하지 않고 충돌 예외를 발생시킨다")
+    void transfer_sameIdempotencyKeyAndDifferentRequest_throwsConflict() {
+        User sender = saveUser("sender@example.com", "송금자");
+        User receiver = saveUser("receiver@example.com", "수취자");
+        Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
+        Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
+
+        transferService.transfer(
+                sender.getId(),
+                "conflict-key",
+                senderAccount.getId(),
+                receiverAccount.getAccountNumber(),
+                50_000L,
+                "점심값"
+        );
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.transfer(account.getId(), "100200300002", 0L, "잘못된 송금")
+                () -> transferService.transfer(
+                        sender.getId(),
+                        "conflict-key",
+                        senderAccount.getId(),
+                        receiverAccount.getAccountNumber(),
+                        60_000L,
+                        "점심값"
+                )
+        );
+        flushAndClear();
+
+        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
+        Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
+
+        assertEquals(TransferErrorCode.IDEMPOTENCY_REQUEST_CONFLICT, exception.getErrorCode());
+        assertEquals(50_000L, savedSenderAccount.getBalance());
+        assertEquals(60_000L, savedReceiverAccount.getBalance());
+        assertEquals(1, transferRepository.count());
+        assertEquals(2, transactionHistoryRepository.count());
+    }
+
+    @Test
+    @DisplayName("송금 금액이 유효하지 않으면 DB 변경 없이 INVALID_INPUT_VALUE 예외를 발생시킨다")
+    void transfer_invalidAmount_doesNotPersistAnything() {
+        User user = saveUser("sender@example.com", "홍길동");
+        Account account = saveAccount(user, "100200300001", 10_000L);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> transferService.transfer(user.getId(), "invalid-amount-key", account.getId(), "100200300002", 0L, "잘못된 송금")
         );
         flushAndClear();
 
@@ -171,7 +269,7 @@ class TransferServiceIntegrationTest {
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.transfer(senderAccount.getId(), "100200300002", 50_000L, "잔액 부족")
+                () -> transferService.transfer(sender.getId(), "insufficient-balance-key", senderAccount.getId(), "100200300002", 50_000L, "잔액 부족")
         );
         flushAndClear();
 
@@ -196,13 +294,14 @@ class TransferServiceIntegrationTest {
     @Test
     @DisplayName("같은 계좌에 동시 입금이 발생해도 모든 입금 잔액과 거래내역이 반영된다")
     void concurrentDeposits_sameAccount_persistsAllBalanceAndHistories() throws InterruptedException {
-        Account account = saveAccount(saveUser("sender@example.com", "홍길동"), "100200300001", 0L);
+        User user = saveUser("sender@example.com", "홍길동");
+        Account account = saveAccount(user, "100200300001", 0L);
         int threadCount = 20;
         long amount = 1_000L;
 
         List<Throwable> failures = runConcurrently(
                 threadCount,
-                () -> transferService.topUp(account.getId(), amount, "동시 입금")
+                () -> transferService.topUp(user.getId(), account.getId(), amount, "동시 입금")
         );
         entityManager.clear();
 
@@ -226,10 +325,18 @@ class TransferServiceIntegrationTest {
         Account receiverAccount = saveAccount(receiver, "100200300002", 0L);
         int threadCount = 20;
         long amount = 1_000L;
+        AtomicInteger keySequence = new AtomicInteger();
 
         List<Throwable> failures = runConcurrently(
                 threadCount,
-                () -> transferService.transfer(senderAccount.getId(), receiverAccount.getAccountNumber(), amount, "동시 송금")
+                () -> transferService.transfer(
+                        sender.getId(),
+                        "same-sender-" + keySequence.incrementAndGet(),
+                        senderAccount.getId(),
+                        receiverAccount.getAccountNumber(),
+                        amount,
+                        "동시 송금"
+                )
         );
         entityManager.clear();
 
@@ -263,10 +370,12 @@ class TransferServiceIntegrationTest {
         List<Throwable> failures = runConcurrently(
                 threadCount,
                 () -> {
-                    if (sequence.getAndIncrement() % 2 == 0) {
-                        transferService.transfer(firstAccount.getId(), secondAccount.getAccountNumber(), amount, "교차 송금");
+                    int currentSequence = sequence.getAndIncrement();
+                    String idempotencyKey = "opposite-direction-" + currentSequence;
+                    if (currentSequence % 2 == 0) {
+                        transferService.transfer(owner.getId(), idempotencyKey, firstAccount.getId(), secondAccount.getAccountNumber(), amount, "교차 송금");
                     } else {
-                        transferService.transfer(secondAccount.getId(), firstAccount.getAccountNumber(), amount, "교차 송금");
+                        transferService.transfer(owner.getId(), idempotencyKey, secondAccount.getId(), firstAccount.getAccountNumber(), amount, "교차 송금");
                     }
                 }
         );

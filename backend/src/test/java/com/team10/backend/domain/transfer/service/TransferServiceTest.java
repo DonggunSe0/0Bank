@@ -1,5 +1,6 @@
 package com.team10.backend.domain.transfer.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.account.type.AccountType;
@@ -12,9 +13,11 @@ import com.team10.backend.domain.transfer.dto.res.TransferRes;
 import com.team10.backend.domain.transfer.entity.Transfer;
 import com.team10.backend.domain.transfer.exception.TransferErrorCode;
 import com.team10.backend.domain.transfer.event.TransferFailedEvent;
+import com.team10.backend.domain.transfer.repository.TransferIdempotencyRepository;
 import com.team10.backend.domain.transfer.repository.TransferRepository;
 import com.team10.backend.domain.transfer.type.TransferStatus;
 import com.team10.backend.domain.user.entity.User;
+import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,6 +52,15 @@ class TransferServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TransferIdempotencyRepository transferIdempotencyRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
     @InjectMocks
     private TransferService transferService;
 
@@ -63,7 +76,7 @@ class TransferServiceTest {
                     return history;
                 });
 
-        DepositRes response = transferService.topUp(1L, 5_000L, "입금 메모");
+        DepositRes response = transferService.topUp(1L, 1L, 5_000L, "입금 메모");
 
         assertEquals(15_000L, account.getBalance());
         assertEquals(100L, response.transactionId());
@@ -93,7 +106,7 @@ class TransferServiceTest {
     void deposit_invalidAmount_throwsInvalidInputValue() {
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.topUp(1L, 0L, "입금 메모")
+                () -> transferService.topUp(1L, 1L, 0L, "입금 메모")
         );
 
         assertEquals(TransferErrorCode.INVALID_INPUT_VALUE, exception.getErrorCode());
@@ -108,7 +121,7 @@ class TransferServiceTest {
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.topUp(1L, 5_000L, "입금 메모")
+                () -> transferService.topUp(1L, 1L, 5_000L, "입금 메모")
         );
 
         assertEquals(TransferErrorCode.ACCOUNT_NOT_FOUND, exception.getErrorCode());
@@ -126,6 +139,11 @@ class TransferServiceTest {
 
         Account senderAccount = account(1L, sender, "100200300001", 100_000L);
         Account receiverAccount = account(2L, receiver, "100200300002", 10_000L);
+        when(transferIdempotencyRepository.findByUser_IdAndIdempotencyKey(1L, "transfer-key"))
+                .thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(1L)).thenReturn(sender);
+        when(transferIdempotencyRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(accountRepository.findIdByAccountNumber("100200300002")).thenReturn(Optional.of(2L));
         when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(senderAccount));
         when(accountRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(receiverAccount));
@@ -134,7 +152,7 @@ class TransferServiceTest {
         when(transactionHistoryRepository.save(any(TransactionHistory.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        TransferRes response = transferService.transfer(1L, "100200300002", 50_000L, "점심값");
+        TransferRes response = transferService.transfer(1L, "transfer-key", 1L, "100200300002", 50_000L, "점심값");
 
         assertEquals(50_000L, senderAccount.getBalance());
         assertEquals(60_000L, receiverAccount.getBalance());
@@ -175,12 +193,18 @@ class TransferServiceTest {
     @Test
     @DisplayName("같은 계좌로 송금하면 INVALID_INPUT_VALUE 예외를 발생시킨다")
     void transfer_sameAccount_throwsInvalidInputValue() {
-        Account account = account(1L, user(), "100200300001", 100_000L);
+        User user = user();
+        Account account = account(1L, user, "100200300001", 100_000L);
+        when(transferIdempotencyRepository.findByUser_IdAndIdempotencyKey(1L, "same-account-key"))
+                .thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(1L)).thenReturn(user);
+        when(transferIdempotencyRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(accountRepository.findIdByAccountNumber("100200300001")).thenReturn(Optional.of(1L));
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.transfer(1L, "100200300001", 50_000L, "점심값")
+                () -> transferService.transfer(1L, "same-account-key", 1L, "100200300001", 50_000L, "점심값")
         );
 
         assertEquals(TransferErrorCode.INVALID_INPUT_VALUE, exception.getErrorCode());
@@ -196,13 +220,18 @@ class TransferServiceTest {
 
         Account senderAccount = account(1L, sender, "100200300001", 10_000L);
         Account receiverAccount = account(2L, receiver, "100200300002", 10_000L);
+        when(transferIdempotencyRepository.findByUser_IdAndIdempotencyKey(1L, "insufficient-key"))
+                .thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(1L)).thenReturn(sender);
+        when(transferIdempotencyRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(accountRepository.findIdByAccountNumber("100200300002")).thenReturn(Optional.of(2L));
         when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(senderAccount));
         when(accountRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(receiverAccount));
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.transfer(1L, "100200300002", 50_000L, "잔액 부족")
+                () -> transferService.transfer(1L, "insufficient-key", 1L, "100200300002", 50_000L, "잔액 부족")
         );
 
         ArgumentCaptor<TransferFailedEvent> eventCaptor = ArgumentCaptor.forClass(TransferFailedEvent.class);

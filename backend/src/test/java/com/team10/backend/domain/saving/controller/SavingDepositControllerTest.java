@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -11,11 +12,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
+import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
+import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
 import com.team10.backend.domain.saving.service.SavingDepositService;
 import com.team10.backend.domain.saving.type.DepositStatus;
 import com.team10.backend.support.security.AuthenticationPrincipalTestConfig;
 import com.team10.backend.support.security.WithMockLongUser;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +70,63 @@ class SavingDepositControllerTest {
     }
 
     @Test
+    @DisplayName("내 예금 목록 조회 API는 인증 사용자의 예금 목록을 반환한다")
+    void getDeposits() throws Exception {
+        DepositSummaryRes response = createDepositSummaryRes(1L, DepositStatus.ACTIVE);
+
+        when(savingDepositService.getDeposits(1L, null)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/savings/deposits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].depositId").value(1L))
+                .andExpect(jsonPath("$[0].productName").value("정기예금"))
+                .andExpect(jsonPath("$[0].bankName").value("국민은행"))
+                .andExpect(jsonPath("$[0].principal").value(1000000L))
+                .andExpect(jsonPath("$[0].maturityDate").value("2027-06-17"))
+                .andExpect(jsonPath("$[0].status").value("ACTIVE"));
+
+        verify(savingDepositService).getDeposits(1L, null);
+    }
+
+    @Test
+    @DisplayName("내 예금 목록 조회 API는 상태값으로 필터링할 수 있다")
+    void getDepositsWithStatus() throws Exception {
+        DepositSummaryRes response = createDepositSummaryRes(1L, DepositStatus.MATURED);
+
+        when(savingDepositService.getDeposits(1L, DepositStatus.MATURED)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/savings/deposits")
+                        .param("status", "MATURED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].depositId").value(1L))
+                .andExpect(jsonPath("$[0].status").value("MATURED"));
+
+        verify(savingDepositService).getDeposits(1L, DepositStatus.MATURED);
+    }
+
+
+    @Test
+    @DisplayName("내 예금 상세 조회 API는 인증 사용자의 예금 상세를 반환한다")
+    void getDeposit() throws Exception {
+        DepositDetailRes response = createDepositDetailRes(1L);
+
+        when(savingDepositService.getDeposit(1L, 1L)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/savings/deposits/{depositId}", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.depositId").value(1L))
+                .andExpect(jsonPath("$.productName").value("정기예금"))
+                .andExpect(jsonPath("$.bankName").value("국민은행"))
+                .andExpect(jsonPath("$.principal").value(1000000L))
+                .andExpect(jsonPath("$.interestRate").value(3.5))
+                .andExpect(jsonPath("$.expectedInterest").value(35000L))
+                .andExpect(jsonPath("$.maturityDate").value("2027-06-17"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        verify(savingDepositService).getDeposit(1L, 1L);
+    }
+
+    @Test
     @DisplayName("예금 가입 API는 필수값이 없으면 400을 반환한다")
     void createDepositWithoutRequiredValue() throws Exception {
         DepositCreateReq request = new DepositCreateReq(null, 1L, 1000000L);
@@ -75,4 +136,29 @@ class SavingDepositControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
+
+    private DepositSummaryRes createDepositSummaryRes(Long depositId, DepositStatus status) {
+        return new DepositSummaryRes(
+                depositId,
+                "정기예금",
+                "국민은행",
+                1000000L,
+                LocalDate.of(2027, 6, 17),
+                status
+        );
+    }
+
+    private DepositDetailRes createDepositDetailRes(Long depositId) {
+        return new DepositDetailRes(
+                depositId,
+                "정기예금",
+                "국민은행",
+                1000000L,
+                3.5,
+                35000L,
+                LocalDate.of(2027, 6, 17),
+                DepositStatus.ACTIVE
+        );
+    }
+
 }

@@ -2,7 +2,10 @@ package com.team10.backend.domain.saving.controller;
 
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
+import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
+import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
 import com.team10.backend.domain.saving.service.SavingDepositService;
+import com.team10.backend.domain.saving.type.DepositStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -10,10 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -32,5 +34,27 @@ public class SavingDepositController {
         DepositCreateRes response =
                 savingDepositService.createDeposit(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "내 예금 목록 조회", description = "인증 사용자의 예금 목록을 조회합니다. 상태값으로 필터링할 수 있습니다.")
+    @GetMapping("/deposits")
+    public ResponseEntity<List<DepositSummaryRes>> getDeposits(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) DepositStatus status
+    ) {
+        List<DepositSummaryRes> response =
+                savingDepositService.getDeposits(userId, status);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "내 예금 상세 조회", description = "인증 사용자의 예금 상세 정보를 조회합니다.")
+    @GetMapping("/deposits/{depositId}")
+    public ResponseEntity<DepositDetailRes> getDeposit(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long depositId
+    ) {
+        DepositDetailRes response =
+                savingDepositService.getDeposit(userId, depositId);
+        return ResponseEntity.ok(response);
     }
 }

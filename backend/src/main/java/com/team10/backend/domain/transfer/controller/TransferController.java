@@ -10,10 +10,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/transfers")
@@ -23,19 +21,24 @@ public class TransferController {
 
     private final TransferService transferService;
 
-    @PostMapping("/deposit")
+    @PostMapping("/topUp")
     @Operation(summary = "입금")
-    public ResponseEntity<DepositRes> deposit(@Valid @RequestBody DepositReq request) {
-        // TODO: 인증도메인 구현 이후 UserDetails 에서 인증된 userId 입력받도록 수정
-        DepositRes response = transferService.topUp(request.accountId(), request.amount(), request.memo());
+    public ResponseEntity<DepositRes> topUp(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody DepositReq request) {
+        DepositRes response = transferService.topUp(userId, request.accountId(), request.amount(), request.memo());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping
     @Operation(summary = "계좌 간 송금")
-    public ResponseEntity<TransferRes> transfer(@Valid @RequestBody TransferReq request) {
-        // TODO: 인증도메인 구현 이후 UserDetails 에서 인증된 userId 입력받도록 수정
+    public ResponseEntity<TransferRes> transfer(
+            @AuthenticationPrincipal Long userId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody TransferReq request) {
         TransferRes response = transferService.transfer(
+                userId,
+                idempotencyKey,
                 request.senderAccountId(),
                 request.receiverAccountNumber(),
                 request.amount(),

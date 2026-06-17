@@ -5,11 +5,14 @@ import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
+import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
+import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
 import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.entity.SavingProduct;
 import com.team10.backend.domain.saving.exception.SavingErrorCode;
 import com.team10.backend.domain.saving.repository.DepositRepository;
 import com.team10.backend.domain.saving.repository.SavingProductRepository;
+import com.team10.backend.domain.saving.type.DepositStatus;
 import com.team10.backend.domain.saving.type.SavingProductType;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
@@ -19,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -86,5 +90,28 @@ public class SavingDepositService {
         Deposit savedDeposit = depositRepository.save(deposit);
 
         return DepositCreateRes.from(savedDeposit);
+    }
+
+    public List<DepositSummaryRes> getDeposits(Long userId, DepositStatus status) {
+        List<Deposit> deposits;
+
+        if (status == null) {
+            deposits = depositRepository.findAllByUserIdWithProduct(userId);
+        } else {
+            deposits = depositRepository.findAllByUserIdAndStatusWithProduct(userId, status);
+        }
+
+        return deposits.stream()
+                .map(DepositSummaryRes::from)
+                .toList();
+    }
+
+    public DepositDetailRes getDeposit(Long userId, Long depositId) {
+        Deposit deposit =
+                depositRepository.findByIdAndUserIdWithProduct(depositId, userId)
+                        .orElseThrow(() -> new
+                                BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
+
+        return DepositDetailRes.from(deposit);
     }
 }
