@@ -10,6 +10,7 @@ import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.service.UserService;
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.exception.GlobalErrorCode;
+import com.team10.backend.global.jwt.JwtProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -85,10 +86,10 @@ public class AuthController {
             @AuthenticationPrincipal Long userId,
             @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String accessToken = JwtProvider.resolveBearerToken(authHeader);
+        if (accessToken == null) {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
-        String accessToken = authHeader.substring(7);
         userService.logout(userId, accessToken);
         ResponseCookie expiredCookie = expireRtCookie();
         return ResponseEntity.noContent()

@@ -67,11 +67,17 @@ public class IdentityVerification extends BaseEntity {
 
     /** 행안부 진위 확인 성공 — 뒷자리 마스킹 후 3단계(1원 송금)로 전환 */
     public void completeGovernmentVerification() {
-        if (this.ocrResidentNumber != null && this.ocrResidentNumber.contains("-")) {
+        maskResidentNumber();
+        this.status = VerificationStatus.GOVERNMENT_VERIFIED;
+    }
+
+    /** 뒷자리 마스킹: 앞 6자리만 남기고 나머지는 가린다 (이미 마스킹된 경우 재처리 안 함) */
+    private void maskResidentNumber() {
+        if (this.ocrResidentNumber != null && this.ocrResidentNumber.contains("-")
+                && !this.ocrResidentNumber.endsWith("-*******")) {
             String front = this.ocrResidentNumber.split("-")[0];
             this.ocrResidentNumber = front + "-*******";
         }
-        this.status = VerificationStatus.GOVERNMENT_VERIFIED;
     }
 
     /** 1원 송금 요청 완료 — 코드 입력 대기 상태로 전환 */
@@ -84,8 +90,9 @@ public class IdentityVerification extends BaseEntity {
         this.status = VerificationStatus.COMPLETED;
     }
 
-    /** 인증 실패 처리 */
+    /** 인증 실패 처리 — 주민번호가 평문으로 남아있으면 함께 마스킹 */
     public void fail(String reason) {
+        maskResidentNumber();
         this.failureReason = reason;
         this.status = VerificationStatus.FAILED;
     }

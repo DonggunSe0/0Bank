@@ -49,13 +49,15 @@ public class UserController {
     @PatchMapping("/me/password")
     @Operation(
             summary = "비밀번호 변경",
-            description = "현재 비밀번호 검증 후 변경합니다. 변경 즉시 기존 Refresh Token이 무효화되어 재로그인이 필요합니다."
+            description = "현재 비밀번호 검증 후 변경합니다. 변경 즉시 기존 Refresh Token이 무효화되고 " +
+                    "현재 Access Token도 블랙리스트에 등록되어, 재로그인이 필요합니다."
     )
     public ResponseEntity<Void> changePassword(
             @AuthenticationPrincipal Long userId,
-            @Valid @RequestBody ChangePasswordReq request
+            @Valid @RequestBody ChangePasswordReq request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        userService.changePassword(userId, request);
+        userService.changePassword(userId, request, authHeader);
         return ResponseEntity.noContent().build();
     }
 

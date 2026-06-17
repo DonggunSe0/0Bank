@@ -78,8 +78,4 @@ public class User extends BaseEntity {
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
     }
-
-    public boolean isActive() {
-        return this.status == UserStatus.ACTIVE;
-    }
 }

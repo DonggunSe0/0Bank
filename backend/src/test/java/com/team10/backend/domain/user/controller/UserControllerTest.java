@@ -147,7 +147,7 @@ class UserControllerTest {
         @DisplayName("정상 변경 — 204")
         void success() throws Exception {
             ChangePasswordReq req = new ChangePasswordReq("OldPass1!", "NewPass1!");
-            doNothing().when(userService).changePassword(eq(1L), any());
+            doNothing().when(userService).changePassword(eq(1L), any(), any());
 
             mockMvc.perform(patch("/api/v1/users/me/password")
                             .with(auth())
@@ -155,7 +155,7 @@ class UserControllerTest {
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isNoContent());
 
-            verify(userService).changePassword(eq(1L), any());
+            verify(userService).changePassword(eq(1L), any(), any());
         }
 
         @Test

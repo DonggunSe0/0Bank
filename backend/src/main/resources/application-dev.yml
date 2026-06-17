@@ -29,8 +29,7 @@ spring:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
-ocr:
-  google-vision-key-path: ${GCP_KEY_PATH:classpath:gcp-key.json}
+
 
 logging:
   level:

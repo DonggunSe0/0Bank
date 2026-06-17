@@ -15,6 +15,7 @@ import com.team10.backend.domain.user.type.VerificationStatus;
 import com.team10.backend.domain.user.verification.BankCode;
 import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.domain.user.verification.OneWonVerificationService;
+import com.team10.backend.domain.user.verification.VerificationSessionRecorder;
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.exception.GlobalErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.concurrent.RejectedExecutionException;
 
 /** 신분증 본인인증 3단계(OCR → 행안부 → 1원 송금) 서비스 */
 @Slf4j
@@ -61,6 +63,7 @@ public class IdentityVerificationService {
     private final OcrService ocrService;
     private final BankTransferService bankTransferService;
     private final OneWonVerificationService oneWonVerificationService;
+    private final VerificationSessionRecorder verificationSessionRecorder;
     private final PlatformTransactionManager txManager;
     private final StringRedisTemplate redisTemplate;
 
@@ -91,7 +94,16 @@ public class IdentityVerificationService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                ocrService.processAsync(imageBytes, verificationId);
+                try {
+                    ocrService.processAsync(imageBytes, verificationId);
+                } catch (RejectedExecutionException e) {
+                    // 스레드풀+큐 포화로 작업 자체가 시작 못 함 — OCR_PENDING에 영구히 멈추지 않도록 별도 트랜잭션으로 FAILED 기록
+                    log.error("[OCR] 스레드풀 포화로 작업 거부 — verificationId={}", verificationId, e);
+                    verificationSessionRecorder.markFailedInNewTransaction(
+                            verificationId,
+                            "서버 처리량이 많아 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요."
+                    );
+                }
             }
         });
 
@@ -105,37 +117,45 @@ public class IdentityVerificationService {
     // 외부 송금 API 포함 → 트랜잭션 밖에서 실행, DB 쓰기만 TransactionTemplate으로 분리
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OneWonStartRes startOneWonVerification(Long userId, OneWonStartReq request) {
-        IdentityVerification verification = identityVerificationRepository
-                .findTopByUserIdOrderByCreatedAtDesc(userId)
-                .filter(v -> v.getStatus() == VerificationStatus.GOVERNMENT_VERIFIED
-                        || v.getStatus() == VerificationStatus.ONE_WON_PENDING)
-                .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_NOT_READY_FOR_ONE_WON));
-
-        Long verificationId = verification.getId();
-
-        validateBankAvailability(request.organization());
-
-        String code = oneWonVerificationService.generateAndStore(verificationId, userId);
-        try {
-            bankTransferService.sendOneWon(request.organization(), request.accountNumber(), code);
-        } catch (Exception e) {
-            // 송금 실패 시 Redis 코드 + daily 카운터 보상 롤백
-            oneWonVerificationService.deleteCode(verificationId);
-            oneWonVerificationService.decrementDailyCount(userId);
-            throw e;
+        // 동시 요청 방지 — 같은 유저가 거의 동시에 두 번 호출하면 실제 송금이 중복 실행될 수 있음
+        if (!oneWonVerificationService.tryAcquireStartLock(userId)) {
+            throw new BusinessException(UserErrorCode.ONE_WON_REQUEST_IN_PROGRESS);
         }
+        try {
+            IdentityVerification verification = identityVerificationRepository
+                    .findTopByUserIdOrderByCreatedAtDesc(userId)
+                    .filter(v -> v.getStatus() == VerificationStatus.GOVERNMENT_VERIFIED
+                            || v.getStatus() == VerificationStatus.ONE_WON_PENDING)
+                    .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_NOT_READY_FOR_ONE_WON));
 
-        return new TransactionTemplate(txManager).execute(status -> {
-            IdentityVerification managed = identityVerificationRepository
-                    .findById(verificationId)
-                    .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND));
-            managed.startOneWon();
-            return new OneWonStartRes(
-                    managed.getId(),
-                    managed.getStatus(),
-                    "1원이 송금되었습니다. 입금 메모의 4자리 코드를 입력해주세요. (유효시간 10분)"
-            );
-        });
+            Long verificationId = verification.getId();
+
+            validateBankAvailability(request.organization());
+
+            String code = oneWonVerificationService.generateAndStore(verificationId, userId);
+            try {
+                bankTransferService.sendOneWon(request.organization(), request.accountNumber(), code);
+            } catch (Exception e) {
+                // 송금 실패 시 Redis 코드 + daily 카운터 보상 롤백
+                oneWonVerificationService.deleteCode(verificationId);
+                oneWonVerificationService.decrementDailyCount(userId);
+                throw e;
+            }
+
+            return new TransactionTemplate(txManager).execute(status -> {
+                IdentityVerification managed = identityVerificationRepository
+                        .findById(verificationId)
+                        .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND));
+                managed.startOneWon();
+                return new OneWonStartRes(
+                        managed.getId(),
+                        managed.getStatus(),
+                        "1원이 송금되었습니다. 입금 메모의 4자리 코드를 입력해주세요. (유효시간 10분)"
+                );
+            });
+        } finally {
+            oneWonVerificationService.releaseStartLock(userId);
+        }
     }
 
     @Transactional

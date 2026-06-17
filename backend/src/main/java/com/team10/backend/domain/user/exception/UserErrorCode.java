@@ -18,6 +18,7 @@ public enum UserErrorCode implements ErrorCode {
     OCR_IMAGE_INVALID_TYPE(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다. (허용: jpeg, png)"),
     VERIFICATION_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "본인인증 세션을 찾을 수 없습니다."),
     VERIFICATION_NOT_READY_FOR_ONE_WON(HttpStatus.CONFLICT, "행안부 인증이 완료된 후 1원 송금 인증을 진행할 수 있습니다."),
+    ONE_WON_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "1원 인증 요청이 이미 처리 중입니다. 잠시 후 다시 시도해주세요."),
     ONE_WON_CODE_EXPIRED(HttpStatus.GONE, "인증코드가 만료되었습니다. 1원 송금을 다시 요청해주세요."),
     ONE_WON_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "인증코드가 일치하지 않습니다."),
     ONE_WON_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증 시도 횟수를 초과했습니다. 1원 송금을 다시 요청해주세요."),

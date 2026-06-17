@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import org.springframework.util.StringUtils;
+
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.UUID;
@@ -129,6 +131,19 @@ public class JwtProvider {
         Date expiry = parseClaims(token, true).getExpiration();
         long remaining = (expiry.getTime() - System.currentTimeMillis()) / 1000L;
         return Math.max(remaining, 0L);
+    }
+
+    private static final String BEARER_PREFIX = "Bearer ";
+
+    /**
+     * Authorization 헤더(예: {@code "Bearer {token}"})에서 토큰 문자열을 추출한다.
+     * 헤더가 없거나 형식이 맞지 않으면 null을 반환한다.
+     */
+    public static String resolveBearerToken(String authHeader) {
+        if (StringUtils.hasText(authHeader) && authHeader.startsWith(BEARER_PREFIX)) {
+            return authHeader.substring(BEARER_PREFIX.length());
+        }
+        return null;
     }
 
     private Claims parseClaims(String token, boolean ignoreExpiry) {

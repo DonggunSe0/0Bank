@@ -1,4 +1,4 @@
-package com.team10.backend.domain.user.ocr;
+package com.team10.backend.domain.codef.ocr;
 
 /**
  * Tesseract OCR 결과에서 파싱된 신분증 정보.
