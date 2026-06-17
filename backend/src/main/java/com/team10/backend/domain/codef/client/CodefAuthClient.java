@@ -1,4 +1,4 @@
-package com.team10.backend.domain.user.client;
+package com.team10.backend.domain.codef.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;

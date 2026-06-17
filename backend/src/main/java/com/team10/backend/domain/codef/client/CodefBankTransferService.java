@@ -1,4 +1,4 @@
-package com.team10.backend.domain.user.client;
+package com.team10.backend.domain.codef.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.user.exception.UserErrorCode;
@@ -35,7 +35,9 @@ public class CodefBankTransferService implements BankTransferService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final CodefAuthClient codefAuthClient;
-    private final RestClient restClient;
+    // 1원 송금은 CODEF가 실제 은행 응답을 기다리는 동기 호출이라 전역 5초 timeout보다 긴
+    // 전용 RestClient(CodefBankRestClientConfig, read timeout 30s)를 사용한다.
+    private final RestClient codefBankTransferRestClient;
 
     @Override
     public void sendOneWon(String organization, String accountNumber, String verificationCode) {
@@ -48,7 +50,7 @@ public class CodefBankTransferService implements BankTransferService {
             body.put("inPrintType", IN_PRINT_TYPE_CUSTOM);
             body.put("inPrintContent", verificationCode);
 
-            String response = restClient.post()
+            String response = codefBankTransferRestClient.post()
                     .uri(TRANSFER_AUTH_URL)
                     .header("Authorization", "Bearer " + token)
                     .contentType(MediaType.APPLICATION_JSON)
