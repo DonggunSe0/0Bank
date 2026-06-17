@@ -30,22 +30,14 @@ import java.time.Duration;
 @Tag(name = "Auth", description = "인증 API")
 public class AuthController {
 
-    /** HttpOnly 쿠키 이름 — 프론트엔드와 동일하게 맞춰야 함. */
+    // 프론트엔드와 동일해야 함
     private static final String RT_COOKIE_NAME = "refresh_token";
 
     private final UserService userService;
 
-    /**
-     * Refresh Token TTL (초 단위). RefreshTokenService 와 동일한 값을 사용한다.
-     * application.yml: jwt.refresh-token-expiration-seconds
-     */
     @Value("${jwt.refresh-token-expiration-seconds}")
     private long refreshTokenExpirationSeconds;
 
-    /**
-     * 쿠키 Secure 플래그 — HTTPS 환경(프로덕션)에서는 true 로 설정.
-     * application.yml: cookie.secure (기본값 false, 로컬 개발용)
-     */
     @Value("${cookie.secure:false}")
     private boolean cookieSecure;
 
@@ -65,7 +57,7 @@ public class AuthController {
         ResponseCookie rtCookie = buildRtCookie(result.refreshToken());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, rtCookie.toString())
-                .body(result); // refreshToken 필드는 @JsonIgnore 처리됨
+                .body(result);
     }
 
     @PostMapping("/refresh")
@@ -84,7 +76,7 @@ public class AuthController {
         ResponseCookie rtCookie = buildRtCookie(result.refreshToken());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, rtCookie.toString())
-                .body(result); // refreshToken 필드는 @JsonIgnore 처리됨
+                .body(result);
     }
 
     @PostMapping("/logout")
@@ -96,7 +88,7 @@ public class AuthController {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
         }
-        String accessToken = authHeader.substring(7); // "Bearer " 제거
+        String accessToken = authHeader.substring(7);
         userService.logout(userId, accessToken);
         ResponseCookie expiredCookie = expireRtCookie();
         return ResponseEntity.noContent()
@@ -104,18 +96,7 @@ public class AuthController {
                 .build();
     }
 
-    // ──────────────────────────────── 헬퍼 ────────────────────────────────
-
-    /**
-     * HttpOnly Refresh Token 쿠키를 생성한다.
-     *
-     * <ul>
-     *   <li>HttpOnly: JS 접근 차단 (XSS 방어)</li>
-     *   <li>SameSite=Strict: CSRF 방어</li>
-     *   <li>Secure: HTTPS 환경에서만 전송 (cookieSecure 값으로 제어)</li>
-     *   <li>Path=/api/v1/auth: 인증 엔드포인트에만 쿠키 전송</li>
-     * </ul>
-     */
+    /** HttpOnly + SameSite=Strict RT 쿠키 생성 (XSS/CSRF 방어) */
     private ResponseCookie buildRtCookie(String token) {
         return ResponseCookie.from(RT_COOKIE_NAME, token)
                 .httpOnly(true)
@@ -126,7 +107,7 @@ public class AuthController {
                 .build();
     }
 
-    /** 로그아웃 시 RT 쿠키를 즉시 만료시키는 빈 쿠키를 생성한다. */
+    /** maxAge=0 으로 RT 쿠키 즉시 만료 */
     private ResponseCookie expireRtCookie() {
         return ResponseCookie.from(RT_COOKIE_NAME, "")
                 .httpOnly(true)

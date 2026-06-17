@@ -61,12 +61,13 @@ public class UserController {
 
     @DeleteMapping("/me")
     @Operation(summary = "회원 탈퇴", description = "계정 상태를 WITHDRAWN으로 변경하고 Refresh Token을 삭제합니다.")
-    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal Long userId) {
-        userService.withdraw(userId);
+    public ResponseEntity<Void> withdraw(
+            @AuthenticationPrincipal Long userId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        userService.withdraw(userId, authHeader);
         return ResponseEntity.noContent().build();
     }
-
-    // ── 약관 동의 ────────────────────────────────────────────────────────────
 
     @GetMapping("/me/consents")
     @Operation(summary = "약관 동의 내역 조회")
@@ -82,8 +83,6 @@ public class UserController {
     ) {
         return ResponseEntity.ok(userConsentService.updateMarketing(userId, request));
     }
-
-    // ── 사용자 프로필 ─────────────────────────────────────────────────────────
 
     @PostMapping("/me/profile")
     @Operation(summary = "프로필 등록", description = "나이·지역·직업·관심 금융 분야를 등록합니다.")
@@ -109,8 +108,6 @@ public class UserController {
     ) {
         return ResponseEntity.ok(userProfileService.update(userId, request));
     }
-
-    // ── 본인인증 ──────────────────────────────────────────────────────────────
 
     @PostMapping(value = "/me/identity-verification/ocr",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

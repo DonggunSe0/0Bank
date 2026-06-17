@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -85,9 +87,10 @@ public class CodefBankTransferService implements BankTransferService {
                     params
             );
 
-            log.debug("[CODEF] 1원 이체 응답 — {}", response);
+            String decoded = URLDecoder.decode(response != null ? response : "", StandardCharsets.UTF_8);
+            log.debug("[CODEF] 1원 이체 응답 — {}", decoded);
 
-            Map<?, ?> responseMap = OBJECT_MAPPER.readValue(response, Map.class);
+            Map<?, ?> responseMap = OBJECT_MAPPER.readValue(decoded, Map.class);
             if (responseMap == null) {
                 throw new BusinessException(UserErrorCode.ONE_WON_TRANSFER_FAILED);
             }

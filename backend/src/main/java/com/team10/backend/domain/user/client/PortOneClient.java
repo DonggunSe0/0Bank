@@ -9,15 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-/**
- * 포트원 V2 REST API 클라이언트.
- *
- * <h2>인증 방식</h2>
- * <pre>Authorization: PortOne {API_SECRET}</pre>
- *
- * <h2>사용 API</h2>
- * <pre>GET https://api.portone.io/identity-verifications/{identityVerificationId}</pre>
- */
+/** 포트원 V2 본인인증 조회 클라이언트 — Authorization: PortOne {API_SECRET} */
 @Slf4j
 @Component
 public class PortOneClient {
@@ -38,13 +30,6 @@ public class PortOneClient {
                 .build();
     }
 
-    /**
-     * 본인인증 결과를 조회한다.
-     *
-     * @param identityVerificationId 프론트엔드에서 포트원 SDK로 발급받은 인증 ID
-     * @return 포트원 본인인증 결과
-     * @throws BusinessException 조회 실패 또는 네트워크 오류 시
-     */
     public PortOneIdentityVerification getIdentityVerification(String identityVerificationId) {
         try {
             PortOneIdentityVerification result = restClient.get()

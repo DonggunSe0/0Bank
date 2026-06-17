@@ -79,16 +79,6 @@ public class User extends BaseEntity {
         this.status = UserStatus.WITHDRAWN;
     }
 
-    /** 휴면 전환 */
-    public void setDormant() {
-        this.status = UserStatus.DORMANT;
-    }
-
-    /** 휴면 해제 (재활성화) */
-    public void reactivate() {
-        this.status = UserStatus.ACTIVE;
-    }
-
     public boolean isActive() {
         return this.status == UserStatus.ACTIVE;
     }

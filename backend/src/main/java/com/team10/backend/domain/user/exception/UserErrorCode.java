@@ -22,6 +22,9 @@ public enum UserErrorCode implements ErrorCode {
     ONE_WON_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "인증코드가 일치하지 않습니다."),
     ONE_WON_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증 시도 횟수를 초과했습니다. 1원 송금을 다시 요청해주세요."),
     ONE_WON_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘 1원 인증 요청 한도를 초과했습니다. 내일 다시 시도해주세요."),
+    OCR_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘 신분증 OCR 요청 한도를 초과했습니다. 내일 다시 시도해주세요."),
+    UNSUPPORTED_BANK(HttpStatus.BAD_REQUEST, "지원하지 않는 은행 기관코드입니다."),
+    BANK_MAINTENANCE(HttpStatus.SERVICE_UNAVAILABLE, "해당 은행은 현재 점검 중입니다. 잠시 후 다시 시도해주세요."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 Refresh Token입니다."),
     DORMANT_ACCOUNT(HttpStatus.FORBIDDEN, "휴면 계정입니다. 고객센터에 문의해주세요."),
     WITHDRAWN_ACCOUNT(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다."),
@@ -32,6 +35,7 @@ public enum UserErrorCode implements ErrorCode {
     IDENTITY_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "본인인증에 실패했습니다. 다시 시도해주세요."),
     IDENTITY_VERIFICATION_NAME_MISMATCH(HttpStatus.BAD_REQUEST, "본인인증 정보와 입력한 이름이 일치하지 않습니다."),
     ONE_WON_TRANSFER_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "1원 송금 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
+    OCR_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "신분증 정보를 읽을 수 없습니다. 선명한 이미지로 다시 시도해주세요."),
     CONSENT_NOT_FOUND(HttpStatus.NOT_FOUND, "약관 동의 내역을 찾을 수 없습니다."),
     ;
 

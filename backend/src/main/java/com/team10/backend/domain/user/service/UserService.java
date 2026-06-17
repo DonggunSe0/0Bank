@@ -42,20 +42,13 @@ public class UserService {
     private final PortOneClient portOneClient;
     private final PlatformTransactionManager txManager;
 
-    /**
-     * 회원가입: PortOne 본인인증 검증 후 유저와 약관 동의를 저장한다.
-     *
-     * <p>외부 API(PortOne) 호출은 DB 커넥션 점유를 방지하기 위해 트랜잭션 외부에서 수행한다.
-     * DB 저장 로직만 TransactionTemplate으로 별도 쓰기 트랜잭션을 시작한다.
-     */
+    // PortOne 외부 API는 트랜잭션 밖에서 호출, DB 저장만 별도 쓰기 트랜잭션
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public UserRes signup(UserCreateReq request) {
-        // Step 1: PortOne 본인인증 검증 — 외부 API, 트랜잭션 없음
         PortOneIdentityVerification verification =
                 portOneClient.getIdentityVerification(request.identityVerificationId());
         validateIdentityVerification(verification, request);
 
-        // Step 2: 유저 + 약관 동의 저장 — 쓰기 트랜잭션
         return new TransactionTemplate(txManager).execute(status -> {
             if (userRepository.existsByEmail(request.email())) {
                 throw new BusinessException(UserErrorCode.DUPLICATE_EMAIL);
@@ -106,10 +99,6 @@ public class UserService {
         return toUserRes(user);
     }
 
-    /**
-     * 로그인: 이메일/비밀번호 검증 후 Access Token + Refresh Token을 발급한다.
-     * 휴면/탈퇴 계정은 로그인 불가.
-     */
     public LoginRes login(LoginReq request) {
         loginAttemptService.checkAndThrowIfLocked(request.email());
 
@@ -124,7 +113,7 @@ public class UserService {
             throw new BusinessException(UserErrorCode.INVALID_CREDENTIALS);
         }
 
-        // 계정 상태 검증은 비밀번호 검증이 완료된 후에 수행하여 정보 노출을 방지합니다.
+        // 비밀번호 검증 후에 상태 체크 — 계정 존재 여부 노출 방지
         switch (user.getStatus()) {
             case DORMANT   -> throw new BusinessException(UserErrorCode.DORMANT_ACCOUNT);
             case WITHDRAWN -> throw new BusinessException(UserErrorCode.WITHDRAWN_ACCOUNT);
@@ -139,23 +128,26 @@ public class UserService {
         return new LoginRes(accessToken, refreshToken, toUserRes(user));
     }
 
-    /**
-     * 회원 탈퇴: 계정 상태를 WITHDRAWN으로 변경하고 Redis RT를 삭제한다.
-     */
     @Transactional
-    public void withdraw(Long userId) {
+    public void withdraw(Long userId, String authHeader) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
         user.withdraw();
         refreshTokenService.delete(userId);
+
+        // AT 블랙리스트 등록 — 탈퇴 즉시 기존 토큰 무효화
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String accessToken = authHeader.substring(7);
+            try {
+                String jti = jwtProvider.extractJti(accessToken);
+                long remainingSeconds = jwtProvider.getRemainingExpirySeconds(accessToken);
+                tokenBlocklistService.block(jti, remainingSeconds);
+            } catch (Exception e) {
+                log.warn("[Withdraw] AT 블랙리스트 등록 실패 (무시) — userId={}, error={}", userId, e.getMessage());
+            }
+        }
     }
 
-    /**
-     * Access Token 재발급 (Refresh Token Rotation).
-     *
-     * <p>Refresh Token은 HttpOnly 쿠키에서 읽어 컨트롤러가 전달한다.
-     * 만료된 AT에서 userId를 추출 → Redis의 RT와 비교 → 새 AT + 새 RT 발급
-     */
     public TokenRefreshRes refresh(TokenRefreshReq request, String refreshToken) {
         Long userId;
         try {
@@ -164,8 +156,7 @@ public class UserService {
             throw new BusinessException(UserErrorCode.INVALID_REFRESH_TOKEN);
         }
 
-        // validateAndConsume: Redis에서 토큰을 원자적으로 가져오면서 즉시 삭제
-        // 동시 요청이 들어와도 하나만 성공 (RT Rotation race condition 방지)
+        // 원자적 get+delete — 동시 요청 중 하나만 성공 (RT Rotation race condition 방지)
         if (!refreshTokenService.validateAndConsume(userId, refreshToken)) {
             throw new BusinessException(UserErrorCode.INVALID_REFRESH_TOKEN);
         }
@@ -179,9 +170,6 @@ public class UserService {
         return new TokenRefreshRes(newAccessToken, newRefreshToken);
     }
 
-    /**
-     * 비밀번호 변경: 현재 비밀번호 검증 후 새 비밀번호로 변경하고 기존 RT를 무효화한다.
-     */
     @Transactional
     public void changePassword(Long userId, ChangePasswordReq request) {
         User user = userRepository.findById(userId)
@@ -197,9 +185,6 @@ public class UserService {
         refreshTokenService.delete(userId);
     }
 
-    /**
-     * 로그아웃: Redis의 Refresh Token을 삭제하고, AT를 블랙리스트에 등록한다.
-     */
     public void logout(Long userId, String accessToken) {
         refreshTokenService.delete(userId);
 

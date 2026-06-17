@@ -9,6 +9,7 @@ import com.team10.backend.domain.user.repository.UserProfileRepository;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +38,12 @@ public class UserProfileService {
                 request.financialInterests()
         );
 
-        return UserProfileRes.from(userId, userProfileRepository.save(profile));
+        try {
+            return UserProfileRes.from(userId, userProfileRepository.save(profile));
+        } catch (DataIntegrityViolationException e) {
+            // 동시 요청으로 existsByUserId 체크를 통과한 경우 DB unique 제약조건에서 잡힘
+            throw new BusinessException(UserErrorCode.PROFILE_ALREADY_EXISTS);
+        }
     }
 
     public UserProfileRes get(Long userId) {
