@@ -19,6 +19,7 @@ import com.team10.backend.global.jwt.TokenBlocklistService;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -60,7 +61,13 @@ public class UserService {
                     request.phoneNumber(),
                     request.birthDate()
             );
-            User saved = userRepository.save(user);
+            User saved;
+            try {
+                saved = userRepository.save(user);
+            } catch (DataIntegrityViolationException e) {
+                // 동시 요청으로 existsByEmail 체크를 통과한 경우 DB unique 제약조건에서 잡힘
+                throw new BusinessException(UserErrorCode.DUPLICATE_EMAIL);
+            }
             userConsentService.saveAll(
                     saved,
                     request.agreedServiceTerms(),

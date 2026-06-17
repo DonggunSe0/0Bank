@@ -105,37 +105,45 @@ public class IdentityVerificationService {
     // 외부 송금 API 포함 → 트랜잭션 밖에서 실행, DB 쓰기만 TransactionTemplate으로 분리
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OneWonStartRes startOneWonVerification(Long userId, OneWonStartReq request) {
-        IdentityVerification verification = identityVerificationRepository
-                .findTopByUserIdOrderByCreatedAtDesc(userId)
-                .filter(v -> v.getStatus() == VerificationStatus.GOVERNMENT_VERIFIED
-                        || v.getStatus() == VerificationStatus.ONE_WON_PENDING)
-                .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_NOT_READY_FOR_ONE_WON));
-
-        Long verificationId = verification.getId();
-
-        validateBankAvailability(request.organization());
-
-        String code = oneWonVerificationService.generateAndStore(verificationId, userId);
-        try {
-            bankTransferService.sendOneWon(request.organization(), request.accountNumber(), code);
-        } catch (Exception e) {
-            // 송금 실패 시 Redis 코드 + daily 카운터 보상 롤백
-            oneWonVerificationService.deleteCode(verificationId);
-            oneWonVerificationService.decrementDailyCount(userId);
-            throw e;
+        // 동시 요청 방지 — 같은 유저가 거의 동시에 두 번 호출하면 실제 송금이 중복 실행될 수 있음
+        if (!oneWonVerificationService.tryAcquireStartLock(userId)) {
+            throw new BusinessException(UserErrorCode.ONE_WON_REQUEST_IN_PROGRESS);
         }
+        try {
+            IdentityVerification verification = identityVerificationRepository
+                    .findTopByUserIdOrderByCreatedAtDesc(userId)
+                    .filter(v -> v.getStatus() == VerificationStatus.GOVERNMENT_VERIFIED
+                            || v.getStatus() == VerificationStatus.ONE_WON_PENDING)
+                    .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_NOT_READY_FOR_ONE_WON));
 
-        return new TransactionTemplate(txManager).execute(status -> {
-            IdentityVerification managed = identityVerificationRepository
-                    .findById(verificationId)
-                    .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND));
-            managed.startOneWon();
-            return new OneWonStartRes(
-                    managed.getId(),
-                    managed.getStatus(),
-                    "1원이 송금되었습니다. 입금 메모의 4자리 코드를 입력해주세요. (유효시간 10분)"
-            );
-        });
+            Long verificationId = verification.getId();
+
+            validateBankAvailability(request.organization());
+
+            String code = oneWonVerificationService.generateAndStore(verificationId, userId);
+            try {
+                bankTransferService.sendOneWon(request.organization(), request.accountNumber(), code);
+            } catch (Exception e) {
+                // 송금 실패 시 Redis 코드 + daily 카운터 보상 롤백
+                oneWonVerificationService.deleteCode(verificationId);
+                oneWonVerificationService.decrementDailyCount(userId);
+                throw e;
+            }
+
+            return new TransactionTemplate(txManager).execute(status -> {
+                IdentityVerification managed = identityVerificationRepository
+                        .findById(verificationId)
+                        .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND));
+                managed.startOneWon();
+                return new OneWonStartRes(
+                        managed.getId(),
+                        managed.getStatus(),
+                        "1원이 송금되었습니다. 입금 메모의 4자리 코드를 입력해주세요. (유효시간 10분)"
+                );
+            });
+        } finally {
+            oneWonVerificationService.releaseStartLock(userId);
+        }
     }
 
     @Transactional

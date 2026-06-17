@@ -24,8 +24,10 @@ public class OneWonVerificationService {
     private static final String KEY_PREFIX     = "identity:one-won:";
     private static final String ATTEMPT_PREFIX = "identity:one-won:attempt:";
     private static final String DAILY_PREFIX   = "identity:one-won:daily:";
+    private static final String LOCK_PREFIX    = "identity:one-won:lock:";
     private static final Duration TTL          = Duration.ofMinutes(10);
     private static final Duration DAILY_TTL    = Duration.ofDays(1);
+    private static final Duration LOCK_TTL     = Duration.ofSeconds(10);
     private static final int MAX_ATTEMPTS      = 5;
     private static final int MAX_DAILY         = 10;
     private static final SecureRandom RANDOM   = new SecureRandom();
@@ -47,6 +49,24 @@ public class OneWonVerificationService {
     );
 
     private final StringRedisTemplate redisTemplate;
+
+    /**
+     * 1원 인증 시작 동시 요청 방지용 락 획득.
+     * 같은 유저가 거의 동시에 두 번 호출하면 실제 송금(sendOneWon)이 중복 실행될 수 있어
+     * userId 기준으로 짧은 TTL의 락을 건다 (SET NX 방식, 원자적).
+     *
+     * @return 락 획득 성공 시 true, 이미 처리 중이면 false
+     */
+    public boolean tryAcquireStartLock(Long userId) {
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(LOCK_PREFIX + userId, "1", LOCK_TTL);
+        return Boolean.TRUE.equals(acquired);
+    }
+
+    /** 1원 인증 시작 처리(성공/실패 불문) 완료 후 락 해제 */
+    public void releaseStartLock(Long userId) {
+        redisTemplate.delete(LOCK_PREFIX + userId);
+    }
 
     public String generateAndStore(Long verificationId, Long userId) {
         String dailyKey = DAILY_PREFIX + userId;
