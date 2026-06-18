@@ -11,6 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface InvestmentHoldingRepository extends JpaRepository<InvestmentHolding, Long> {
 
+    boolean existsByInvestmentAccountId(Long investmentAccountId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select h

@@ -34,7 +34,7 @@ public class InvestmentAccount extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false, unique = true, length = 10)
+    @Column(nullable = false, unique = true, length = 13)
     private String accountNumber;
 
     @Column(length = 50)
@@ -91,12 +91,21 @@ public class InvestmentAccount extends BaseEntity {
         return this.status == InvestmentAccountStatus.ACTIVE;
     }
 
-    public void verifyPassword(
-            PasswordEncoder encoder,
-            String rawPassword
-    ) {
-        if (!encoder.matches(rawPassword, accountPasswordHash)) {
-            throw new BusinessException((InvestmentErrorCode.INVESTMENT_ACCOUNT_PASSWORD_MISMATCH));
+    public void updateNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void changePassword(String accountPasswordHash) {
+        this.accountPasswordHash = accountPasswordHash;
+    }
+
+    public void close() {
+        this.status = InvestmentAccountStatus.CLOSED;
+    }
+
+    public void verifyPassword(PasswordEncoder encoder, String pastPassword) {
+        if (!encoder.matches(pastPassword, accountPasswordHash)) {
+            throw new BusinessException(InvestmentErrorCode.INVESTMENT_ACCOUNT_PASSWORD_MISMATCH);
         }
     }
 

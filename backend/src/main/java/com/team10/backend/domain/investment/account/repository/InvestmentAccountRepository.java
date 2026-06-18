@@ -13,9 +13,15 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface InvestmentAccountRepository extends JpaRepository<InvestmentAccount, Long> {
 
+    Optional<InvestmentAccount> findByIdAndUserId(Long accountId, Long userId);
+
     List<InvestmentAccount> findAllByUserIdAndStatusNot(Long userId, InvestmentAccountStatus status);
 
-    Optional<InvestmentAccount> findByIdAndUserId(Long accountId, Long userId);
+    Optional<InvestmentAccount> findByIdAndUserIdAndStatusNot(
+            Long accountId,
+            Long userId,
+            InvestmentAccountStatus status
+    );
 
     boolean existsByAccountNumber(String accountNumber);
 
