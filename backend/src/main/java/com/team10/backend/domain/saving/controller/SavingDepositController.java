@@ -1,9 +1,11 @@
 package com.team10.backend.domain.saving.controller;
 
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
+import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
 import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
 import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
+import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
 import com.team10.backend.domain.saving.service.SavingDepositService;
 import com.team10.backend.domain.saving.type.DepositStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,5 +58,16 @@ public class SavingDepositController {
         DepositDetailRes response =
                 savingDepositService.getDeposit(userId, depositId);
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "적금 가입", description = "인증 사용자가 활성 적금 상품에 가입합니다.")
+    @PostMapping("/installments")
+    public ResponseEntity<InstallmentCreateRes> createInstallment(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody InstallmentCreateReq request
+    ) {
+        InstallmentCreateRes response =
+                savingDepositService.createInstallment(userId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

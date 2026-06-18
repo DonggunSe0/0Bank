@@ -4,13 +4,17 @@ import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
+import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
 import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
 import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
+import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
 import com.team10.backend.domain.saving.entity.Deposit;
+import com.team10.backend.domain.saving.entity.Installment;
 import com.team10.backend.domain.saving.entity.SavingProduct;
 import com.team10.backend.domain.saving.exception.SavingErrorCode;
 import com.team10.backend.domain.saving.repository.DepositRepository;
+import com.team10.backend.domain.saving.repository.InstallmentRepository;
 import com.team10.backend.domain.saving.repository.SavingProductRepository;
 import com.team10.backend.domain.saving.type.DepositStatus;
 import com.team10.backend.domain.saving.type.SavingProductType;
@@ -35,6 +39,7 @@ public class SavingDepositService {
     private final SavingProductRepository savingProductRepository;
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private final InstallmentRepository installmentRepository;
 
     @Transactional
     public DepositCreateRes createDeposit(Long userId, DepositCreateReq request) {
@@ -90,6 +95,62 @@ public class SavingDepositService {
         Deposit savedDeposit = depositRepository.save(deposit);
 
         return DepositCreateRes.from(savedDeposit);
+    }
+
+    @Transactional
+    public InstallmentCreateRes createInstallment(Long userId, InstallmentCreateReq request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.USER_NOT_FOUND));
+
+        SavingProduct savingProduct = savingProductRepository
+                .findByIdAndTypeAndActiveTrue(request.productId(),
+                        SavingProductType.INSTALLMENT)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
+
+        Account withdrawAccount = accountRepository
+                .findByIdAndUserId(request.withdrawAccountId(), userId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (!withdrawAccount.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        if (request.monthlyAmount() < savingProduct.getMinAmount()) {
+            throw new BusinessException(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
+        }
+
+        if (savingProduct.getMonthlyLimit() != null
+                && request.monthlyAmount() > savingProduct.getMonthlyLimit()) {
+            throw new BusinessException(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
+        }
+
+        Long expectedTargetAmount =
+                request.monthlyAmount() * savingProduct.getPeriodMonth();
+
+        if (!request.targetAmount().equals(expectedTargetAmount)) {
+            throw new BusinessException(SavingErrorCode.INVALID_TARGET_AMOUNT);
+        }
+
+        LocalDate maturityDate = LocalDate.now()
+                .plusMonths(savingProduct.getPeriodMonth());
+
+        // 적금 가입할 때 출금 계좌에서 1회차 월 납입액을 빼는 코드
+        withdrawAccount.withdraw(request.monthlyAmount());
+
+        Installment installment = Installment.create(
+                user,
+                savingProduct,
+                withdrawAccount,
+                request.monthlyAmount(),
+                request.targetAmount(),
+                savingProduct.getInterestRate(),
+                maturityDate,
+                request.autoTransferYn()
+        );
+
+        Installment savedInstallment = installmentRepository.save(installment);
+
+        return InstallmentCreateRes.from(savedInstallment);
     }
 
     public List<DepositSummaryRes> getDeposits(Long userId, DepositStatus status) {

@@ -12,15 +12,20 @@ import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.account.type.AccountStatus;
 import com.team10.backend.domain.account.type.AccountType;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
+import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
 import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
 import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
+import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
 import com.team10.backend.domain.saving.entity.Deposit;
+import com.team10.backend.domain.saving.entity.Installment;
 import com.team10.backend.domain.saving.entity.SavingProduct;
 import com.team10.backend.domain.saving.exception.SavingErrorCode;
 import com.team10.backend.domain.saving.repository.DepositRepository;
+import com.team10.backend.domain.saving.repository.InstallmentRepository;
 import com.team10.backend.domain.saving.repository.SavingProductRepository;
 import com.team10.backend.domain.saving.type.DepositStatus;
+import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.domain.saving.type.SavingProductType;
 import com.team10.backend.domain.transfer.exception.TransferErrorCode;
 import com.team10.backend.domain.user.entity.User;
@@ -53,18 +58,23 @@ class SavingDepositServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private InstallmentRepository installmentRepository;
+
     @InjectMocks
     private SavingDepositService savingDepositService;
 
     private User user;
     private Account activeAccount;
     private SavingProduct depositProduct;
+    private SavingProduct installmentProduct;
 
     @BeforeEach
     void setUp() {
         user = createUser(1L);
         activeAccount = createAccount(1L, user, AccountStatus.ACTIVE);
         depositProduct = createSavingProduct(1L, 100000L, 10000000L);
+        installmentProduct = createInstallmentProduct(2L, 10000L, 500000L);
     }
 
     @Test
@@ -271,6 +281,163 @@ class SavingDepositServiceTest {
                 .isEqualTo(SavingErrorCode.DEPOSIT_NOT_FOUND);
     }
 
+    @Test
+    @DisplayName("적금 가입 요청이 유효하면 적금 가입 정보를 저장한다")
+    void createInstallment() {
+        InstallmentCreateReq request = new InstallmentCreateReq(
+                2L,
+                1L,
+                100000L,
+                1200000L,
+                true
+        );
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(installmentRepository.save(any(Installment.class))).thenAnswer(invocation -> {
+            Installment installment = invocation.getArgument(0);
+            ReflectionTestUtils.setField(installment, "id", 1L);
+            return installment;
+        });
+
+        InstallmentCreateRes response = savingDepositService.createInstallment(1L, request);
+
+        assertThat(response.installmentId()).isEqualTo(1L);
+        assertThat(response.status()).isEqualTo(InstallmentStatus.ACTIVE);
+        assertThat(response.maturityDate()).isEqualTo(LocalDate.now().plusMonths(12));
+        assertThat(response.progressRate()).isEqualTo(8L);
+        assertThat(activeAccount.getBalance()).isEqualTo(1900000L);
+        verify(installmentRepository).save(any(Installment.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 사용자는 적금에 가입할 수 없다")
+    void createInstallmentWithNotFoundUser() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 100000L, 1200000L, true);
+
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(999L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("존재하지 않거나 비활성 적금 상품이면 적금 가입에 실패한다")
+    void createInstallmentWithNotFoundProduct() {
+        InstallmentCreateReq request = new InstallmentCreateReq(999L, 1L, 100000L, 1200000L, true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(999L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("출금 계좌가 본인 소유가 아니거나 존재하지 않으면 적금 가입에 실패한다")
+    void createInstallmentWithNotFoundWithdrawAccount() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 999L, 100000L, 1200000L, true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(999L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("ACTIVE 상태가 아닌 계좌로는 적금에 가입할 수 없다")
+    void createInstallmentWithNotActiveWithdrawAccount() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 100000L, 1200000L, true);
+        Account closedAccount = createAccount(1L, user, AccountStatus.CLOSED);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(closedAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+    @Test
+    @DisplayName("최소 월 납입액보다 작으면 적금 가입에 실패한다")
+    void createInstallmentWithLessThanMinAmount() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 5000L, 60000L, true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
+    }
+
+    @Test
+    @DisplayName("월 납입 한도보다 크면 적금 가입에 실패한다")
+    void createInstallmentWithGreaterThanMonthlyLimit() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 600000L, 7200000L, true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
+    }
+
+    @Test
+    @DisplayName("목표 금액이 월 납입액과 가입 기간으로 계산한 값과 다르면 적금 가입에 실패한다")
+    void createInstallmentWithInvalidTargetAmount() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 100000L, 1000000L, true);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(SavingErrorCode.INVALID_TARGET_AMOUNT);
+    }
+
+    @Test
+    @DisplayName("출금 계좌 잔액이 부족하면 적금 가입에 실패한다")
+    void createInstallmentWithInsufficientBalance() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 100000L, 1200000L, true);
+        Account insufficientAccount = createAccount(1L, user, AccountStatus.ACTIVE, 50000L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(insufficientAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE);
+    }
+
     private User createUser(Long id) {
         User user = User.create(
                 "user" + id + "@test.com",
@@ -322,6 +489,24 @@ class SavingDepositServiceTest {
                 .minAmount(minAmount)
                 .maxAmount(maxAmount)
                 .monthlyLimit(null)
+                .terms("가입 조건")
+                .active(true)
+                .build();
+        ReflectionTestUtils.setField(product, "id", id);
+        return product;
+    }
+
+    private SavingProduct createInstallmentProduct(Long id, Long minAmount, Long monthlyLimit) {
+        SavingProduct product = SavingProduct.builder()
+                .name("정기적금")
+                .bankName("국민은행")
+                .bankCode("KB")
+                .type(SavingProductType.INSTALLMENT)
+                .interestRate(3.0)
+                .periodMonth(12)
+                .minAmount(minAmount)
+                .maxAmount(null)
+                .monthlyLimit(monthlyLimit)
                 .terms("가입 조건")
                 .active(true)
                 .build();

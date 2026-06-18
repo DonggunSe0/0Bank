@@ -11,11 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
+import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
 import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
 import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
 import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
+import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
 import com.team10.backend.domain.saving.service.SavingDepositService;
 import com.team10.backend.domain.saving.type.DepositStatus;
+import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.support.security.AuthenticationPrincipalTestConfig;
 import com.team10.backend.support.security.WithMockLongUser;
 import java.time.LocalDate;
@@ -132,6 +135,55 @@ class SavingDepositControllerTest {
         DepositCreateReq request = new DepositCreateReq(null, 1L, 1000000L);
 
         mockMvc.perform(post("/api/v1/savings/deposits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("적금 가입 API는 인증 사용자와 요청 본문을 받아 201을 반환한다")
+    void createInstallment() throws Exception {
+        InstallmentCreateReq request = new InstallmentCreateReq(
+                2L,
+                1L,
+                100000L,
+                1200000L,
+                true
+        );
+        InstallmentCreateRes response = new InstallmentCreateRes(
+                1L,
+                InstallmentStatus.ACTIVE,
+                LocalDate.of(2027, 6, 17),
+                0L
+        );
+
+        when(savingDepositService.createInstallment(eq(1L), any(InstallmentCreateReq.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/savings/installments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.installmentId").value(1L))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.maturityDate").value("2027-06-17"))
+                .andExpect(jsonPath("$.progressRate").value(0L));
+
+        verify(savingDepositService).createInstallment(eq(1L), any(InstallmentCreateReq.class));
+    }
+
+    @Test
+    @DisplayName("적금 가입 API는 필수값이 없으면 400을 반환한다")
+    void createInstallmentWithoutRequiredValue() throws Exception {
+        InstallmentCreateReq request = new InstallmentCreateReq(
+                null,
+                1L,
+                100000L,
+                1200000L,
+                true
+        );
+
+        mockMvc.perform(post("/api/v1/savings/installments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
