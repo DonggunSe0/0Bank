@@ -2,7 +2,7 @@ package com.team10.backend.domain.transfer.controller;
 
 import com.team10.backend.domain.transfer.dto.req.DepositReq;
 import com.team10.backend.domain.transfer.dto.req.TransferReq;
-import com.team10.backend.domain.transfer.dto.res.DepositRes;
+import com.team10.backend.domain.transfer.dto.res.TopUpRes;
 import com.team10.backend.domain.transfer.dto.res.TransferRes;
 import com.team10.backend.domain.transfer.service.TransferService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,10 +23,11 @@ public class TransferController {
 
     @PostMapping("/topUp")
     @Operation(summary = "입금")
-    public ResponseEntity<DepositRes> topUp(
+    public ResponseEntity<TopUpRes> topUp(
             @AuthenticationPrincipal Long userId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody DepositReq request) {
-        DepositRes response = transferService.topUp(userId, request.accountId(), request.amount(), request.memo());
+        TopUpRes response = transferService.topUp(userId, idempotencyKey, request.accountId(), request.amount(), request.memo());
         return ResponseEntity.ok(response);
     }
 

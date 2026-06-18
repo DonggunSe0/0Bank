@@ -17,6 +17,8 @@ import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
 import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
 import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
 import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
+import com.team10.backend.domain.saving.dto.res.InstallmentDetailRes;
+import com.team10.backend.domain.saving.dto.res.InstallmentSummaryRes;
 import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.entity.Installment;
 import com.team10.backend.domain.saving.entity.SavingProduct;
@@ -282,6 +284,78 @@ class SavingDepositServiceTest {
     }
 
     @Test
+    @DisplayName("상태 필터 없이 내 적금 목록을 조회한다")
+    void getInstallments() {
+        Installment installment = createInstallment(1L, InstallmentStatus.ACTIVE);
+
+        when(installmentRepository.findAllByUserIdWithProduct(1L))
+                .thenReturn(List.of(installment));
+
+        List<InstallmentSummaryRes> responses = savingDepositService.getInstallments(1L, null);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).installmentId()).isEqualTo(1L);
+        assertThat(responses.get(0).productName()).isEqualTo("정기적금");
+        assertThat(responses.get(0).bankName()).isEqualTo("국민은행");
+        assertThat(responses.get(0).paidAmount()).isEqualTo(100000L);
+        assertThat(responses.get(0).progressRate()).isEqualTo(8L);
+        assertThat(responses.get(0).status()).isEqualTo(InstallmentStatus.ACTIVE);
+        verify(installmentRepository).findAllByUserIdWithProduct(1L);
+    }
+
+    @Test
+    @DisplayName("상태 필터로 내 적금 목록을 조회한다")
+    void getInstallmentsWithStatus() {
+        Installment installment = createInstallment(1L, InstallmentStatus.MATURED);
+
+        when(installmentRepository.findAllByUserIdAndStatusWithProduct(1L, InstallmentStatus.MATURED))
+                .thenReturn(List.of(installment));
+
+        List<InstallmentSummaryRes> responses =
+                savingDepositService.getInstallments(1L, InstallmentStatus.MATURED);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).installmentId()).isEqualTo(1L);
+        assertThat(responses.get(0).status()).isEqualTo(InstallmentStatus.MATURED);
+        verify(installmentRepository)
+                .findAllByUserIdAndStatusWithProduct(1L, InstallmentStatus.MATURED);
+    }
+
+    @Test
+    @DisplayName("내 적금 상세를 조회한다")
+    void getInstallment() {
+        Installment installment = createInstallment(1L, InstallmentStatus.ACTIVE);
+
+        when(installmentRepository.findByIdAndUserIdWithProduct(1L, 1L))
+                .thenReturn(Optional.of(installment));
+
+        InstallmentDetailRes response = savingDepositService.getInstallment(1L, 1L);
+
+        assertThat(response.installmentId()).isEqualTo(1L);
+        assertThat(response.productName()).isEqualTo("정기적금");
+        assertThat(response.bankName()).isEqualTo("국민은행");
+        assertThat(response.monthlyAmount()).isEqualTo(100000L);
+        assertThat(response.paidAmount()).isEqualTo(100000L);
+        assertThat(response.targetAmount()).isEqualTo(1200000L);
+        assertThat(response.progressRate()).isEqualTo(8L);
+        assertThat(response.maturityDate()).isEqualTo(LocalDate.now().plusMonths(12));
+        assertThat(response.status()).isEqualTo(InstallmentStatus.ACTIVE);
+        verify(installmentRepository).findByIdAndUserIdWithProduct(1L, 1L);
+    }
+
+    @Test
+    @DisplayName("본인 적금이 아니거나 존재하지 않으면 상세 조회에 실패한다")
+    void getInstallmentWithNotFoundInstallment() {
+        when(installmentRepository.findByIdAndUserIdWithProduct(999L, 1L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> savingDepositService.getInstallment(1L, 999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(SavingErrorCode.INSTALLMENT_NOT_FOUND);
+    }
+
+    @Test
     @DisplayName("적금 가입 요청이 유효하면 적금 가입 정보를 저장한다")
     void createInstallment() {
         InstallmentCreateReq request = new InstallmentCreateReq(
@@ -476,6 +550,22 @@ class SavingDepositServiceTest {
         ReflectionTestUtils.setField(deposit, "id", id);
         ReflectionTestUtils.setField(deposit, "status", status);
         return deposit;
+    }
+
+    private Installment createInstallment(Long id, InstallmentStatus status) {
+        Installment installment = Installment.create(
+                user,
+                installmentProduct,
+                activeAccount,
+                100000L,
+                1200000L,
+                3.0,
+                LocalDate.now().plusMonths(12),
+                true
+        );
+        ReflectionTestUtils.setField(installment, "id", id);
+        ReflectionTestUtils.setField(installment, "status", status);
+        return installment;
     }
 
     private SavingProduct createSavingProduct(Long id, Long minAmount, Long maxAmount) {

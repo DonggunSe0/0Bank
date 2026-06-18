@@ -4,7 +4,6 @@ import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.type.DepositStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDate;
 import java.util.Objects;
 
 public record DepositSummaryRes(
@@ -20,9 +19,6 @@ public record DepositSummaryRes(
         @Schema(description = "예치 원금", example = "1000000")
         Long principal,
 
-        @Schema(description = "만기일", example = "2027-06-16")
-        LocalDate maturityDate,
-
         @Schema(description = "예금 상태", example = "ACTIVE")
         DepositStatus status
 ) {
@@ -35,7 +31,6 @@ public record DepositSummaryRes(
                 deposit.getSavingProduct().getName(),
                 deposit.getSavingProduct().getBankName(),
                 deposit.getPrincipal(),
-                deposit.getMaturityDate(),
                 deposit.getStatus()
         );
     }
