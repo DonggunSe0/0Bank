@@ -3,7 +3,7 @@ package com.team10.backend.domain.transfer.controller;
 import com.team10.backend.domain.transaction.type.TransactionType;
 import com.team10.backend.domain.transfer.dto.req.DepositReq;
 import com.team10.backend.domain.transfer.dto.req.TransferReq;
-import com.team10.backend.domain.transfer.dto.res.DepositRes;
+import com.team10.backend.domain.transfer.dto.res.TopUpRes;
 import com.team10.backend.domain.transfer.dto.res.TransferRes;
 import com.team10.backend.domain.transfer.service.TransferService;
 import com.team10.backend.domain.transfer.type.TransferStatus;
@@ -35,7 +35,7 @@ class TransferControllerTest {
     @DisplayName("입금 요청을 서비스에 위임하고 200 OK 응답을 반환한다")
     void topUp_delegatesToServiceAndReturnsOk() {
         DepositReq request = new DepositReq(1L, 100_000L, "초기 입금");
-        DepositRes response = new DepositRes(
+        TopUpRes response = new TopUpRes(
                 10L,
                 1L,
                 TransactionType.DEPOSIT,
@@ -45,13 +45,13 @@ class TransferControllerTest {
                 "초기 입금",
                 LocalDateTime.of(2026, 6, 9, 10, 0)
         );
-        when(transferService.topUp(1L, 1L, 100_000L, "초기 입금")).thenReturn(response);
+        when(transferService.topUp(1L, "deposit-key", 1L, 100_000L, "초기 입금")).thenReturn(response);
 
-        ResponseEntity<DepositRes> result = transferController.topUp(1L, request);
+        ResponseEntity<TopUpRes> result = transferController.topUp(1L, "deposit-key", request);
 
         assertEquals(200, result.getStatusCode().value());
         assertSame(response, result.getBody());
-        verify(transferService).topUp(1L, 1L, 100_000L, "초기 입금");
+        verify(transferService).topUp(1L, "deposit-key", 1L, 100_000L, "초기 입금");
     }
 
     @Test
