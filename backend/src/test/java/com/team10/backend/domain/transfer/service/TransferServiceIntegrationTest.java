@@ -7,17 +7,19 @@ import com.team10.backend.domain.transaction.entity.TransactionHistory;
 import com.team10.backend.domain.transaction.repository.TransactionHistoryRepository;
 import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.domain.transaction.type.TransactionType;
-import com.team10.backend.domain.transfer.dto.res.DepositRes;
+import com.team10.backend.domain.transfer.dto.res.TopUpRes;
 import com.team10.backend.domain.transfer.dto.res.TransferRes;
 import com.team10.backend.domain.transfer.entity.Transfer;
-import com.team10.backend.domain.transfer.entity.TransferIdempotency;
 import com.team10.backend.domain.transfer.exception.TransferErrorCode;
-import com.team10.backend.domain.transfer.repository.TransferIdempotencyRepository;
 import com.team10.backend.domain.transfer.repository.TransferRepository;
-import com.team10.backend.domain.transfer.type.IdempotencyStatus;
 import com.team10.backend.domain.transfer.type.TransferStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.exception.BusinessException;
+import com.team10.backend.global.exception.GlobalErrorCode;
+import com.team10.backend.global.idempotency.entity.Idempotency;
+import com.team10.backend.global.idempotency.repository.IdempotencyRepository;
+import com.team10.backend.global.idempotency.type.IdempotencyOperationType;
+import com.team10.backend.global.idempotency.type.IdempotencyStatus;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,11 +35,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,7 +58,7 @@ class TransferServiceIntegrationTest {
     private TransferRepository transferRepository;
 
     @Autowired
-    private TransferIdempotencyRepository transferIdempotencyRepository;
+    private IdempotencyRepository idempotencyRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -74,7 +72,7 @@ class TransferServiceIntegrationTest {
         User user = saveUser("sender@example.com", "홍길동");
         Account account = saveAccount(user, "100200300001", 10_000L);
 
-        DepositRes response = transferService.topUp(user.getId(), account.getId(), 5_000L, "입금 메모");
+        TopUpRes response = transferService.topUp(user.getId(), "deposit-success-key", account.getId(), 5_000L, "입금 메모");
         flushAndClear();
 
         Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
@@ -93,6 +91,74 @@ class TransferServiceIntegrationTest {
         assertEquals(15_000L, history.getBalanceAfter());
         assertEquals("입금 메모", history.getMemo());
         assertNotNull(history.getTransactedAt());
+    }
+
+    @Test
+    @DisplayName("같은 멱등성 키와 같은 요청으로 입금을 재시도하면 중복 입금하지 않고 최초 응답을 반환한다")
+    void deposit_sameIdempotencyKeyAndSameRequest_returnsStoredResponseWithoutDuplicateDeposit() {
+        User user = saveUser("sender@example.com", "홍길동");
+        Account account = saveAccount(user, "100200300001", 10_000L);
+
+        TopUpRes firstResponse = transferService.topUp(
+                user.getId(),
+                "same-deposit-key",
+                account.getId(),
+                5_000L,
+                "입금 메모"
+        );
+        TopUpRes retryResponse = transferService.topUp(
+                user.getId(),
+                "same-deposit-key",
+                account.getId(),
+                5_000L,
+                "입금 메모"
+        );
+        flushAndClear();
+
+        Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
+        Idempotency idempotency = idempotencyRepository
+                .findByUser_IdAndOperationTypeAndIdempotencyKey(user.getId(), IdempotencyOperationType.DEPOSIT, "same-deposit-key")
+                .orElseThrow();
+
+        assertEquals(firstResponse, retryResponse);
+        assertEquals(15_000L, savedAccount.getBalance());
+        assertEquals(1, transactionHistoryRepository.count());
+        assertEquals(IdempotencyStatus.SUCCESS, idempotency.getStatus());
+        assertNotNull(idempotency.getResponseBody());
+        assertNotNull(idempotency.getCompletedAt());
+    }
+
+    @Test
+    @DisplayName("같은 멱등성 키로 다른 입금 요청이 들어오면 입금을 처리하지 않고 충돌 예외를 발생시킨다")
+    void deposit_sameIdempotencyKeyAndDifferentRequest_throwsConflict() {
+        User user = saveUser("sender@example.com", "홍길동");
+        Account account = saveAccount(user, "100200300001", 10_000L);
+
+        transferService.topUp(
+                user.getId(),
+                "deposit-conflict-key",
+                account.getId(),
+                5_000L,
+                "입금 메모"
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> transferService.topUp(
+                        user.getId(),
+                        "deposit-conflict-key",
+                        account.getId(),
+                        6_000L,
+                        "입금 메모"
+                )
+        );
+        flushAndClear();
+
+        Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
+
+        assertEquals(GlobalErrorCode.IDEMPOTENCY_REQUEST_CONFLICT, exception.getErrorCode());
+        assertEquals(15_000L, savedAccount.getBalance());
+        assertEquals(1, transactionHistoryRepository.count());
     }
 
     @Test
@@ -187,8 +253,8 @@ class TransferServiceIntegrationTest {
         flushAndClear();
 
         Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
-        TransferIdempotency idempotency = transferIdempotencyRepository
-                .findByUser_IdAndIdempotencyKey(sender.getId(), "same-request-key")
+        Idempotency idempotency = idempotencyRepository
+                .findByUser_IdAndOperationTypeAndIdempotencyKey(sender.getId(), IdempotencyOperationType.TRANSFER, "same-request-key")
                 .orElseThrow();
 
         assertEquals(firstResponse, retryResponse);
@@ -233,7 +299,7 @@ class TransferServiceIntegrationTest {
         Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
         Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
 
-        assertEquals(TransferErrorCode.IDEMPOTENCY_REQUEST_CONFLICT, exception.getErrorCode());
+        assertEquals(GlobalErrorCode.IDEMPOTENCY_REQUEST_CONFLICT, exception.getErrorCode());
         assertEquals(50_000L, savedSenderAccount.getBalance());
         assertEquals(60_000L, savedReceiverAccount.getBalance());
         assertEquals(1, transferRepository.count());
@@ -276,12 +342,17 @@ class TransferServiceIntegrationTest {
         Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
         Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
         List<Transfer> transfers = transferRepository.findAll();
+        Idempotency idempotency = idempotencyRepository
+                .findByUser_IdAndOperationTypeAndIdempotencyKey(sender.getId(), IdempotencyOperationType.TRANSFER, "insufficient-balance-key")
+                .orElseThrow();
 
         assertEquals(TransferErrorCode.INSUFFICIENT_BALANCE, exception.getErrorCode());
         assertEquals(10_000L, savedSenderAccount.getBalance());
         assertEquals(10_000L, savedReceiverAccount.getBalance());
         assertEquals(1, transfers.size());
         assertEquals(0, transactionHistoryRepository.count());
+        assertEquals(IdempotencyStatus.FAILED, idempotency.getStatus());
+        assertNotNull(idempotency.getCompletedAt());
 
         Transfer failedTransfer = transfers.getFirst();
         assertEquals(TransferStatus.FAILED, failedTransfer.getStatus());
@@ -289,6 +360,15 @@ class TransferServiceIntegrationTest {
         assertEquals(receiverAccount.getId(), failedTransfer.getReceiverAccount().getId());
         assertEquals(50_000L, failedTransfer.getAmount());
         assertEquals("잔액 부족", failedTransfer.getMemo());
+
+        BusinessException retryException = assertThrows(
+                BusinessException.class,
+                () -> transferService.transfer(sender.getId(), "insufficient-balance-key", senderAccount.getId(), "100200300002", 50_000L, "잔액 부족")
+        );
+
+        assertEquals(GlobalErrorCode.IDEMPOTENCY_REQUEST_FAILED, retryException.getErrorCode());
+        assertEquals(1, transferRepository.count());
+        assertEquals(0, transactionHistoryRepository.count());
     }
 
     @Test
@@ -301,7 +381,13 @@ class TransferServiceIntegrationTest {
 
         List<Throwable> failures = runConcurrently(
                 threadCount,
-                () -> transferService.topUp(user.getId(), account.getId(), amount, "동시 입금")
+                () -> transferService.topUp(
+                        user.getId(),
+                        "concurrent-deposit-" + Thread.currentThread().threadId(),
+                        account.getId(),
+                        amount,
+                        "동시 입금"
+                )
         );
         entityManager.clear();
 

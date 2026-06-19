@@ -2,12 +2,10 @@ package com.team10.backend.domain.saving.controller;
 
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
 import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
-import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
-import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
-import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
-import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
+import com.team10.backend.domain.saving.dto.res.*;
 import com.team10.backend.domain.saving.service.SavingDepositService;
 import com.team10.backend.domain.saving.type.DepositStatus;
+import com.team10.backend.domain.saving.type.InstallmentStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -22,7 +20,7 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/savings")
-@Tag(name = "Saving Deposit", description = "예금 가입 API")
+@Tag(name = "Saving Deposit", description = "예금/적금 API")
 public class SavingDepositController {
 
     private final SavingDepositService savingDepositService;
@@ -69,5 +67,26 @@ public class SavingDepositController {
         InstallmentCreateRes response =
                 savingDepositService.createInstallment(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "내 적금 목록 조회", description = "인증 사용자의 적금 목록을 조회합니다. 상태값으로 필터링할 수 있습니다.")
+    @GetMapping("/installments")
+    public ResponseEntity<List<InstallmentSummaryRes>> getInstallments(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) InstallmentStatus status
+    ) {
+        List<InstallmentSummaryRes> response =
+                savingDepositService.getInstallments(userId, status);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "내 적금 상세 조회", description = "인증 사용자의 적금 상세 정보를 조회합니다.")
+    @GetMapping("/installments/{installmentId}")
+    public ResponseEntity<InstallmentDetailRes> getInstallment(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long installmentId
+    ){
+        InstallmentDetailRes response = savingDepositService.getInstallment(userId, installmentId);
+        return ResponseEntity.ok(response);
     }
 }

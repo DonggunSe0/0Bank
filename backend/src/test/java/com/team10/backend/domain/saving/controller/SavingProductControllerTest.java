@@ -42,8 +42,7 @@ class SavingProductControllerTest {
                 .andExpect(jsonPath("$[0].name").value("정기예금"))
                 .andExpect(jsonPath("$[0].bankName").value("국민은행"))
                 .andExpect(jsonPath("$[0].interestRate").value(3.5))
-                .andExpect(jsonPath("$[0].periodMonth").value(12))
-                .andExpect(jsonPath("$[0].minAmount").value(100000L));
+                .andExpect(jsonPath("$[0].periodMonth").value(12));
 
         verify(savingProductService).getDepositProducts();
     }
@@ -103,8 +102,7 @@ class SavingProductControllerTest {
                 name,
                 "국민은행",
                 3.5,
-                12,
-                100000L
+                12
         );
     }
 

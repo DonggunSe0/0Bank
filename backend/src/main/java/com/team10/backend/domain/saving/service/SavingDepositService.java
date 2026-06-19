@@ -5,10 +5,7 @@ import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
 import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
-import com.team10.backend.domain.saving.dto.res.DepositCreateRes;
-import com.team10.backend.domain.saving.dto.res.DepositDetailRes;
-import com.team10.backend.domain.saving.dto.res.DepositSummaryRes;
-import com.team10.backend.domain.saving.dto.res.InstallmentCreateRes;
+import com.team10.backend.domain.saving.dto.res.*;
 import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.entity.Installment;
 import com.team10.backend.domain.saving.entity.SavingProduct;
@@ -17,6 +14,7 @@ import com.team10.backend.domain.saving.repository.DepositRepository;
 import com.team10.backend.domain.saving.repository.InstallmentRepository;
 import com.team10.backend.domain.saving.repository.SavingProductRepository;
 import com.team10.backend.domain.saving.type.DepositStatus;
+import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.domain.saving.type.SavingProductType;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
@@ -174,5 +172,30 @@ public class SavingDepositService {
                                 BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
 
         return DepositDetailRes.from(deposit);
+    }
+
+    public List<InstallmentSummaryRes> getInstallments(Long userId, InstallmentStatus status) {
+        List<Installment> installments;
+
+        if (status == null) {
+            installments =
+                    installmentRepository.findAllByUserIdWithProduct(userId);
+        } else {
+            installments =
+                    installmentRepository.findAllByUserIdAndStatusWithProduct(userId, status);
+        }
+
+        return installments.stream()
+                .map(InstallmentSummaryRes::from)
+                .toList();
+    }
+
+    public InstallmentDetailRes getInstallment(Long userId, Long installmentId) {
+        Installment installment =
+                installmentRepository.findByIdAndUserIdWithProduct(installmentId, userId)
+                        .orElseThrow(() -> new
+                                BusinessException(SavingErrorCode.INSTALLMENT_NOT_FOUND));
+
+        return InstallmentDetailRes.from(installment);
     }
 }

@@ -312,8 +312,9 @@ Authorization: Bearer {accessToken}
 ## 6.1 입금
 
 ```http
-POST /api/transfers/deposit
+POST /api/v1/transfers/topUp
 Authorization: Bearer {accessToken}
+Idempotency-Key: deposit-20260618-0001
 ```
 
 ### Request Body

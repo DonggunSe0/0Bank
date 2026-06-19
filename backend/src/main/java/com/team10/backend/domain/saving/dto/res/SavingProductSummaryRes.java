@@ -17,21 +17,16 @@ public record SavingProductSummaryRes(
         Double interestRate,
 
         @Schema(description = "가입 기간 개월 수", example = "12")
-        Integer periodMonth,
-
-        @Schema(description = "최소 가입 금액", example = "100000")
-        Long minAmount
+        Integer periodMonth
 ) {
 
-    public static SavingProductSummaryRes from(SavingProduct
-                                                       savingProduct) {
+    public static SavingProductSummaryRes from(SavingProduct savingProduct) {
         return new SavingProductSummaryRes(
                 savingProduct.getId(),
                 savingProduct.getName(),
                 savingProduct.getBankName(),
                 savingProduct.getInterestRate(),
-                savingProduct.getPeriodMonth(),
-                savingProduct.getMinAmount()
+                savingProduct.getPeriodMonth()
         );
     }
 }

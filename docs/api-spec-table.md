@@ -22,7 +22,7 @@
 | Account | 계좌 개설 | POST | `/api/accounts` | Y | nickname, accountType | accountId, accountNumber, balance, status |
 | Account | 내 계좌 목록 조회 | GET | `/api/accounts` | Y | - | account list |
 | Account | 내 계좌 상세 조회 | GET | `/api/accounts/{accountId}` | Y | accountId | account detail |
-| Transfer | 입금 | POST | `/api/transfers/deposit` | Y | accountId, amount, memo | transactionId, balanceAfter |
+| Transfer | 입금 | POST | `/api/v1/transfers/topUp` | Y | Idempotency-Key, accountId, amount, memo | transactionId, balanceAfter |
 | Transfer | 계좌 간 송금 | POST | `/api/transfers` | Y | senderAccountId, receiverAccountNumber, amount, memo | transferId, status, senderBalanceAfter |
 | Transaction | 거래내역 조회 | GET | `/api/accounts/{accountId}/transactions` | Y | accountId, filters, page, size | transaction page |
 
@@ -235,11 +235,12 @@
 | 항목 | 내용 |
 | --- | --- |
 | Method | POST |
-| URL | `/api/transfers/deposit` |
+| URL | `/api/v1/transfers/topUp` |
 | 인증 | 필요 |
+| Header | `Idempotency-Key` 필수 |
 | 설명 | 본인 계좌에 금액을 입금한다. |
 | 성공 Status | `200 OK` |
-| 주요 Error | `400 INVALID_INPUT_VALUE`, `403 ACCOUNT_ACCESS_DENIED`, `404 ACCOUNT_NOT_FOUND`, `409 ACCOUNT_NOT_ACTIVE` |
+| 주요 Error | `400 INVALID_INPUT_VALUE`, `400 IDEMPOTENCY_KEY_REQUIRED`, `400 IDEMPOTENCY_KEY_INVALID`, `403 ACCOUNT_ACCESS_DENIED`, `404 ACCOUNT_NOT_FOUND`, `409 ACCOUNT_NOT_ACTIVE`, `409 IDEMPOTENCY_REQUEST_CONFLICT`, `409 IDEMPOTENCY_REQUEST_PROCESSING`, `409 IDEMPOTENCY_REQUEST_FAILED`, `409 IDEMPOTENCY_REQUEST_EXPIRED` |
 
 #### Request Body
 

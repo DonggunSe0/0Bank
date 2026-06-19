@@ -47,7 +47,6 @@ class SavingProductServiceTest {
         assertThat(responses.get(0).bankName()).isEqualTo("국민은행");
         assertThat(responses.get(0).interestRate()).isEqualTo(3.5);
         assertThat(responses.get(0).periodMonth()).isEqualTo(12);
-        assertThat(responses.get(0).minAmount()).isEqualTo(100000L);
     }
 
     @Test
