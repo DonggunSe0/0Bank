@@ -9,6 +9,9 @@ import java.util.Objects;
 @Schema(description = "투자 계좌 요약 응답")
 public record InvestmentAccountSummaryRes(
 
+        @Schema(description = "투자 계좌 ID")
+        Long id,
+
         @Schema(description = "투자 계좌번호")
         String accountNumber,
 
@@ -29,6 +32,7 @@ public record InvestmentAccountSummaryRes(
         Objects.requireNonNull(account, "account는 null일 수 없습니다.");
 
         return new InvestmentAccountSummaryRes(
+                account.getId(),
                 account.getAccountNumber(),
                 account.getNickname(),
                 account.getCashBalance(),

@@ -87,6 +87,7 @@ class InvestmentAccountServiceTest {
         List<InvestmentAccountSummaryRes> responses = investmentAccountService.getAccounts(1L);
 
         assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).id()).isEqualTo(1L);
         assertThat(responses.get(0).accountNumber()).isEqualTo("1234567890-12");
         assertThat(responses.get(0).nickname()).isEqualTo("모의투자 계좌");
         assertThat(responses.get(0).cashBalance()).isZero();
@@ -104,6 +105,7 @@ class InvestmentAccountServiceTest {
 
         InvestmentAccountDetailRes response = investmentAccountService.getAccount(1L, 1L);
 
+        assertThat(response.id()).isEqualTo(1L);
         assertThat(response.accountNumber()).isEqualTo("1234567890-12");
         assertThat(response.nickname()).isEqualTo("모의투자 계좌");
         assertThat(response.cashBalance()).isZero();
@@ -166,6 +168,7 @@ class InvestmentAccountServiceTest {
 
         InvestmentAccountCreateRes response = investmentAccountService.createAccount(1L, request);
 
+        assertThat(response.id()).isEqualTo(1L);
         assertThat(response.accountNumber()).matches("\\d{10}-\\d{2}");
         assertThat(response.nickname()).isEqualTo("모의투자 계좌");
         assertThat(response.cashBalance()).isZero();

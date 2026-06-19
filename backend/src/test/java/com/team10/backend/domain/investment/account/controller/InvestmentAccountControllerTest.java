@@ -53,6 +53,7 @@ class InvestmentAccountControllerTest {
     @DisplayName("내 투자 계좌 목록 조회 API는 인증 사용자의 해지되지 않은 투자 계좌 목록을 반환한다")
     void getAccounts() throws Exception {
         InvestmentAccountSummaryRes response = new InvestmentAccountSummaryRes(
+                1L,
                 "1234567890-12",
                 "모의투자 계좌",
                 10000L,
@@ -64,6 +65,7 @@ class InvestmentAccountControllerTest {
 
         mockMvc.perform(get("/api/v1/investment/accounts"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1L))
                 .andExpect(jsonPath("$[0].accountNumber").value("1234567890-12"))
                 .andExpect(jsonPath("$[0].nickname").value("모의투자 계좌"))
                 .andExpect(jsonPath("$[0].cashBalance").value(10000L))
@@ -77,6 +79,7 @@ class InvestmentAccountControllerTest {
     @DisplayName("내 투자 계좌 상세 조회 API는 인증 사용자와 accountId로 투자 계좌 상세를 반환한다")
     void getAccount() throws Exception {
         InvestmentAccountDetailRes response = new InvestmentAccountDetailRes(
+                1L,
                 "1234567890-12",
                 "모의투자 계좌",
                 10000L,
@@ -89,6 +92,7 @@ class InvestmentAccountControllerTest {
 
         mockMvc.perform(get("/api/v1/investment/accounts/{accountId}", 1L))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.accountNumber").value("1234567890-12"))
                 .andExpect(jsonPath("$.nickname").value("모의투자 계좌"))
                 .andExpect(jsonPath("$.cashBalance").value(10000L))
@@ -122,6 +126,7 @@ class InvestmentAccountControllerTest {
         InvestmentAccountCreateReq request =
                 new InvestmentAccountCreateReq("모의투자 계좌", "123456", "verification-key", CurrencyCode.KRW);
         InvestmentAccountCreateRes response = new InvestmentAccountCreateRes(
+                1L,
                 "1234567890-12",
                 "모의투자 계좌",
                 0L,
@@ -137,6 +142,7 @@ class InvestmentAccountControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.accountNumber").value("1234567890-12"))
                 .andExpect(jsonPath("$.nickname").value("모의투자 계좌"))
                 .andExpect(jsonPath("$.cashBalance").value(0L))

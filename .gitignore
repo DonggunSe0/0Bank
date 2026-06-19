@@ -70,9 +70,12 @@ frontend/dist/
 frontend/build/
 frontend/.next/
 frontend/out/
+frontend/.vercel/
+frontend/.turbo/
 frontend/.env.local
 frontend/.env.*.local
 frontend-test/
+*.tsbuildinfo
 
 ############################
 # Coverage / Test

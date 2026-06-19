@@ -10,16 +10,19 @@ import java.util.Objects;
 @Schema(description = "투자 계좌 개설 성공에 대한 응답.")
 public record InvestmentAccountCreateRes(
 
-        @Schema(description = "투자 계좌번호", example = "1234567890-12")
+        @Schema(description = "투자 계좌 ID")
+        Long id,
+
+        @Schema(description = "투자 계좌번호")
         String accountNumber,
 
-        @Schema(description = "투자 계좌 별칭", example = "모의투자 계좌")
+        @Schema(description = "투자 계좌 별칭")
         String nickname,
 
-        @Schema(description = "예수금", example = "0")
+        @Schema(description = "예수금")
         Long cashBalance,
 
-        @Schema(description = "통화", example = "KRW")
+        @Schema(description = "통화")
         CurrencyCode currencyCode,
 
         @Schema(description = "투자 계좌 상태", example = "ACTIVE")
@@ -33,6 +36,7 @@ public record InvestmentAccountCreateRes(
         Objects.requireNonNull(account, "account는 null일 수 없습니다.");
 
         return new InvestmentAccountCreateRes(
+                account.getId(),
                 account.getAccountNumber(),
                 account.getNickname(),
                 account.getCashBalance(),
