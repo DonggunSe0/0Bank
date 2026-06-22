@@ -97,9 +97,27 @@ public class IdentityVerification extends BaseEntity {
         this.status = VerificationStatus.GOVERNMENT_VERIFIED;
     }
 
-    /** 1원 송금 요청 완료 — 코드 입력 대기 상태로 전환 */
+    /**
+     * 1원 송금 요청 접수 — 실제 송금은 트랜잭션 커밋 후 비동기로 처리된다.
+     * 동기 응답 시점에는 아직 송금이 완료되지 않았으므로 {@link #startOneWon()}과 구분한다.
+     */
+    public void requestOneWonTransfer() {
+        this.status = VerificationStatus.ONE_WON_IN_PROGRESS;
+    }
+
+    /** 1원 송금 요청 완료 — 코드 입력 대기 상태로 전환 (비동기 처리 성공 후 호출) */
     public void startOneWon() {
         this.status = VerificationStatus.ONE_WON_PENDING;
+    }
+
+    /**
+     * 비동기 1원 송금 실패 — 재시도 가능하도록 GOVERNMENT_VERIFIED로 되돌리고 사유만 기록한다.
+     * {@link #fail}과 달리 종료 상태(FAILED)로 보내지 않아, 사용자가 OCR부터 다시 시작하지 않고
+     * 1원 송금만 재요청할 수 있다.
+     */
+    public void revertOneWonRequest(String reason) {
+        this.failureReason = reason;
+        this.status = VerificationStatus.GOVERNMENT_VERIFIED;
     }
 
     /** 1원 송금 코드 검증 성공 — 인증 완료 */

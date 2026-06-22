@@ -2,19 +2,20 @@ package com.team10.backend.domain.user.service;
 
 import com.team10.backend.domain.user.dto.req.OneWonStartReq;
 import com.team10.backend.domain.user.dto.req.OneWonVerifyReq;
+import com.team10.backend.domain.user.dto.res.IdentityVerificationStatusRes;
 import com.team10.backend.domain.user.dto.res.OcrAcceptedRes;
 import com.team10.backend.domain.user.dto.res.OneWonStartRes;
 import com.team10.backend.domain.user.dto.res.OneWonVerifyRes;
 import com.team10.backend.domain.user.entity.IdentityVerification;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.event.OcrSubmittedEvent;
+import com.team10.backend.domain.user.event.OneWonTransferRequestedEvent;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.ocr.OcrService;
 import com.team10.backend.domain.user.repository.IdentityVerificationRepository;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.domain.user.type.VerificationStatus;
 import com.team10.backend.domain.user.verification.BankCode;
-import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.domain.user.verification.OneWonVerificationService;
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.exception.GlobalErrorCode;
@@ -58,7 +59,6 @@ public class IdentityVerificationService {
     private final UserRepository userRepository;
     private final IdentityVerificationRepository identityVerificationRepository;
     private final OcrService ocrService;
-    private final BankTransferService bankTransferService;
     private final OneWonVerificationService oneWonVerificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final PlatformTransactionManager txManager;
@@ -101,13 +101,20 @@ public class IdentityVerificationService {
         );
     }
 
-    // 외부 송금 API 포함 → 트랜잭션 밖에서 실행, DB 쓰기만 TransactionTemplate으로 분리
+    /**
+     * 1원 송금 요청 접수. 실제 은행 API 호출(최대 30초 블로킹, CodefBankRestClientConfig readTimeout)은
+     * 요청 스레드를 점유하지 않도록 트랜잭션 커밋 후 OneWonTransferRequestedEventListener가 비동기로 처리한다
+     * (OcrService와 동일한 accept-동기/처리-비동기 패턴). 동시 요청 방지 락은 비동기 처리가 끝날 때까지
+     * 유지해야 하므로, 정상적으로 비동기 처리에 넘긴 경우(kickedOff)에는 여기서 해제하지 않는다.
+     */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OneWonStartRes startOneWonVerification(Long userId, OneWonStartReq request) {
         // 동시 요청 방지 — 같은 유저가 거의 동시에 두 번 호출하면 실제 송금이 중복 실행될 수 있음
         if (!oneWonVerificationService.tryAcquireStartLock(userId)) {
             throw new BusinessException(UserErrorCode.ONE_WON_REQUEST_IN_PROGRESS);
         }
+
+        boolean kickedOff = false;
         try {
             IdentityVerification verification = identityVerificationRepository
                     .findTopByUserIdOrderByCreatedAtDesc(userId)
@@ -119,30 +126,45 @@ public class IdentityVerificationService {
 
             validateBankAvailability(request.organization());
 
-            String code = oneWonVerificationService.generateAndStore(verificationId, userId);
-            try {
-                bankTransferService.sendOneWon(request.organization(), request.accountNumber(), code);
-            } catch (Exception e) {
-                // 송금 실패 시 Redis 코드 + daily 카운터 보상 롤백
-                oneWonVerificationService.deleteCode(verificationId);
-                oneWonVerificationService.decrementDailyCount(userId);
-                throw e;
-            }
-
-            return new TransactionTemplate(txManager).execute(status -> {
+            OneWonStartRes response = new TransactionTemplate(txManager).execute(status -> {
                 IdentityVerification managed = identityVerificationRepository
                         .findById(verificationId)
                         .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND));
-                managed.startOneWon();
+                managed.requestOneWonTransfer();
+
+                // afterCommit() 이후 OneWonTransferRequestedEventListener가 실제 송금을 비동기로 처리한다.
+                eventPublisher.publishEvent(new OneWonTransferRequestedEvent(
+                        verificationId, userId, request.organization(), request.accountNumber()
+                ));
+
                 return new OneWonStartRes(
                         managed.getId(),
                         managed.getStatus(),
-                        "1원이 송금되었습니다. 입금 메모의 4자리 코드를 입력해주세요. (유효시간 10분)"
+                        "1원 송금 요청이 접수되었습니다. 처리 결과는 상태 조회 API로 확인해주세요."
                 );
             });
+
+            kickedOff = true;
+            return response;
         } finally {
-            oneWonVerificationService.releaseStartLock(userId);
+            // 비동기 처리에 정상적으로 넘긴 경우엔 락 해제를 OneWonTransferProcessor의 finally로 위임한다.
+            if (!kickedOff) {
+                oneWonVerificationService.releaseStartLock(userId);
+            }
         }
+    }
+
+    /** 가장 최근 본인인증 세션의 진행 상태를 조회한다. OCR/1원송금이 비동기로 처리되므로 폴링용으로 사용한다. */
+    public IdentityVerificationStatusRes getMyVerificationStatus(Long userId) {
+        IdentityVerification verification = identityVerificationRepository
+                .findTopByUserIdOrderByCreatedAtDesc(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND));
+
+        return new IdentityVerificationStatusRes(
+                verification.getId(),
+                verification.getStatus(),
+                verification.getFailureReason()
+        );
     }
 
     @Transactional

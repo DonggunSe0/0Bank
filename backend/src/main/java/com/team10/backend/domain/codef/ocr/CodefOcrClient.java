@@ -6,8 +6,8 @@ import com.team10.backend.domain.codef.client.CodefAuthClient;
 import com.team10.backend.domain.codef.client.CodefAuthException;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.global.exception.BusinessException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -22,7 +22,6 @@ import java.util.Map;
 /** CODEF 신분증 OCR 클라이언트 (POST /v1/kr/etc/a/ocr/registration-card) */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CodefOcrClient {
 
     private static final String OCR_URL = "https://development.codef.io/v1/kr/etc/a/ocr/registration-card";
@@ -30,6 +29,15 @@ public class CodefOcrClient {
 
     private final CodefAuthClient codefAuthClient;
     private final RestClient restClient;
+
+    // account-inquiry 용 자격증명으로 발급된 토큰을 사용 (CodefAuthClientConfig 참고).
+    public CodefOcrClient(
+            @Qualifier("accountInquiry") CodefAuthClient codefAuthClient,
+            RestClient restClient
+    ) {
+        this.codefAuthClient = codefAuthClient;
+        this.restClient = restClient;
+    }
 
     /**
      * 신분증 이미지 바이트를 CODEF OCR API로 전송하고 구조화된 정보를 반환한다.

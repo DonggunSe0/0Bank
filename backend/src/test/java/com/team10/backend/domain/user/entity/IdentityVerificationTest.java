@@ -112,6 +112,33 @@ class IdentityVerificationTest {
     }
 
     @Nested
+    @DisplayName("requestOneWonTransfer / revertOneWonRequest")
+    class OneWonAsyncFlow {
+
+        @Test
+        @DisplayName("1원 송금 요청 접수 시 ONE_WON_IN_PROGRESS로 전환된다")
+        void requestOneWonTransfer_transitions() {
+            IdentityVerification verification = IdentityVerification.startOcr(newUser());
+
+            verification.requestOneWonTransfer();
+
+            assertThat(verification.getStatus()).isEqualTo(VerificationStatus.ONE_WON_IN_PROGRESS);
+        }
+
+        @Test
+        @DisplayName("비동기 송금 실패 시 사유를 기록하고 재시도 가능한 GOVERNMENT_VERIFIED로 복구된다")
+        void revertOneWonRequest_recordsReasonAndRevertsToRetryable() {
+            IdentityVerification verification = IdentityVerification.startOcr(newUser());
+            verification.requestOneWonTransfer();
+
+            verification.revertOneWonRequest("1원 송금에 실패했습니다. 다시 시도해주세요.");
+
+            assertThat(verification.getFailureReason()).isEqualTo("1원 송금에 실패했습니다. 다시 시도해주세요.");
+            assertThat(verification.getStatus()).isEqualTo(VerificationStatus.GOVERNMENT_VERIFIED);
+        }
+    }
+
+    @Nested
     @DisplayName("fail")
     class Fail {
 

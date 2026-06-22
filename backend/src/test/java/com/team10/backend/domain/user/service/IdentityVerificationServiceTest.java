@@ -2,18 +2,19 @@ package com.team10.backend.domain.user.service;
 
 import com.team10.backend.domain.user.dto.req.OneWonStartReq;
 import com.team10.backend.domain.user.dto.req.OneWonVerifyReq;
+import com.team10.backend.domain.user.dto.res.IdentityVerificationStatusRes;
 import com.team10.backend.domain.user.dto.res.OcrAcceptedRes;
 import com.team10.backend.domain.user.dto.res.OneWonStartRes;
 import com.team10.backend.domain.user.dto.res.OneWonVerifyRes;
 import com.team10.backend.domain.user.entity.IdentityVerification;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.event.OcrSubmittedEvent;
+import com.team10.backend.domain.user.event.OneWonTransferRequestedEvent;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.ocr.OcrService;
 import com.team10.backend.domain.user.repository.IdentityVerificationRepository;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.domain.user.type.VerificationStatus;
-import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.domain.user.verification.OneWonVerificationService;
 import com.team10.backend.domain.user.verification.OneWonVerificationService.VerifyResult;
 import com.team10.backend.global.exception.BusinessException;
@@ -57,7 +58,6 @@ class IdentityVerificationServiceTest {
     @Mock UserRepository userRepository;
     @Mock IdentityVerificationRepository identityVerificationRepository;
     @Mock OcrService ocrService;
-    @Mock BankTransferService bankTransferService;
     @Mock OneWonVerificationService oneWonVerificationService;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock PlatformTransactionManager txManager;
@@ -204,7 +204,7 @@ class IdentityVerificationServiceTest {
     class StartOneWonVerification {
 
         @Test
-        @DisplayName("정상 흐름 — 1원 송금 후 ONE_WON_PENDING 반환")
+        @DisplayName("정상 접수 — ONE_WON_IN_PROGRESS 반환, 이벤트 발행, 락은 비동기 처리에 넘겨 유지된다")
         void success() {
             IdentityVerification verification =
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
@@ -213,20 +213,29 @@ class IdentityVerificationServiceTest {
             when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
                     .thenReturn(Optional.of(verification));
-            when(oneWonVerificationService.generateAndStore(10L, 1L)).thenReturn("1234");
             when(identityVerificationRepository.findById(10L)).thenReturn(Optional.of(verification));
             TransactionStatus txStatus = mock(TransactionStatus.class);
             when(txManager.getTransaction(any())).thenReturn(txStatus);
 
             OneWonStartRes res = service.startOneWonVerification(1L, req);
 
-            assertThat(res.status()).isEqualTo(VerificationStatus.ONE_WON_PENDING);
-            verify(bankTransferService).sendOneWon("090", "12345678901", "1234");
-            verify(oneWonVerificationService).releaseStartLock(1L);
+            assertThat(res.status()).isEqualTo(VerificationStatus.ONE_WON_IN_PROGRESS);
+
+            ArgumentCaptor<OneWonTransferRequestedEvent> eventCaptor =
+                    ArgumentCaptor.forClass(OneWonTransferRequestedEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            OneWonTransferRequestedEvent event = eventCaptor.getValue();
+            assertThat(event.verificationId()).isEqualTo(10L);
+            assertThat(event.userId()).isEqualTo(1L);
+            assertThat(event.organization()).isEqualTo("090");
+            assertThat(event.accountNumber()).isEqualTo("12345678901");
+
+            // 실제 송금은 비동기로 처리되므로, 중복 방지 락은 여기서 해제하지 않고 비동기 처리 쪽(OneWonTransferProcessor)에 넘긴다
+            verify(oneWonVerificationService, never()).releaseStartLock(1L);
         }
 
         @Test
-        @DisplayName("행안부 인증 미완료 상태 → VERIFICATION_NOT_READY_FOR_ONE_WON")
+        @DisplayName("행안부 인증 미완료 상태 → VERIFICATION_NOT_READY_FOR_ONE_WON, 락 해제")
         void notReady() {
             IdentityVerification verification =
                     createVerification(10L, user, VerificationStatus.OCR_PENDING);
@@ -239,10 +248,12 @@ class IdentityVerificationServiceTest {
             assertThatThrownBy(() -> service.startOneWonVerification(1L, req))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.VERIFICATION_NOT_READY_FOR_ONE_WON);
+
+            verify(oneWonVerificationService).releaseStartLock(1L);
         }
 
         @Test
-        @DisplayName("세션 없음 → VERIFICATION_NOT_READY_FOR_ONE_WON")
+        @DisplayName("세션 없음 → VERIFICATION_NOT_READY_FOR_ONE_WON, 락 해제")
         void sessionNotFound() {
             OneWonStartReq req = new OneWonStartReq("12345678901", "004");
 
@@ -253,10 +264,12 @@ class IdentityVerificationServiceTest {
             assertThatThrownBy(() -> service.startOneWonVerification(1L, req))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.VERIFICATION_NOT_READY_FOR_ONE_WON);
+
+            verify(oneWonVerificationService).releaseStartLock(1L);
         }
 
         @Test
-        @DisplayName("지원하지 않는 기관코드 → UNSUPPORTED_BANK")
+        @DisplayName("지원하지 않는 기관코드 → UNSUPPORTED_BANK, 락 해제")
         void unsupportedBank() {
             IdentityVerification verification =
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
@@ -269,10 +282,12 @@ class IdentityVerificationServiceTest {
             assertThatThrownBy(() -> service.startOneWonVerification(1L, req))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.UNSUPPORTED_BANK);
+
+            verify(oneWonVerificationService).releaseStartLock(1L);
         }
 
         @Test
-        @DisplayName("은행 점검 시간대 → BANK_MAINTENANCE")
+        @DisplayName("은행 점검 시간대 → BANK_MAINTENANCE, 락 해제")
         void bankMaintenance() {
             IdentityVerification verification =
                     createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
@@ -290,28 +305,44 @@ class IdentityVerificationServiceTest {
                         .isInstanceOf(BusinessException.class)
                         .extracting("errorCode").isEqualTo(UserErrorCode.BANK_MAINTENANCE);
             }
+
+            verify(oneWonVerificationService).releaseStartLock(1L);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // getMyVerificationStatus
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getMyVerificationStatus")
+    class GetMyVerificationStatus {
+
+        @Test
+        @DisplayName("세션 존재 → 상태와 실패 사유 반환")
+        void found_returnsStatus() {
+            IdentityVerification verification =
+                    createVerification(10L, user, VerificationStatus.ONE_WON_IN_PROGRESS);
+
+            when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
+                    .thenReturn(Optional.of(verification));
+
+            IdentityVerificationStatusRes res = service.getMyVerificationStatus(1L);
+
+            assertThat(res.verificationId()).isEqualTo(10L);
+            assertThat(res.status()).isEqualTo(VerificationStatus.ONE_WON_IN_PROGRESS);
+            assertThat(res.failureReason()).isNull();
         }
 
         @Test
-        @DisplayName("송금 실패 시 Redis 코드 + 카운터 롤백")
-        void transferFailed_rollback() {
-            IdentityVerification verification =
-                    createVerification(10L, user, VerificationStatus.GOVERNMENT_VERIFIED);
-            OneWonStartReq req = new OneWonStartReq("12345678901", "090");
-
-            when(oneWonVerificationService.tryAcquireStartLock(1L)).thenReturn(true);
+        @DisplayName("세션 없음 → VERIFICATION_SESSION_NOT_FOUND")
+        void notFound_throws() {
             when(identityVerificationRepository.findTopByUserIdOrderByCreatedAtDesc(1L))
-                    .thenReturn(Optional.of(verification));
-            when(oneWonVerificationService.generateAndStore(10L, 1L)).thenReturn("1234");
-            doThrow(new BusinessException(UserErrorCode.ONE_WON_TRANSFER_FAILED))
-                    .when(bankTransferService).sendOneWon(any(), any(), any());
+                    .thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.startOneWonVerification(1L, req))
+            assertThatThrownBy(() -> service.getMyVerificationStatus(1L))
                     .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode").isEqualTo(UserErrorCode.ONE_WON_TRANSFER_FAILED);
-
-            verify(oneWonVerificationService).deleteCode(10L);
-            verify(oneWonVerificationService).decrementDailyCount(1L);
+                    .extracting("errorCode").isEqualTo(UserErrorCode.VERIFICATION_SESSION_NOT_FOUND);
         }
     }
 

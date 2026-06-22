@@ -22,6 +22,7 @@ spring:
     redis:
       host: localhost
       port: 6379
+      password: ${REDIS_PASSWORD:redis_local_pw} # docker-compose.yml의 redis requirepass와 동일한 값이어야 함
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

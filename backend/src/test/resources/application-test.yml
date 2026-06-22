@@ -57,9 +57,12 @@ security:
     secret: dGVzdC1obWFjLXNlY3JldA==
 
 codef:
-  client-id: test-client-id
-  client-secret: test-client-secret
-  public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzvtHhUxMWqCSoQhLpjjPocR3/Dt2ryZx8pu6Z5jCYhkwKg5AktRXP+1VbixKh8OfVHaDhPZ8Daqpf3pi5zS/feyJZ9Nd8Qzdll6PZbl7opKbFy2QKH85aOwaMGdu6Zdq1fEXOOYTMkGBvPtGoF20lxNM0FdcZEFEFDilcfQkQ/q2mq78+ItjY6DUrIIHPYzKQh3M70cab7X6pvK0eBWIFTbtwBx5hvV0ftYZWWUxnGgK1IOjxOUqNpJrfz2YiN/NyybHXhdR/4fsLmiC2J7wymBTTC/q/4XVhLj6FM//svFigXBNDLl9uBi1LTeCiQQky+0xVy3J2KC3hBCPSSP1mQIDAQAB
+  account-inquiry:
+    client-id: test-account-inquiry-client-id
+    client-secret: test-account-inquiry-client-secret
+  one-won-transfer:
+    client-id: test-one-won-transfer-client-id
+    client-secret: test-one-won-transfer-client-secret
 
 portone:
   api-secret: test-portone-secret

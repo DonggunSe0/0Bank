@@ -37,12 +37,12 @@ class CodefAuthClientTest {
         // 기본값: 분산 락은 항상 즉시 획득되고, Redis 공유 캐시는 비어있다고 가정.
         // (각 테스트가 필요한 부분만 덮어써서 의도를 드러낸다)
         // 락 값은 매 호출마다 새로 생성되는 UUID이므로 고정값("1") 대신 anyString()으로 매칭한다.
-        lenient().when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), anyString(), any(Duration.class)))
+        lenient().when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock:test"), anyString(), any(Duration.class)))
                 .thenReturn(true);
-        lenient().when(valueOperations.get("codef:oauth:token")).thenReturn(null);
+        lenient().when(valueOperations.get("codef:oauth:token:test")).thenReturn(null);
 
         codefAuthClient = new CodefAuthClient(
-                "test-client-id", "test-client-secret", codefOAuthExchange, redisTemplate, getAndDeleteIfMatchScript);
+                "test", "test-client-id", "test-client-secret", codefOAuthExchange, redisTemplate, getAndDeleteIfMatchScript);
     }
 
     @Nested
@@ -60,7 +60,7 @@ class CodefAuthClientTest {
             assertThat(token).isEqualTo("abc123");
             verify(codefOAuthExchange, times(1)).issueToken(anyString(), anyString());
             // 만료 5분 버퍼를 뺀 나머지(3600-300=3300초)만큼 Redis에 공유 캐싱
-            verify(valueOperations).set(eq("codef:oauth:token"), eq("abc123"), eq(Duration.ofSeconds(3300)));
+            verify(valueOperations).set(eq("codef:oauth:token:test"), eq("abc123"), eq(Duration.ofSeconds(3300)));
         }
 
         @Test
@@ -81,8 +81,8 @@ class CodefAuthClientTest {
         @Test
         @DisplayName("Redis 공유 캐시(L2)에 다른 인스턴스가 올려둔 토큰이 있으면 그걸 재사용한다")
         void sharedCacheHit_doesNotCallOAuthApi() {
-            when(valueOperations.get("codef:oauth:token")).thenReturn("shared-token");
-            when(redisTemplate.getExpire("codef:oauth:token")).thenReturn(1000L);
+            when(valueOperations.get("codef:oauth:token:test")).thenReturn("shared-token");
+            when(redisTemplate.getExpire("codef:oauth:token:test")).thenReturn(1000L);
 
             String token = codefAuthClient.getAccessToken();
 
@@ -93,11 +93,11 @@ class CodefAuthClientTest {
         @Test
         @DisplayName("다른 인스턴스가 분산 락을 잡고 있으면 대기하다가 Redis에 올라온 토큰을 재사용한다")
         void lockContention_waitsAndReusesTokenFromOtherInstance() {
-            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), anyString(), any(Duration.class)))
+            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock:test"), anyString(), any(Duration.class)))
                     .thenReturn(false); // 락 획득 실패 — 다른 인스턴스가 발급 중
-            when(valueOperations.get("codef:oauth:token"))
+            when(valueOperations.get("codef:oauth:token:test"))
                     .thenReturn(null, "other-instance-token"); // 첫 확인은 미스, 대기 후 재확인 시 히트
-            when(redisTemplate.getExpire("codef:oauth:token")).thenReturn(1000L);
+            when(redisTemplate.getExpire("codef:oauth:token:test")).thenReturn(1000L);
 
             String token = codefAuthClient.getAccessToken();
 
@@ -108,9 +108,9 @@ class CodefAuthClientTest {
         @Test
         @DisplayName("락 경쟁 후 대기 시간을 초과하면 가용성을 위해 직접 발급한다")
         void lockContention_timesOutAndFetchesDirectly() {
-            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), anyString(), any(Duration.class)))
+            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock:test"), anyString(), any(Duration.class)))
                     .thenReturn(false); // 끝까지 락을 못 잡음
-            when(valueOperations.get("codef:oauth:token")).thenReturn(null); // 끝까지 Redis에도 안 올라옴
+            when(valueOperations.get("codef:oauth:token:test")).thenReturn(null); // 끝까지 Redis에도 안 올라옴
             when(codefOAuthExchange.issueToken(anyString(), anyString()))
                     .thenReturn(new CodefOAuthExchange.CodefTokenResponse("direct-fetch", 3600L));
 
@@ -135,7 +135,7 @@ class CodefAuthClientTest {
             assertThat(first).isEqualTo("short-lived");
             assertThat(second).isEqualTo("refreshed");
             verify(codefOAuthExchange, times(2)).issueToken(anyString(), anyString());
-            verify(valueOperations, never()).set(eq("codef:oauth:token"), eq("short-lived"), any(Duration.class));
+            verify(valueOperations, never()).set(eq("codef:oauth:token:test"), eq("short-lived"), any(Duration.class));
         }
 
         @Test
@@ -178,8 +178,8 @@ class CodefAuthClientTest {
             codefAuthClient.getAccessToken();
 
             // TTL 만료로 락이 다른 인스턴스로 넘어간 경우를 보호하려면 값 비교 없는 무조건 DEL을 쓰면 안 된다.
-            verify(redisTemplate).execute(eq(getAndDeleteIfMatchScript), eq(List.of("codef:oauth:token:lock")), anyString());
-            verify(redisTemplate, never()).delete("codef:oauth:token:lock");
+            verify(redisTemplate).execute(eq(getAndDeleteIfMatchScript), eq(List.of("codef:oauth:token:lock:test")), anyString());
+            verify(redisTemplate, never()).delete("codef:oauth:token:lock:test");
         }
     }
 }

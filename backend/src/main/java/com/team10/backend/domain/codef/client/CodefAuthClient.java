@@ -1,10 +1,8 @@
 package com.team10.backend.domain.codef.client;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -15,7 +13,12 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * CODEF OAuth Access Token 발급/캐싱 (OCR, 1원 송금 등 CODEF API 호출에서 공용으로 사용).
+ * CODEF OAuth Access Token 발급/캐싱.
+ *
+ * <p>CODEF는 상품(계좌조회/OCR, 1원송금)마다 별도로 자격증명을 발급하므로, 이 클래스는
+ * {@code @Component}로 단일 공유 빈을 두지 않고 용도(purpose)별로 인스턴스를 분리해
+ * {@code CodefAuthClientConfig}에서 빈으로 등록한다. purpose는 Redis 캐시/락 키의
+ * 네임스페이스로도 쓰여, 서로 다른 용도의 토큰이 같은 Redis 키를 두고 충돌하지 않는다.
  *
  * <h2>분산서버 대응 — 2단계 캐시 + 분산 락</h2>
  * <p>인스턴스 로컬 {@link AtomicReference}만 쓰면 인스턴스마다 캐시가 따로 생겨, 인스턴스 수만큼
@@ -36,15 +39,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * 실수로 지워버릴 수 있다 — 그 경우 세 번째 인스턴스까지 동시에 락을 잡게 된다.
  */
 @Slf4j
-@Component
 public class CodefAuthClient {
 
-    private static final String REDIS_KEY = "codef:oauth:token";
-    private static final String LOCK_KEY = "codef:oauth:token:lock";
     private static final Duration EXPIRY_BUFFER = Duration.ofMinutes(5);
     private static final Duration LOCK_TTL = Duration.ofSeconds(10);
     private static final Duration LOCK_WAIT_INTERVAL = Duration.ofMillis(100);
     private static final int LOCK_WAIT_RETRIES = 10; // 최대 1초 대기
+
+    // purpose로 네임스페이스를 나눠 용도별 인스턴스가 같은 Redis 키를 두고 충돌하지 않게 한다.
+    private final String redisKey;
+    private final String lockKey;
 
     private final String clientId;
     private final String clientSecret;
@@ -62,12 +66,15 @@ public class CodefAuthClient {
     private final Object tokenLock = new Object();
 
     public CodefAuthClient(
-            @Value("${codef.client-id}") String clientId,
-            @Value("${codef.client-secret}") String clientSecret,
+            String purpose,
+            String clientId,
+            String clientSecret,
             CodefOAuthExchange codefOAuthExchange,
             StringRedisTemplate redisTemplate,
             RedisScript<Long> getAndDeleteIfMatchScript
     ) {
+        this.redisKey = "codef:oauth:token:" + purpose;
+        this.lockKey = "codef:oauth:token:lock:" + purpose;
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.codefOAuthExchange = codefOAuthExchange;
@@ -102,11 +109,11 @@ public class CodefAuthClient {
 
     /** Redis에 다른 인스턴스가 올려둔 유효한 토큰이 있으면 로컬에도 채워두고 반환한다 */
     private String readSharedToken() {
-        String token = redisTemplate.opsForValue().get(REDIS_KEY);
+        String token = redisTemplate.opsForValue().get(redisKey);
         if (token == null) {
             return null;
         }
-        Long remainingTtl = redisTemplate.getExpire(REDIS_KEY);
+        Long remainingTtl = redisTemplate.getExpire(redisKey);
         if (remainingTtl == null || remainingTtl <= 0) {
             return null;
         }
@@ -122,7 +129,7 @@ public class CodefAuthClient {
     private String fetchWithDistributedLock() {
         String lockValue = UUID.randomUUID().toString();
         boolean lockAcquired = Boolean.TRUE.equals(
-                redisTemplate.opsForValue().setIfAbsent(LOCK_KEY, lockValue, LOCK_TTL));
+                redisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, LOCK_TTL));
 
         if (lockAcquired) {
             try {
@@ -151,7 +158,7 @@ public class CodefAuthClient {
      * TTL 만료로 락이 이미 다른 인스턴스 소유로 넘어간 경우엔 아무것도 지우지 않는다.
      */
     private void releaseLock(String lockValue) {
-        redisTemplate.execute(getAndDeleteIfMatchScript, List.of(LOCK_KEY), lockValue);
+        redisTemplate.execute(getAndDeleteIfMatchScript, List.of(lockKey), lockValue);
     }
 
     private void sleep(Duration duration) {
@@ -187,7 +194,7 @@ public class CodefAuthClient {
             // 버퍼를 빼고도 양수로 남는 만큼만 Redis에 공유 — 너무 짧으면 다른 인스턴스와
             // 공유할 가치가 없으니 로컬 캐시에만 두고 다음 호출에서 바로 재발급되게 둔다.
             if (cacheableSeconds > 0) {
-                redisTemplate.opsForValue().set(REDIS_KEY, response.accessToken(), Duration.ofSeconds(cacheableSeconds));
+                redisTemplate.opsForValue().set(redisKey, response.accessToken(), Duration.ofSeconds(cacheableSeconds));
             }
 
             log.info("[CODEF] 토큰 발급 완료");

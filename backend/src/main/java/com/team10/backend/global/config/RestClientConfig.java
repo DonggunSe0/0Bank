@@ -14,9 +14,7 @@ public class RestClientConfig {
 
     @Bean
     public RestClient restClient() {
-        // SimpleClientHttpRequestFactory(JDK 기본 URLConnection)는 커넥션 풀링/keep-alive가 없어 매 호출마다
-        // TCP+TLS 핸드셰이크를 새로 한다. JDK HttpClient는 커넥션 풀을 내장하고 있어 동일 호스트로의 반복 호출
-        // (PortOne, CODEF OAuth/OCR 등)에서 연결을 재사용한다.
+
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();

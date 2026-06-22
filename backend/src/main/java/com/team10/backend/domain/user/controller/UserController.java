@@ -5,6 +5,7 @@ import com.team10.backend.domain.user.dto.req.ConsentUpdateReq;
 import com.team10.backend.domain.user.dto.req.OneWonStartReq;
 import com.team10.backend.domain.user.dto.req.OneWonVerifyReq;
 import com.team10.backend.domain.user.dto.res.ConsentRes;
+import com.team10.backend.domain.user.dto.res.IdentityVerificationStatusRes;
 import com.team10.backend.domain.user.dto.res.OcrAcceptedRes;
 import com.team10.backend.domain.user.dto.res.OneWonStartRes;
 import com.team10.backend.domain.user.dto.res.OneWonVerifyRes;
@@ -111,6 +112,18 @@ public class UserController {
         return ResponseEntity.ok(userProfileService.update(userId, request));
     }
 
+    @GetMapping("/me/identity-verification")
+    @Operation(
+            summary = "본인인증 진행 상태 조회",
+            description = "가장 최근 본인인증 세션의 진행 상태를 조회합니다. " +
+                    "OCR/1원송금이 비동기로 처리되므로, 접수(202) 응답 후 이 API로 결과를 폴링하세요."
+    )
+    public ResponseEntity<IdentityVerificationStatusRes> getMyVerificationStatus(
+            @AuthenticationPrincipal Long userId
+    ) {
+        return ResponseEntity.ok(identityVerificationService.getMyVerificationStatus(userId));
+    }
+
     @PostMapping(value = "/me/identity-verification/ocr",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
@@ -130,7 +143,9 @@ public class UserController {
     @PostMapping("/me/identity-verification/one-won")
     @Operation(
             summary = "본인인증 3단계 — 1원 송금 요청",
-            description = "지정 계좌로 1원을 송금합니다. 입금 메모의 4자리 코드로 /verify를 호출하세요."
+            description = "지정 계좌로 1원 송금을 요청합니다. 송금은 백그라운드에서 비동기로 처리되니 " +
+                    "GET /me/identity-verification 으로 ONE_WON_PENDING 전환을 확인한 뒤 " +
+                    "입금 메모의 4자리 코드로 /verify를 호출하세요."
     )
     public ResponseEntity<OneWonStartRes> startOneWonVerification(
             @AuthenticationPrincipal Long userId,

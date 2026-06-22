@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.global.exception.BusinessException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -22,7 +22,6 @@ import java.util.Map;
 @Slf4j
 @Service
 @Primary
-@RequiredArgsConstructor
 public class CodefBankTransferService implements BankTransferService {
 
     // 운영 전환 시 development.codef.io → api 도메인으로 교체
@@ -35,6 +34,15 @@ public class CodefBankTransferService implements BankTransferService {
 
     private final CodefAuthClient codefAuthClient;
     private final RestClient codefBankTransferRestClient;
+
+    // one-won-transfer 용 자격증명으로 발급된 토큰을 사용 (CodefAuthClientConfig 참고).
+    public CodefBankTransferService(
+            @Qualifier("oneWonTransfer") CodefAuthClient codefAuthClient,
+            RestClient codefBankTransferRestClient
+    ) {
+        this.codefAuthClient = codefAuthClient;
+        this.codefBankTransferRestClient = codefBankTransferRestClient;
+    }
 
     @Override
     public void sendOneWon(String organization, String accountNumber, String verificationCode) {
