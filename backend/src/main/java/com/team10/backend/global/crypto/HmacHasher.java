@@ -86,7 +86,7 @@ public class HmacHasher {
         String version;
         String storedDigest;
         int idx = stored.indexOf(VERSION_DELIMITER);
-        if (idx >= 0 && keysByVersion.containsKey(stored.substring(0, idx))) {
+        if (idx >= 0) {
             version = stored.substring(0, idx);
             storedDigest = stored.substring(idx + 1);
         } else {
