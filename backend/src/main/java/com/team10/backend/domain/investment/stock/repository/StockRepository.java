@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -19,24 +20,24 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
 
     Optional<Stock> findByStockCode(String stockCode);
 
+    Optional<Stock> findByStockCodeAndStatus(String stockCode, StockStatus status);
+
     List<Stock> findAllByStockCodeIn(Collection<String> stockCodes);
+
+    Page<Stock> findAllByMarketAndStatus(StockMarket market, StockStatus status, Pageable pageable);
 
     @Query("""
             select s
             from Stock s
             where s.market = :market
               and s.status = :status
-              and (
-                s.stockName like concat('%', :keyword, '%')
-                or s.stockCode like concat('%', :keyword, '%')
-              )
-            order by s.stockName asc
+              and s.stockName like concat('%', :keyword, '%') escape '\\'
+            order by s.stockName asc, s.stockCode asc
             """)
     List<Stock> search(
             @Param("keyword") String keyword,
             @Param("market") StockMarket market,
-            @Param("status") StockStatus status,
-            Pageable pageable
+            @Param("status") StockStatus status
     );
 
     /**
