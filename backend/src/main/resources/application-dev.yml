@@ -5,9 +5,6 @@ spring:
     password: app1234
 
   jpa:
-    hibernate:
-      ddl-auto: update # prod 환경에서 반드시 validate or none 으로 수정
-
     show-sql: true # jpa가 실행한 sql문 콘솔에 출력
 
     properties:

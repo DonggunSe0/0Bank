@@ -7,6 +7,9 @@ spring:
     hikari:
       maximum-pool-size: 50
 
+  flyway:
+    enabled: false
+
   jpa:
     hibernate:
       ddl-auto: create-drop
