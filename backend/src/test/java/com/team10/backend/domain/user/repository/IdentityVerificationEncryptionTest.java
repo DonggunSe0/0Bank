@@ -3,6 +3,7 @@ package com.team10.backend.domain.user.repository;
 import com.team10.backend.domain.user.entity.IdentityVerification;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.config.QuerydslConfig;
+import com.team10.backend.global.crypto.HmacConfig;
 import com.team10.backend.global.crypto.HmacHasher;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({QuerydslConfig.class, HmacHasher.class})
+@Import({QuerydslConfig.class, HmacConfig.class, HmacHasher.class})
 class IdentityVerificationEncryptionTest {
 
     @Autowired

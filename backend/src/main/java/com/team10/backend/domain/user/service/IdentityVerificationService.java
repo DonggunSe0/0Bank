@@ -15,6 +15,7 @@ import com.team10.backend.domain.user.ocr.OcrService;
 import com.team10.backend.domain.user.repository.IdentityVerificationRepository;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.domain.user.type.VerificationStatus;
+import com.team10.backend.domain.user.util.DailyResetClock;
 import com.team10.backend.domain.user.verification.BankCode;
 import com.team10.backend.domain.user.verification.OneWonVerificationService;
 import com.team10.backend.global.exception.BusinessException;
@@ -35,7 +36,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -53,8 +53,7 @@ public class IdentityVerificationService {
     private static final byte[] PNG_SIGNATURE =
             {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
     private static final String OCR_DAILY_KEY_PREFIX = "identity:ocr:daily:";
-    private static final int MAX_OCR_DAILY = 5;
-    private static final Duration DAILY_TTL = Duration.ofDays(1);
+    private static final int MAX_OCR_DAILY = 5; // 매일 00:00 KST 리셋
 
     private final UserRepository userRepository;
     private final IdentityVerificationRepository identityVerificationRepository;
@@ -101,12 +100,7 @@ public class IdentityVerificationService {
         );
     }
 
-    /**
-     * 1원 송금 요청 접수. 실제 은행 API 호출(최대 30초 블로킹, CodefBankRestClientConfig readTimeout)은
-     * 요청 스레드를 점유하지 않도록 트랜잭션 커밋 후 OneWonTransferRequestedEventListener가 비동기로 처리한다
-     * (OcrService와 동일한 accept-동기/처리-비동기 패턴). 동시 요청 방지 락은 비동기 처리가 끝날 때까지
-     * 유지해야 하므로, 정상적으로 비동기 처리에 넘긴 경우(kickedOff)에는 여기서 해제하지 않는다.
-     */
+    /** 1원 송금 요청 접수 — 실제 은행 API 호출은 커밋 후 비동기로 처리(accept-동기/처리-비동기 패턴). 락은 비동기 처리에 넘긴 뒤 그쪽에서 해제한다. */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OneWonStartRes startOneWonVerification(Long userId, OneWonStartReq request) {
         // 동시 요청 방지 — 같은 유저가 거의 동시에 두 번 호출하면 실제 송금이 중복 실행될 수 있음
@@ -211,10 +205,12 @@ public class IdentityVerificationService {
 
     private void checkOcrDailyLimit(Long userId) {
         String key = OCR_DAILY_KEY_PREFIX + userId;
+        // 매번 호출 시점부터 다음 자정(KST)까지 남은 초를 TTL로 넘긴다 — 키가 그날 처음 만들어질 때만
+        // EXPIRE가 적용되므로(incrWithExpireIfNewScript), 결과적으로 모든 사용자가 자정에 리셋된다.
         Long count = redisTemplate.execute(
                 incrWithExpireIfNewScript,
                 List.of(key),
-                String.valueOf(DAILY_TTL.toSeconds())
+                String.valueOf(DailyResetClock.secondsUntilNextMidnight())
         );
         if (count == null) {
             throw new BusinessException(GlobalErrorCode.INTERNAL_SERVER_ERROR);

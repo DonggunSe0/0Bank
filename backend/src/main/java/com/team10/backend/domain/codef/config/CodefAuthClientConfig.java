@@ -10,16 +10,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
 /**
- * CODEF는 상품(계좌조회/OCR, 1원송금)마다 별도로 자격증명을 발급하므로 {@link CodefAuthClient}를
- * 단일 공유 빈으로 두지 않고 용도별로 분리한 빈 두 개로 등록한다.
- *
- * <ul>
- *   <li>{@code accountInquiry} — 신분증 OCR 등에서 사용 ({@code codef.account-inquiry.*})</li>
- *   <li>{@code oneWonTransfer} — 1원 송금 계좌인증에서 사용 ({@code codef.one-won-transfer.*})</li>
- * </ul>
- *
- * 각 빈은 {@link CodefAuthClient} 생성 시 purpose를 넘겨받아 Redis 토큰 캐시/락 키를 분리하므로,
- * 두 용도의 토큰이 같은 Redis 키를 두고 서로 덮어쓰는 일은 없다.
+ * 상품(계좌조회/OCR, 1원송금)별로 CODEF 자격증명이 달라 {@link CodefAuthClient}를 용도별 빈 두 개로 분리 등록한다.
+ * purpose가 Redis 토큰 캐시/락 키의 네임스페이스가 되어 서로 덮어쓰지 않는다.
  */
 @Configuration
 public class CodefAuthClientConfig {

@@ -11,22 +11,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Opaque Refresh Token Redis 관리 서비스.
- *
- * <h2>Redis 키 전략</h2>
- * <pre>
- * refresh:{userId} → UUID 문자열 (TTL 7일)
- * </pre>
- *
- * <h2>Refresh Token 검증 흐름</h2>
- * <ol>
- *   <li>클라이언트가 만료된 Access Token + Refresh Token 전송</li>
- *   <li>{@link JwtProvider#parseUserIdIgnoreExpiry}로 만료된 AT에서 userId 추출</li>
- *   <li>{@link #validate}로 Redis의 토큰과 비교</li>
- *   <li>일치하면 새 AT + 새 RT 발급 (Refresh Token Rotation)</li>
- * </ol>
- */
+/** Opaque Refresh Token Redis 관리 서비스. {@code refresh:{userId}} → UUID(TTL 7일), 검증 일치 시 AT+RT를 함께 재발급한다(Rotation). */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -38,17 +23,10 @@ public class RefreshTokenService {
     private long refreshTokenExpirationSeconds;
 
     private final StringRedisTemplate redisTemplate;
-    // RedisScriptConfig에서 정의 — 값 일치 시에만 원자적으로 삭제(1=일치 후 삭제, 0=불일치/키 없음).
-    // 불일치 시 키를 삭제하지 않으므로 잘못된 RT 제출이 올바른 RT를 무효화하지 않는다.
+    // RedisScriptConfig 정의 — 일치 시에만 원자적 삭제(1=삭제, 0=불일치/없음), 불일치 시 기존 RT는 보존된다.
     private final RedisScript<Long> getAndDeleteIfMatchScript;
 
-    /**
-     * 새 Refresh Token을 발급하고 Redis에 저장한다 (TTL 7일).
-     * 기존 토큰이 있으면 덮어써서 단일 세션을 보장한다.
-     *
-     * @param userId 사용자 PK
-     * @return 발급된 Opaque Refresh Token
-     */
+    /** 새 Refresh Token을 발급해 Redis에 저장한다(TTL 7일) — 기존 토큰은 덮어써 단일 세션을 보장한다. */
     public String issue(Long userId) {
         String token = UUID.randomUUID().toString();
         redisTemplate.opsForValue().set(
@@ -60,17 +38,7 @@ public class RefreshTokenService {
         return token;
     }
 
-    /**
-     * Refresh Token Rotation 전용 원자적 검증.
-     *
-     * <p>Lua 스크립트로 GET + 일치 시에만 DEL을 원자적으로 실행한다.
-     * 동시에 두 요청이 같은 RT로 재발급을 시도해도 하나만 성공한다 (race condition 방지).
-     * 불일치 토큰 제출 시 Redis의 올바른 RT는 보존된다.
-     *
-     * @param userId 사용자 PK
-     * @param token  클라이언트가 제출한 Refresh Token
-     * @return 일치 여부 (만료됐거나 불일치 시 false)
-     */
+    /** Rotation 전용 원자적 검증 — Lua 스크립트로 GET+일치 시 DEL을 원자 실행해 동시 요청 중 하나만 성공시킨다. */
     public boolean validateAndConsume(Long userId, String token) {
         if (token == null) return false;
         Long result = redisTemplate.execute(
@@ -81,11 +49,7 @@ public class RefreshTokenService {
         return Long.valueOf(1L).equals(result);
     }
 
-    /**
-     * Refresh Token을 삭제한다 (로그아웃 / 강제 만료).
-     *
-     * @param userId 사용자 PK
-     */
+    /** Refresh Token을 삭제한다 (로그아웃 / 강제 만료). */
     public void delete(Long userId) {
         redisTemplate.delete(KEY_PREFIX + userId);
         log.info("[RefreshToken] 삭제 — userId={}", userId);
