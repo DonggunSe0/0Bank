@@ -34,7 +34,7 @@ class KisAuthClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build(); /** RestClient가 생성한 요청을 가로채 테스트한다 */
-        kisAuthClient = new KisAuthClient(builder.build(), new KisProperties("app-key", "app-secret"));
+        kisAuthClient = new KisAuthClient(builder.build(), new KisProperties("app-key", "app-secret", 41));
     }
 
     @Test

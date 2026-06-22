@@ -39,6 +39,15 @@ exchange-rate:
   sync:
     enabled: false
 
+investment:
+  realtime:
+    redis-pub-sub:
+      enabled: false
+    stream-lease-renewal:
+      enabled: false
+    kis-leader-reconcile:
+      enabled: false
+
 
 kis:
   app-key: test-key

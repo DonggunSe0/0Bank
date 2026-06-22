@@ -30,6 +30,9 @@ public enum InvestmentErrorCode implements ErrorCode {
     INSUFFICIENT_CASH_BALANCE(HttpStatus.CONFLICT, "예수금이 부족합니다."),
     INVALID_CASH_AMOUNT(HttpStatus.BAD_REQUEST, "입/출금액은 양수여야합니다"),
 
+    REALTIME_ORDERBOOK_STREAM_NOT_FOUND(HttpStatus.NOT_FOUND, "실시간 호가 스트림을 찾을 수 없습니다."),
+    REALTIME_ORDERBOOK_SUBSCRIPTION_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "실시간 호가 구독 가능 종목 수를 초과했습니다."),
+
     KIS_AUTH_FAILED(HttpStatus.BAD_GATEWAY, "KIS 인증 처리에 실패했습니다."),
     KIS_API_FAILED(HttpStatus.BAD_GATEWAY, "KIS API 호출에 실패했습니다.");
 

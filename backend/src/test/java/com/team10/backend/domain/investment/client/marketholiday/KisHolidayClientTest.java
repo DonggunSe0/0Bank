@@ -51,7 +51,7 @@ class KisHolidayClientTest {
         server = MockRestServiceServer.bindTo(builder).build();
         kisHolidayClient = new KisHolidayClient(
                 builder.build(),
-                new KisProperties("app-key", "app-secret"),
+                new KisProperties("app-key", "app-secret", 41),
                 accessTokenManager
         );
     }

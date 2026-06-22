@@ -1,6 +1,7 @@
 package com.team10.backend.global.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.TaskScheduler;
@@ -16,10 +17,15 @@ public class SchedulingConfig {
      * 커스텀 스케줄링 스레드 풀 생성
      */
     @Bean
-    public TaskScheduler taskScheduler() {
+    public TaskScheduler taskScheduler(
+            @Value("${app.scheduling.pool-size:6}") int poolSize,
+            @Value("${app.scheduling.await-termination-seconds:10}") int awaitTerminationSeconds
+    ) {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(2);
+        scheduler.setPoolSize(poolSize);
         scheduler.setThreadNamePrefix("scheduler-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(awaitTerminationSeconds);
         scheduler.setErrorHandler(
                 ex -> log.error(
                         "Scheduled task failed",

@@ -61,4 +61,26 @@ public final class KisConstants {
 
     }
 
+    public static final class RealtimeWebSocket {
+
+        public static final String APPROVAL_KEY = "approval_key";
+        public static final String TR_TYPE = "tr_type";
+        public static final String BODY = "body";
+        public static final String HEADER = "header";
+        public static final String INPUT = "input";
+        public static final String TR_KEY = "tr_key";
+
+        public static final String ORDERBOOK_TR_ID = "H0STASP0";
+        public static final String PINGPONG_TR_ID = "PINGPONG";
+        public static final String PERSONAL_CUST_TYPE = "P";
+        public static final String UTF_8_CONTENT_TYPE = "utf-8";
+        public static final String SUBSCRIBE_TR_TYPE = "1";
+        public static final String UNSUBSCRIBE_TR_TYPE = "2";
+
+        private RealtimeWebSocket() {
+
+        }
+
+    }
+
 }

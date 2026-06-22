@@ -30,9 +30,17 @@ spring:
 springdoc:
   default-produces-media-type: application/json;charset=UTF-8
 
+app:
+  scheduling:
+    pool-size: 6
+    await-termination-seconds: 10
+
 upbit:
   base-url: https://crix-api-cdn.upbit.com
 exchange-rate:
   sync:
     enabled: true
     fixed-delay-ms: 60000 # 동기화 시간 1분
+
+kis:
+  websocket-max-subscriptions: 41
