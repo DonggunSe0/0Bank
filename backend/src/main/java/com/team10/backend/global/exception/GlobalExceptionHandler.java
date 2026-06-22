@@ -8,6 +8,7 @@ import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -90,6 +91,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException e) {
         log.warn("[MISSING_PARAM] {}", e.getMessage());
+        return ResponseEntity.badRequest().body(ErrorResponse.from(GlobalErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    // 필수 @RequestHeader 누락
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException e) {
+        log.warn("[MISSING_HEADER] {}", e.getMessage());
         return ResponseEntity.badRequest().body(ErrorResponse.from(GlobalErrorCode.INVALID_INPUT_VALUE));
     }
 

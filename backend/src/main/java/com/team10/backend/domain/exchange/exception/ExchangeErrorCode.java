@@ -22,6 +22,7 @@ public enum ExchangeErrorCode implements ErrorCode {
     FX_WALLET_ACCESS_DENIED(HttpStatus.FORBIDDEN, "외화 지갑 접근 권한이 없습니다."),
     INSUFFICIENT_FX_BALANCE(HttpStatus.CONFLICT, "외화 지갑 잔액이 부족합니다."),
     FX_WALLET_BALANCE_REMAINING(HttpStatus.CONFLICT, "외화 지갑 잔액이 남아있어 해지할 수 없습니다."),
+    FX_WALLET_CURRENCY_MISMATCH(HttpStatus.CONFLICT, "외화 지갑의 통화가 환전 견적의 외화 통화와 일치하지 않습니다."),
 
     EXCHANGE_QUOTE_NOT_FOUND(HttpStatus.NOT_FOUND, "환전 견적을 찾을 수 없습니다."),
     EXCHANGE_QUOTE_EXPIRED(HttpStatus.GONE, "환전 견적이 만료되었습니다."),

@@ -3,9 +3,6 @@ spring:
   # datasource:
 
   jpa:
-    hibernate:
-      ddl-auto: validate # 운영 환경에서는 db 자동 업데이트 금지
-
     show-sql: false
 
     properties:

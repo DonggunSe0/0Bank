@@ -2,24 +2,30 @@ package com.team10.backend.domain.exchange.service;
 
 import com.team10.backend.domain.exchange.calculator.ExchangeCalculator;
 import com.team10.backend.domain.exchange.calculator.QuoteCalculation;
+import com.team10.backend.domain.exchange.dto.res.ExchangeOrderRes;
 import com.team10.backend.domain.exchange.dto.res.ExchangeQuoteRes;
 import com.team10.backend.domain.exchange.entity.Currency;
+import com.team10.backend.domain.exchange.entity.ExchangeOrder;
 import com.team10.backend.domain.exchange.entity.ExchangeQuote;
 import com.team10.backend.domain.exchange.entity.ExchangeRate;
 import com.team10.backend.domain.exchange.exception.ExchangeErrorCode;
 import com.team10.backend.domain.exchange.repository.CurrencyRepository;
+import com.team10.backend.domain.exchange.repository.ExchangeOrderRepository;
 import com.team10.backend.domain.exchange.repository.ExchangeQuoteRepository;
 import com.team10.backend.domain.exchange.repository.ExchangeRateRepository;
 import com.team10.backend.domain.exchange.type.CurrencyCode;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
+import com.team10.backend.global.idempotency.annotation.Idempotent;
+import com.team10.backend.global.idempotency.type.IdempotencyOperationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -27,10 +33,11 @@ public class ExchangeService {
 
     private final ExchangeQuoteRepository exchangeQuoteRepository;
     private final ExchangeRateRepository exchangeRateRepository;
+    private final ExchangeOrderRepository exchangeOrderRepository;
     private final UserRepository userRepository;
     private final CurrencyRepository currencyRepository;
     private final ExchangeCalculator exchangeCalculator;
-
+    private final ExchangeBusinessService exchangeBusinessService;
 
     @Transactional
     public ExchangeQuoteRes createQuote(
@@ -39,9 +46,8 @@ public class ExchangeService {
             CurrencyCode toCurrencyCode,
             BigDecimal fromAmount
     ) {
-        // 사용자 조회
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ExchangeErrorCode.USER_NOT_FOUND));
+        // 사용자 조회 및 검증
+        User user = findUser(userId);
         // 동일 통화 검증
         validateDifferentCurrencies(fromCurrencyCode, toCurrencyCode);
         validateKrwPair(fromCurrencyCode, toCurrencyCode);
@@ -83,6 +89,27 @@ public class ExchangeService {
         return ExchangeQuoteRes.from(exchangeQuoteRepository.save(quote));
     }
 
+    @Idempotent(
+            operationType = IdempotencyOperationType.EXCHANGE_ORDER,
+            userId = "#userId",
+            key = "#idempotencyKey",
+            hashFields = {"#exchangeQuoteId", "#krwAccountId", "#fxWalletId"}
+    )
+    public ExchangeOrderRes createExchangeOrder(
+            Long userId,
+            String idempotencyKey,
+            Long exchangeQuoteId,
+            Long krwAccountId,
+            Long fxWalletId
+    ) {
+        return exchangeBusinessService.executeExchangeOrder(
+                userId,
+                exchangeQuoteId,
+                krwAccountId,
+                fxWalletId
+        );
+    }
+
     private void validateDifferentCurrencies(CurrencyCode fromCurrencyCode, CurrencyCode toCurrencyCode) {
         if (fromCurrencyCode == toCurrencyCode) {
             throw new BusinessException(ExchangeErrorCode.SAME_CURRENCY_EXCHANGE_NOT_ALLOWED);
@@ -107,6 +134,29 @@ public class ExchangeService {
     private CurrencyCode resolveForeignCurrency(CurrencyCode fromCurrencyCode, CurrencyCode toCurrencyCode) {
         boolean fromIsKRW = fromCurrencyCode == CurrencyCode.KRW;
         return fromIsKRW ? toCurrencyCode : fromCurrencyCode; // 외화만 반환
+    }
+
+    private User findUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ExchangeErrorCode.USER_NOT_FOUND));
+    }
+
+    // 환전 주문 전체 조회
+    @Transactional(readOnly = true)
+    public List<ExchangeOrderRes> getExchangeOrders(Long userId) {
+        return exchangeOrderRepository.findAllByUserIdOrderByCreatedAtDesc(userId)
+                .stream()
+                .map(ExchangeOrderRes::from)
+                .toList();
+    }
+
+    // 환전 주문 상세 조회
+    @Transactional(readOnly = true)
+    public ExchangeOrderRes getExchangeOrder(Long userId, Long exchangeOrderId) {
+        ExchangeOrder order = exchangeOrderRepository.findByIdAndUserId(exchangeOrderId, userId)
+                .orElseThrow(() -> new BusinessException(ExchangeErrorCode.EXCHANGE_ORDER_NOT_FOUND));
+
+        return ExchangeOrderRes.from(order);
     }
 
 }

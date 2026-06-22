@@ -1,10 +1,11 @@
 package com.team10.backend.domain.exchange.controller;
 
+import com.team10.backend.domain.exchange.dto.req.ExchangeOrderCreateReq;
 import com.team10.backend.domain.exchange.dto.req.ExchangeQuoteCreateReq;
 import com.team10.backend.domain.exchange.dto.res.CurrencyRes;
+import com.team10.backend.domain.exchange.dto.res.ExchangeOrderRes;
 import com.team10.backend.domain.exchange.dto.res.ExchangeQuoteRes;
 import com.team10.backend.domain.exchange.dto.res.ExchangeRateRes;
-import com.team10.backend.domain.exchange.entity.Currency;
 import com.team10.backend.domain.exchange.service.ExchangeRateService;
 import com.team10.backend.domain.exchange.service.ExchangeService;
 import com.team10.backend.domain.exchange.type.CurrencyCode;
@@ -14,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -51,8 +53,7 @@ public class ExchangeController {
     @PostMapping("/currencies/quotes")
     @Operation(description = "환전 견적 생성")
     public ResponseEntity<ExchangeQuoteRes> createExchangeQuote(
-            // TODO: 인증된 사용자(@AuthenticationPrincipal)에서 userId 꺼내쓰도록 수정
-            @RequestParam Long userId,
+            @AuthenticationPrincipal Long userId,
             @Valid @RequestBody ExchangeQuoteCreateReq request
     ) {
         ExchangeQuoteRes response = exchangeService.createQuote(
@@ -65,20 +66,38 @@ public class ExchangeController {
 
     @PostMapping("/currencies/orders")
     @Operation(description = "환전 주문 실행")
-    public ResponseEntity<List<Currency>> createExchangeOrder() {
-        throw new UnsupportedOperationException("구현 예정 기능");
-    }
-
-    @GetMapping("/currencies/orders/{exchangeOrderId}")
-    @Operation(description = "환전 주문 상세 조회")
-    public ResponseEntity<List<Currency>> getExchangeOrder() {
-        throw new UnsupportedOperationException("구현 예정 기능");
+    public ResponseEntity<ExchangeOrderRes> createExchangeOrder(
+            @AuthenticationPrincipal Long userId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody ExchangeOrderCreateReq request
+    ) {
+        ExchangeOrderRes response = exchangeService.createExchangeOrder(
+                userId,
+                idempotencyKey,
+                request.exchangeQuoteId(),
+                request.krwAccountId(),
+                request.fxWalletId()
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/currencies/orders")
     @Operation(description = "내 환전 주문 목록 조회")
-    public ResponseEntity<List<Currency>> getExchangeOrders() {
-        throw new UnsupportedOperationException("구현 예정 기능");
+    public ResponseEntity<List<ExchangeOrderRes>> getExchangeOrders(
+            @AuthenticationPrincipal Long userId
+    ) {
+        List<ExchangeOrderRes> response = exchangeService.getExchangeOrders(userId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/currencies/orders/{exchangeOrderId}")
+    @Operation(description = "환전 주문 상세 조회")
+    public ResponseEntity<ExchangeOrderRes> getExchangeOrder(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long exchangeOrderId
+    ) {
+        ExchangeOrderRes response = exchangeService.getExchangeOrder(userId, exchangeOrderId);
+        return ResponseEntity.ok(response);
     }
 
 }

@@ -1,7 +1,6 @@
 package com.team10.backend.domain.exchange.dto.req;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "환전 주문 실행 요청")
@@ -16,10 +15,6 @@ public record ExchangeOrderCreateReq(
 
         @Schema(description = "외화 지갑 ID", example = "1")
         @NotNull(message = "외화 지갑 ID는 필수입니다.")
-        Long fxWalletId,
-
-        @Schema(description = "환전 주문 멱등성 키", example = "exchange-order-20260617-0001")
-        @NotBlank(message = "멱등성 키는 필수입니다.")
-        String idempotencyKey
+        Long fxWalletId
 ) {
 }

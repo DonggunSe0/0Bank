@@ -1,8 +1,10 @@
 package com.team10.backend.domain.exchange.entity;
 
+import com.team10.backend.domain.exchange.exception.ExchangeErrorCode;
 import com.team10.backend.domain.exchange.type.FxWalletStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.entity.BaseEntity;
+import com.team10.backend.global.exception.BusinessException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -62,5 +64,17 @@ public class FxWallet extends BaseEntity {
 
     public boolean hasBalance() {
         return this.balance.compareTo(BigDecimal.ZERO) != 0; // 0보다 크거나 잔액이 음수인 예외도 방지
+    }
+
+    public void deposit(BigDecimal amount) {
+        this.balance = this.balance.add(amount);
+    }
+
+    public void withdraw(BigDecimal amount) {
+        if (balance.subtract(amount).compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ExchangeErrorCode.INSUFFICIENT_FX_BALANCE);
+        } else {
+            this.balance = this.balance.subtract(amount);
+        }
     }
 }

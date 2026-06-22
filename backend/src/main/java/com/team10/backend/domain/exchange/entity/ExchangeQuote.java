@@ -1,5 +1,6 @@
 package com.team10.backend.domain.exchange.entity;
 
+import com.team10.backend.domain.exchange.type.CurrencyCode;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.entity.BaseEntity;
 import jakarta.persistence.*;
@@ -72,6 +73,12 @@ public class ExchangeQuote extends BaseEntity {
 
     public boolean isExpired(LocalDateTime now) {
         return !expiredAt.isAfter(now);
+    }
+
+    // 외화 반환 메서드
+    public Currency getFxCurrency() {
+        return fromCurrency.getCurrencyCode() != CurrencyCode.KRW
+                ? fromCurrency : toCurrency;
     }
 
 }

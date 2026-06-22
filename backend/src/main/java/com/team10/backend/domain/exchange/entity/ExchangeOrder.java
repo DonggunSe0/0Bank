@@ -25,7 +25,7 @@ public class ExchangeOrder extends BaseEntity {
     private User user;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "exchange_quote_id", nullable = false)
+    @JoinColumn(name = "exchange_quote_id", nullable = false, unique = true)
     private ExchangeQuote exchangeQuote;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -63,9 +63,30 @@ public class ExchangeOrder extends BaseEntity {
     @Column(nullable = false, length = 20)
     private ExchangeOrderStatus status;
 
-    @Column(name = "idempotency_key", unique = true, length = 100)
-    private String idempotencyKey;
-
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    public static ExchangeOrder createCompleted(
+            User user,
+            ExchangeQuote exchangeQuote,
+            Account krwAccount,
+            FxWallet fxWallet,
+            ExchangeDirection direction,
+            LocalDateTime completedAt
+    ) {
+        ExchangeOrder exchangeOrder = new ExchangeOrder();
+        exchangeOrder.user = user;
+        exchangeOrder.exchangeQuote = exchangeQuote;
+        exchangeOrder.krwAccount = krwAccount;
+        exchangeOrder.fxWallet = fxWallet;
+        exchangeOrder.direction = direction;
+        exchangeOrder.fromAmount = exchangeQuote.getFromAmount();
+        exchangeOrder.toAmount = exchangeQuote.getExpectedToAmount();
+        exchangeOrder.appliedRate = exchangeQuote.getRate();
+        exchangeOrder.feeRate = exchangeQuote.getFeeRate();
+        exchangeOrder.fee = exchangeQuote.getFee();
+        exchangeOrder.status = ExchangeOrderStatus.COMPLETED;
+        exchangeOrder.completedAt = completedAt;
+        return exchangeOrder;
+    }
 }
