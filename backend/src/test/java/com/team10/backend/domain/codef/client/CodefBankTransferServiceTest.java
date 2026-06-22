@@ -118,6 +118,16 @@ class CodefBankTransferServiceTest {
         }
 
         @Test
+        @DisplayName("result 필드가 객체가 아닌 다른 타입 → ONE_WON_TRANSFER_FAILED (200 OK 응답이 예상과 다른 모양인 케이스)")
+        void resultFieldWrongType() {
+            mockHttpResponse("{\"result\":\"unexpected-string-value\"}");
+
+            assertThatThrownBy(() -> service.sendOneWon("004", "12345678901", "1234"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(UserErrorCode.ONE_WON_TRANSFER_FAILED);
+        }
+
+        @Test
         @DisplayName("토큰 발급 실패 → ONE_WON_TRANSFER_FAILED로 변환")
         void authFailure() {
             when(codefAuthClient.getAccessToken())

@@ -39,8 +39,19 @@ public class CodefBankTransferService implements BankTransferService {
     @Override
     public void sendOneWon(String organization, String accountNumber, String verificationCode) {
         Map<?, ?> responseMap = requestTransfer(organization, accountNumber, verificationCode);
-        Map<?, ?> result = (responseMap != null) ? (Map<?, ?>) responseMap.get("result") : null;
-        String code = (result != null) ? (String) result.get("code") : null;
+
+        Map<?, ?> result;
+        String code;
+        try {
+            result = (responseMap != null) ? (Map<?, ?>) responseMap.get("result") : null;
+            code = (result != null) ? (String) result.get("code") : null;
+        } catch (ClassCastException e) {
+            // CODEF가 200 OK이지만 예상과 다른 모양(필드 타입 불일치 등)으로 응답한 경우.
+            // 캐스팅 실패를 그대로 흘리면 GlobalExceptionHandler의 일반 500으로 새어나간다.
+            log.error("[CODEF] 1원 송금 응답 형식이 예상과 다름 — org={}, account={}",
+                    organization, maskAccountNumber(accountNumber), e);
+            throw new BusinessException(UserErrorCode.ONE_WON_TRANSFER_FAILED);
+        }
 
         if (!"CF-00000".equals(code)) {
             // 계좌번호는 마스킹, 인증코드(verificationCode)는 시연 목적상 의도적으로 평문 노출

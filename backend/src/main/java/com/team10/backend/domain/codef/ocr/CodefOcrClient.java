@@ -37,35 +37,43 @@ public class CodefOcrClient {
     public IdCardOcrResult extractIdCard(byte[] imageBytes) {
         Map<?, ?> responseMap = requestOcr(imageBytes);
 
-        Map<?, ?> result = (responseMap != null) ? (Map<?, ?>) responseMap.get("result") : null;
-        String code = (result != null) ? (String) result.get("code") : null;
-        log.debug("[CODEF OCR] 응답 수신 — code={}", code);
+        try {
+            Map<?, ?> result = (responseMap != null) ? (Map<?, ?>) responseMap.get("result") : null;
+            String code = (result != null) ? (String) result.get("code") : null;
+            log.debug("[CODEF OCR] 응답 수신 — code={}", code);
 
-        if (!"CF-00000".equals(code)) {
-            log.error("[CODEF OCR] 실패 — code={}, message={}", code, result != null ? result.get("message") : null);
+            if (!"CF-00000".equals(code)) {
+                log.error("[CODEF OCR] 실패 — code={}, message={}", code, result != null ? result.get("message") : null);
+                throw new BusinessException(UserErrorCode.OCR_FAILED);
+            }
+
+            Map<?, ?> data = (Map<?, ?>) responseMap.get("data");
+            if (data == null) {
+                throw new BusinessException(UserErrorCode.OCR_FAILED);
+            }
+
+            String name        = (String) data.get("resUserName");
+            String rawIdentity = (String) data.get("resUserIdentity");
+            String rawDate     = (String) data.get("resIssueDate");
+
+            if (isBlank(name) || isBlank(rawIdentity) || isBlank(rawDate)
+                    || rawIdentity.length() < 13 || rawDate.length() < 8) {
+                log.warn("[CODEF OCR] 필수 필드 누락 — name={}, identity={}, date={}", name, maskIdentity(rawIdentity), rawDate);
+                throw new BusinessException(UserErrorCode.OCR_FAILED);
+            }
+
+            String residentNumber = rawIdentity.substring(0, 6) + "-" + rawIdentity.substring(6);
+            String issueDate = rawDate.substring(0, 4) + "-" + rawDate.substring(4, 6) + "-" + rawDate.substring(6, 8);
+
+            log.info("[CODEF OCR] 추출 완료 — name={}", name);
+            return new IdCardOcrResult(name, residentNumber, issueDate);
+
+        } catch (ClassCastException e) {
+            // CODEF가 200 OK이지만 예상과 다른 모양(필드 타입 불일치 등)으로 응답한 경우.
+            // 캐스팅 실패를 그대로 흘리면 GlobalExceptionHandler의 일반 500으로 새어나간다.
+            log.error("[CODEF OCR] 응답 형식이 예상과 다름", e);
             throw new BusinessException(UserErrorCode.OCR_FAILED);
         }
-
-        Map<?, ?> data = (Map<?, ?>) responseMap.get("data");
-        if (data == null) {
-            throw new BusinessException(UserErrorCode.OCR_FAILED);
-        }
-
-        String name        = (String) data.get("resUserName");
-        String rawIdentity = (String) data.get("resUserIdentity");
-        String rawDate     = (String) data.get("resIssueDate");
-
-        if (isBlank(name) || isBlank(rawIdentity) || isBlank(rawDate)
-                || rawIdentity.length() < 13 || rawDate.length() < 8) {
-            log.warn("[CODEF OCR] 필수 필드 누락 — name={}, identity={}, date={}", name, maskIdentity(rawIdentity), rawDate);
-            throw new BusinessException(UserErrorCode.OCR_FAILED);
-        }
-
-        String residentNumber = rawIdentity.substring(0, 6) + "-" + rawIdentity.substring(6);
-        String issueDate = rawDate.substring(0, 4) + "-" + rawDate.substring(4, 6) + "-" + rawDate.substring(6, 8);
-
-        log.info("[CODEF OCR] 추출 완료 — name={}", name);
-        return new IdCardOcrResult(name, residentNumber, issueDate);
     }
 
     /** OCR API 호출 + 응답 디코딩. 실패 시 전부 OCR_FAILED로 변환한다. */

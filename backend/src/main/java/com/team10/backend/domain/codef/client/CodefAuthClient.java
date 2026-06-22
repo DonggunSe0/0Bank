@@ -3,12 +3,15 @@ package com.team10.backend.domain.codef.client;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -25,6 +28,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *       락을 못 잡은 인스턴스는 잠시 대기 후 Redis를 재확인하고, 끝까지 못 받으면
  *       (락 보유 인스턴스 지연/실패 대비) 가용성을 위해 직접 발급을 시도한다.</li>
  * </ol>
+ *
+ * <h2>락 해제 안전성</h2>
+ * <p>락 값에 매 시도마다 새로 생성한 UUID를 넣고, 해제 시 {@code getAndDeleteIfMatchScript}로
+ * "내가 쓴 값일 때만" 원자적으로 지운다. 단순히 키를 무조건 DEL하면, 발급 호출이
+ * {@link #LOCK_TTL}보다 길어져 락이 자동 만료된 사이 다른 인스턴스가 새로 잡은 락을
+ * 실수로 지워버릴 수 있다 — 그 경우 세 번째 인스턴스까지 동시에 락을 잡게 된다.
  */
 @Slf4j
 @Component
@@ -43,6 +52,9 @@ public class CodefAuthClient {
     // 토큰 캐싱/락 로직만 담당한다 (CodefHttpServiceConfig에서 빈으로 등록).
     private final CodefOAuthExchange codefOAuthExchange;
     private final StringRedisTemplate redisTemplate;
+    // RedisScriptConfig에서 정의 — 값 일치 시에만 원자적으로 삭제(1=일치 후 삭제, 0=불일치/키 없음).
+    // 락 해제에 사용해 TTL 만료로 넘어간 다른 인스턴스의 락을 잘못 지우지 않게 한다.
+    private final RedisScript<Long> getAndDeleteIfMatchScript;
 
     // AT 캐시 — 만료 5분 전 갱신, token+만료시간 원자적 관리
     private record TokenCache(String token, long expiryEpoch) {}
@@ -53,12 +65,14 @@ public class CodefAuthClient {
             @Value("${codef.client-id}") String clientId,
             @Value("${codef.client-secret}") String clientSecret,
             CodefOAuthExchange codefOAuthExchange,
-            StringRedisTemplate redisTemplate
+            StringRedisTemplate redisTemplate,
+            RedisScript<Long> getAndDeleteIfMatchScript
     ) {
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.codefOAuthExchange = codefOAuthExchange;
         this.redisTemplate = redisTemplate;
+        this.getAndDeleteIfMatchScript = getAndDeleteIfMatchScript;
     }
 
     /** L1(로컬) → L2(Redis) → 분산 락+발급 순으로 확인해 유효한 토큰을 반환한다 */
@@ -106,14 +120,15 @@ public class CodefAuthClient {
      * 가용성을 위해 직접 발급한다 — 이 경우 드물게 중복 발급이 발생할 수 있다.
      */
     private String fetchWithDistributedLock() {
+        String lockValue = UUID.randomUUID().toString();
         boolean lockAcquired = Boolean.TRUE.equals(
-                redisTemplate.opsForValue().setIfAbsent(LOCK_KEY, "1", LOCK_TTL));
+                redisTemplate.opsForValue().setIfAbsent(LOCK_KEY, lockValue, LOCK_TTL));
 
         if (lockAcquired) {
             try {
                 return fetchAndCacheToken();
             } finally {
-                redisTemplate.delete(LOCK_KEY);
+                releaseLock(lockValue);
             }
         }
 
@@ -129,6 +144,14 @@ public class CodefAuthClient {
 
         log.warn("[CODEF] 분산 락 대기 시간 초과 — 직접 토큰 발급 시도");
         return fetchAndCacheToken();
+    }
+
+    /**
+     * 내가 setIfAbsent로 써넣은 값과 Redis에 남아있는 값이 같을 때만 원자적으로 락을 지운다.
+     * TTL 만료로 락이 이미 다른 인스턴스 소유로 넘어간 경우엔 아무것도 지우지 않는다.
+     */
+    private void releaseLock(String lockValue) {
+        redisTemplate.execute(getAndDeleteIfMatchScript, List.of(LOCK_KEY), lockValue);
     }
 
     private void sleep(Duration duration) {

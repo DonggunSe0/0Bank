@@ -9,8 +9,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,6 +27,7 @@ class CodefAuthClientTest {
     @Mock CodefOAuthExchange codefOAuthExchange;
     @Mock StringRedisTemplate redisTemplate;
     @Mock ValueOperations<String, String> valueOperations;
+    @Mock RedisScript<Long> getAndDeleteIfMatchScript;
 
     CodefAuthClient codefAuthClient;
 
@@ -33,11 +36,13 @@ class CodefAuthClientTest {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         // 기본값: 분산 락은 항상 즉시 획득되고, Redis 공유 캐시는 비어있다고 가정.
         // (각 테스트가 필요한 부분만 덮어써서 의도를 드러낸다)
-        lenient().when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), eq("1"), any(Duration.class)))
+        // 락 값은 매 호출마다 새로 생성되는 UUID이므로 고정값("1") 대신 anyString()으로 매칭한다.
+        lenient().when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), anyString(), any(Duration.class)))
                 .thenReturn(true);
         lenient().when(valueOperations.get("codef:oauth:token")).thenReturn(null);
 
-        codefAuthClient = new CodefAuthClient("test-client-id", "test-client-secret", codefOAuthExchange, redisTemplate);
+        codefAuthClient = new CodefAuthClient(
+                "test-client-id", "test-client-secret", codefOAuthExchange, redisTemplate, getAndDeleteIfMatchScript);
     }
 
     @Nested
@@ -88,7 +93,7 @@ class CodefAuthClientTest {
         @Test
         @DisplayName("다른 인스턴스가 분산 락을 잡고 있으면 대기하다가 Redis에 올라온 토큰을 재사용한다")
         void lockContention_waitsAndReusesTokenFromOtherInstance() {
-            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), eq("1"), any(Duration.class)))
+            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), anyString(), any(Duration.class)))
                     .thenReturn(false); // 락 획득 실패 — 다른 인스턴스가 발급 중
             when(valueOperations.get("codef:oauth:token"))
                     .thenReturn(null, "other-instance-token"); // 첫 확인은 미스, 대기 후 재확인 시 히트
@@ -103,7 +108,7 @@ class CodefAuthClientTest {
         @Test
         @DisplayName("락 경쟁 후 대기 시간을 초과하면 가용성을 위해 직접 발급한다")
         void lockContention_timesOutAndFetchesDirectly() {
-            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), eq("1"), any(Duration.class)))
+            when(valueOperations.setIfAbsent(eq("codef:oauth:token:lock"), anyString(), any(Duration.class)))
                     .thenReturn(false); // 끝까지 락을 못 잡음
             when(valueOperations.get("codef:oauth:token")).thenReturn(null); // 끝까지 Redis에도 안 올라옴
             when(codefOAuthExchange.issueToken(anyString(), anyString()))
@@ -162,6 +167,19 @@ class CodefAuthClientTest {
 
             assertThatThrownBy(() -> codefAuthClient.getAccessToken())
                     .isInstanceOf(CodefAuthException.class);
+        }
+
+        @Test
+        @DisplayName("락 해제는 무조건 DEL이 아니라 내가 쓴 값일 때만 지우는 compare-and-delete 스크립트를 사용한다")
+        void releasesLock_viaCompareAndDeleteScript_notUnconditionalDelete() {
+            when(codefOAuthExchange.issueToken(anyString(), anyString()))
+                    .thenReturn(new CodefOAuthExchange.CodefTokenResponse("abc123", 3600L));
+
+            codefAuthClient.getAccessToken();
+
+            // TTL 만료로 락이 다른 인스턴스로 넘어간 경우를 보호하려면 값 비교 없는 무조건 DEL을 쓰면 안 된다.
+            verify(redisTemplate).execute(eq(getAndDeleteIfMatchScript), eq(List.of("codef:oauth:token:lock")), anyString());
+            verify(redisTemplate, never()).delete("codef:oauth:token:lock");
         }
     }
 }

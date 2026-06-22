@@ -168,6 +168,19 @@ class CodefOcrClientTest {
         }
 
         @Test
+        @DisplayName("result 필드가 객체가 아닌 다른 타입 → OCR_FAILED (200 OK 응답이 예상과 다른 모양인 케이스)")
+        void resultFieldWrongType() {
+            mockHttpResponse("""
+                    {"result":"unexpected-string-value",
+                     "data":{"resUserName":"홍길동","resUserIdentity":"9012011234567","resIssueDate":"20230115"}}
+                    """);
+
+            assertThatThrownBy(() -> codefOcrClient.extractIdCard(new byte[]{1}))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(UserErrorCode.OCR_FAILED);
+        }
+
+        @Test
         @DisplayName("토큰 발급 실패 → OCR_FAILED로 변환")
         void authFailure() {
             when(codefAuthClient.getAccessToken())
