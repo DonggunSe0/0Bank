@@ -19,6 +19,7 @@ import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.expression.Expression;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ public class IdempotencyAspect {
     private final IdempotencyService idempotencyService;
     private final IdempotencyRequestHasher idempotencyRequestHasher;
     private final IdempotencyReservationFacade idempotencyReservationFacade;
+    private final TransactionTemplate transactionTemplate;
 
     private final SpelExpressionParser parser = new SpelExpressionParser(); // 문자열로 된 SpEL 표현식을 읽는 객체
     private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer(); // 메서드 파라미터 이름을 알아내는 도구
@@ -65,13 +67,32 @@ public class IdempotencyAspect {
         Idempotency idempotency = reserveResult.idempotency();
 
         try {
-            Object response = joinPoint.proceed(); // @Idempotent가 붙은 메서드 전체를 실행
-
-            idempotencyService.completeSuccess(idempotency.getId(), response);
-            return response;
+            return executeBusinessAndCompleteSuccess(joinPoint, idempotency);
         } catch (BusinessException e) {
             idempotencyService.completeFailure(idempotency.getId());
             throw e;
+        }
+    }
+
+    private Object executeBusinessAndCompleteSuccess(
+            ProceedingJoinPoint joinPoint,
+            Idempotency idempotency
+    ) throws Throwable {
+        // 비즈니스 처리와 멱등성 SUCCESS 기록을 같은 트랜잭션에 묶어 둘 중 하나만 커밋되는 상태를 방지한다.
+        try {
+            return transactionTemplate.execute(status -> {
+                try {
+                    Object response = joinPoint.proceed(); // @Idempotent가 붙은 메서드 전체를 실행
+                    idempotencyService.completeSuccess(idempotency.getId(), response);
+                    return response;
+                } catch (RuntimeException | Error e) {
+                    throw e;
+                } catch (Throwable e) {
+                    throw new ProceedingFailure(e);
+                }
+            });
+        } catch (ProceedingFailure e) {
+            throw e.getCause();
         }
     }
 
@@ -141,5 +162,12 @@ public class IdempotencyAspect {
     private Class<?> getReturnType(ProceedingJoinPoint joinPoint) {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         return signature.getReturnType();
+    }
+
+    private static class ProceedingFailure extends RuntimeException {
+
+        private ProceedingFailure(Throwable cause) {
+            super(cause);
+        }
     }
 }

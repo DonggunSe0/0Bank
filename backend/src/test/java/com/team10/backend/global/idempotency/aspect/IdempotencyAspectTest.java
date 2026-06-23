@@ -21,6 +21,8 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -40,6 +42,9 @@ class IdempotencyAspectTest {
 
     @Mock
     private IdempotencyReservationFacade idempotencyReservationFacade;
+
+    @Mock
+    private TransactionTemplate transactionTemplate;
 
     @Mock
     private ProceedingJoinPoint joinPoint;
@@ -66,6 +71,7 @@ class IdempotencyAspectTest {
                 TopUpRes.class
         )).thenReturn(IdempotencyReserveResult.reserved(idempotency));
         when(joinPoint.proceed()).thenReturn(response);
+        executeTransactionCallback();
 
         Object result = aspect.handle(joinPoint, idempotent);
 
@@ -128,6 +134,7 @@ class IdempotencyAspectTest {
                 TopUpRes.class
         )).thenReturn(IdempotencyReserveResult.reserved(idempotency));
         when(joinPoint.proceed()).thenThrow(businessException);
+        executeTransactionCallback();
 
         BusinessException result = assertThrows(
                 BusinessException.class,
@@ -143,8 +150,18 @@ class IdempotencyAspectTest {
         return new IdempotencyAspect(
                 idempotencyService,
                 idempotencyRequestHasher,
-                idempotencyReservationFacade
+                idempotencyReservationFacade,
+                transactionTemplate
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private void executeTransactionCallback() {
+        when(transactionTemplate.execute(any(TransactionCallback.class)))
+                .thenAnswer(invocation -> {
+                    TransactionCallback<Object> callback = invocation.getArgument(0);
+                    return callback.doInTransaction(null);
+                });
     }
 
     private void givenJoinPoint(Method method) {

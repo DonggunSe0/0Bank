@@ -78,7 +78,7 @@ public class FxWalletService {
     // 외화 지갑 해지/비활성화
     @Transactional
     public FxWalletRes closeFxWallet(Long fxWalletId, Long userId) {
-        FxWallet fxWallet = fxWalletRepository.findByIdAndUserId(fxWalletId, userId)
+        FxWallet fxWallet = fxWalletRepository.findByIdAndUserIdForUpdate(fxWalletId, userId)
                 .orElseThrow(() -> new BusinessException(ExchangeErrorCode.FX_WALLET_NOT_FOUND));
 
         // 상태 검증

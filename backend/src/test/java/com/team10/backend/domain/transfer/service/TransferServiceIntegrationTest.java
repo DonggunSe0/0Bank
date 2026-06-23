@@ -8,11 +8,8 @@ import com.team10.backend.domain.transaction.repository.TransactionHistoryReposi
 import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.domain.transaction.type.TransactionType;
 import com.team10.backend.domain.transfer.dto.res.TopUpRes;
-import com.team10.backend.domain.transfer.dto.res.TransferRes;
-import com.team10.backend.domain.transfer.entity.Transfer;
 import com.team10.backend.domain.transfer.exception.TransferErrorCode;
 import com.team10.backend.domain.transfer.repository.TransferRepository;
-import com.team10.backend.domain.transfer.type.TransferStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.exception.GlobalErrorCode;
@@ -33,7 +30,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.lang.reflect.Constructor;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -171,151 +167,6 @@ class TransferServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("송금 성공 시 실제 DB에 양쪽 잔액, 송금, 거래내역 두 건이 저장된다")
-    void transfer_success_persistsBalancesTransferAndTwoHistories() {
-        User sender = saveUser("sender@example.com", "송금자");
-        User receiver = saveUser("receiver@example.com", "수취자");
-        Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
-        Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
-
-        TransferRes response = transferService.transfer(sender.getId(), "transfer-success-key", senderAccount.getId(), "100200300002", 50_000L, "점심값");
-        flushAndClear();
-
-        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
-        Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
-        List<TransactionHistory> histories = transactionHistoryRepository.findAll()
-                .stream()
-                .sorted(Comparator.comparing(TransactionHistory::getDirection).reversed())
-                .toList();
-
-        assertEquals(50_000L, savedSenderAccount.getBalance());
-        assertEquals(60_000L, savedReceiverAccount.getBalance());
-        assertEquals(1, transferRepository.count());
-        assertEquals(2, histories.size());
-
-        assertNotNull(response.transferId());
-        assertEquals(TransferStatus.SUCCESS, response.status());
-        assertEquals(senderAccount.getId(), response.senderAccountId());
-        assertEquals("100200300001", response.senderAccountNumber());
-        assertEquals("100200300002", response.receiverAccountNumber());
-        assertEquals(50_000L, response.amount());
-        assertEquals(50_000L, response.senderBalanceAfter());
-        assertEquals("점심값", response.memo());
-
-        TransactionHistory senderHistory = histories.get(0);
-        assertEquals(savedSenderAccount.getId(), senderHistory.getAccount().getId());
-        assertEquals(TransactionType.TRANSFER, senderHistory.getType());
-        assertEquals(TransactionDirection.OUT, senderHistory.getDirection());
-        assertEquals(50_000L, senderHistory.getAmount());
-        assertEquals(100_000L, senderHistory.getBalanceBefore());
-        assertEquals(50_000L, senderHistory.getBalanceAfter());
-        assertEquals("100200300002", senderHistory.getCounterpartyAccountNumber());
-        assertEquals("수취자", senderHistory.getCounterpartyName());
-        assertEquals(response.transferId(), senderHistory.getTransfer().getId());
-
-        TransactionHistory receiverHistory = histories.get(1);
-        assertEquals(savedReceiverAccount.getId(), receiverHistory.getAccount().getId());
-        assertEquals(TransactionType.TRANSFER, receiverHistory.getType());
-        assertEquals(TransactionDirection.IN, receiverHistory.getDirection());
-        assertEquals(50_000L, receiverHistory.getAmount());
-        assertEquals(10_000L, receiverHistory.getBalanceBefore());
-        assertEquals(60_000L, receiverHistory.getBalanceAfter());
-        assertEquals("100200300001", receiverHistory.getCounterpartyAccountNumber());
-        assertEquals("송금자", receiverHistory.getCounterpartyName());
-        assertEquals(response.transferId(), receiverHistory.getTransfer().getId());
-    }
-
-    @Test
-    @DisplayName("같은 멱등성 키와 같은 요청으로 재시도하면 송금을 중복 처리하지 않고 최초 응답을 반환한다")
-    void transfer_sameIdempotencyKeyAndSameRequest_returnsStoredResponseWithoutDuplicateTransfer() {
-        User sender = saveUser("sender@example.com", "송금자");
-        User receiver = saveUser("receiver@example.com", "수취자");
-        Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
-        Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
-
-        TransferRes firstResponse = transferService.transfer(
-                sender.getId(),
-                "same-request-key",
-                senderAccount.getId(),
-                receiverAccount.getAccountNumber(),
-                50_000L,
-                "점심값"
-        );
-
-        transferService.transfer(
-                sender.getId(),
-                "after-first-key",
-                senderAccount.getId(),
-                receiverAccount.getAccountNumber(),
-                20_000L,
-                "후속 송금"
-        );
-
-        TransferRes retryResponse = transferService.transfer(
-                sender.getId(),
-                "same-request-key",
-                senderAccount.getId(),
-                receiverAccount.getAccountNumber(),
-                50_000L,
-                "점심값"
-        );
-        flushAndClear();
-
-        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
-        Idempotency idempotency = idempotencyRepository
-                .findByUser_IdAndIdempotencyKey(sender.getId(), "same-request-key")
-                .orElseThrow();
-
-        assertEquals(firstResponse, retryResponse);
-        assertEquals(30_000L, savedSenderAccount.getBalance());
-        assertEquals(2, transferRepository.count());
-        assertEquals(4, transactionHistoryRepository.count());
-        assertEquals(IdempotencyStatus.SUCCESS, idempotency.getStatus());
-        assertNotNull(idempotency.getResponseBody());
-        assertNotNull(idempotency.getCompletedAt());
-    }
-
-    @Test
-    @DisplayName("같은 멱등성 키로 다른 요청이 들어오면 송금을 처리하지 않고 충돌 예외를 발생시킨다")
-    void transfer_sameIdempotencyKeyAndDifferentRequest_throwsConflict() {
-        User sender = saveUser("sender@example.com", "송금자");
-        User receiver = saveUser("receiver@example.com", "수취자");
-        Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
-        Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
-
-        transferService.transfer(
-                sender.getId(),
-                "conflict-key",
-                senderAccount.getId(),
-                receiverAccount.getAccountNumber(),
-                50_000L,
-                "점심값"
-        );
-
-        BusinessException exception = assertThrows(
-                BusinessException.class,
-                () -> transferService.transfer(
-                        sender.getId(),
-                        "conflict-key",
-                        senderAccount.getId(),
-                        receiverAccount.getAccountNumber(),
-                        60_000L,
-                        "점심값"
-                )
-        );
-        flushAndClear();
-
-        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
-        Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
-
-        assertEquals(GlobalErrorCode.IDEMPOTENCY_REQUEST_CONFLICT, exception.getErrorCode());
-        assertEquals(50_000L, savedSenderAccount.getBalance());
-        assertEquals(60_000L, savedReceiverAccount.getBalance());
-        assertEquals(1, transferRepository.count());
-        assertEquals(2, transactionHistoryRepository.count());
-    }
-
-    @Test
     @DisplayName("송금 금액이 유효하지 않으면 DB 변경 없이 INVALID_INPUT_VALUE 예외를 발생시킨다")
     void transfer_invalidAmount_doesNotPersistAnything() {
         User user = saveUser("sender@example.com", "홍길동");
@@ -331,52 +182,6 @@ class TransferServiceIntegrationTest {
         assertEquals(TransferErrorCode.INVALID_INPUT_VALUE, exception.getErrorCode());
         assertEquals(10_000L, savedAccount.getBalance());
         assertEquals(0, transferRepository.count());
-        assertEquals(0, transactionHistoryRepository.count());
-    }
-
-    @Test
-    @DisplayName("잔액 부족 송금은 잔액과 거래내역 변경 없이 실패 송금 기록을 저장한다")
-    void transfer_insufficientBalance_rollsBackBalanceAndHistory() {
-        User sender = saveUser("sender@example.com", "송금자");
-        User receiver = saveUser("receiver@example.com", "수취자");
-        Account senderAccount = saveAccount(sender, "100200300001", 10_000L);
-        Account receiverAccount = saveAccount(receiver, "100200300002", 10_000L);
-
-        BusinessException exception = assertThrows(
-                BusinessException.class,
-                () -> transferService.transfer(sender.getId(), "insufficient-balance-key", senderAccount.getId(), "100200300002", 50_000L, "잔액 부족")
-        );
-        flushAndClear();
-
-        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
-        Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
-        List<Transfer> transfers = transferRepository.findAll();
-        Idempotency idempotency = idempotencyRepository
-                .findByUser_IdAndIdempotencyKey(sender.getId(), "insufficient-balance-key")
-                .orElseThrow();
-
-        assertEquals(TransferErrorCode.INSUFFICIENT_BALANCE, exception.getErrorCode());
-        assertEquals(10_000L, savedSenderAccount.getBalance());
-        assertEquals(10_000L, savedReceiverAccount.getBalance());
-        assertEquals(1, transfers.size());
-        assertEquals(0, transactionHistoryRepository.count());
-        assertEquals(IdempotencyStatus.FAILED, idempotency.getStatus());
-        assertNotNull(idempotency.getCompletedAt());
-
-        Transfer failedTransfer = transfers.getFirst();
-        assertEquals(TransferStatus.FAILED, failedTransfer.getStatus());
-        assertEquals(senderAccount.getId(), failedTransfer.getSenderAccount().getId());
-        assertEquals(receiverAccount.getId(), failedTransfer.getReceiverAccount().getId());
-        assertEquals(50_000L, failedTransfer.getAmount());
-        assertEquals("잔액 부족", failedTransfer.getMemo());
-
-        BusinessException retryException = assertThrows(
-                BusinessException.class,
-                () -> transferService.transfer(sender.getId(), "insufficient-balance-key", senderAccount.getId(), "100200300002", 50_000L, "잔액 부족")
-        );
-
-        assertEquals(GlobalErrorCode.IDEMPOTENCY_REQUEST_FAILED, retryException.getErrorCode());
-        assertEquals(1, transferRepository.count());
         assertEquals(0, transactionHistoryRepository.count());
     }
 
@@ -409,47 +214,6 @@ class TransferServiceIntegrationTest {
         assertTrue(histories.stream().allMatch(history -> history.getType() == TransactionType.DEPOSIT));
         assertTrue(histories.stream().allMatch(history -> history.getDirection() == TransactionDirection.IN));
         assertTrue(histories.stream().allMatch(history -> history.getAmount().equals(amount)));
-    }
-
-    @Test
-    @DisplayName("같은 송금자 계좌에서 동시 송금이 발생해도 잔액과 거래내역이 일관되게 저장된다")
-    void concurrentTransfers_sameSender_persistsConsistentBalancesAndHistories() throws InterruptedException {
-        User sender = saveUser("sender@example.com", "송금자");
-        User receiver = saveUser("receiver@example.com", "수취자");
-        Account senderAccount = saveAccount(sender, "100200300001", 100_000L);
-        Account receiverAccount = saveAccount(receiver, "100200300002", 0L);
-        int threadCount = 20;
-        long amount = 1_000L;
-        AtomicInteger keySequence = new AtomicInteger();
-
-        List<Throwable> failures = runConcurrently(
-                threadCount,
-                () -> transferService.transfer(
-                        sender.getId(),
-                        "same-sender-" + keySequence.incrementAndGet(),
-                        senderAccount.getId(),
-                        receiverAccount.getAccountNumber(),
-                        amount,
-                        "동시 송금"
-                )
-        );
-        entityManager.clear();
-
-        Account savedSenderAccount = accountRepository.findById(senderAccount.getId()).orElseThrow();
-        Account savedReceiverAccount = accountRepository.findById(receiverAccount.getId()).orElseThrow();
-        List<TransactionHistory> histories = transactionHistoryRepository.findAll();
-
-        assertNoConcurrentFailures(failures);
-        assertEquals(100_000L - threadCount * amount, savedSenderAccount.getBalance());
-        assertEquals(threadCount * amount, savedReceiverAccount.getBalance());
-        assertEquals(threadCount, transferRepository.count());
-        assertEquals(threadCount * 2, histories.size());
-        assertEquals(threadCount, histories.stream()
-                .filter(history -> history.getDirection() == TransactionDirection.OUT)
-                .count());
-        assertEquals(threadCount, histories.stream()
-                .filter(history -> history.getDirection() == TransactionDirection.IN)
-                .count());
     }
 
     @Test

@@ -72,6 +72,7 @@ public class ExchangeOrder extends BaseEntity {
             Account krwAccount,
             FxWallet fxWallet,
             ExchangeDirection direction,
+            TransactionHistory transactionHistory,
             LocalDateTime completedAt
     ) {
         ExchangeOrder exchangeOrder = new ExchangeOrder();
@@ -80,6 +81,7 @@ public class ExchangeOrder extends BaseEntity {
         exchangeOrder.krwAccount = krwAccount;
         exchangeOrder.fxWallet = fxWallet;
         exchangeOrder.direction = direction;
+        exchangeOrder.transactionHistory = transactionHistory;
         exchangeOrder.fromAmount = exchangeQuote.getFromAmount();
         exchangeOrder.toAmount = exchangeQuote.getExpectedToAmount();
         exchangeOrder.appliedRate = exchangeQuote.getRate();

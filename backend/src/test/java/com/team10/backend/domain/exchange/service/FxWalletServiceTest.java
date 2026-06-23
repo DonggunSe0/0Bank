@@ -1,12 +1,5 @@
 package com.team10.backend.domain.exchange.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import com.team10.backend.domain.exchange.dto.res.FxWalletRes;
 import com.team10.backend.domain.exchange.entity.Currency;
 import com.team10.backend.domain.exchange.entity.FxWallet;
@@ -19,10 +12,6 @@ import com.team10.backend.domain.exchange.type.FxWalletStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +20,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class FxWalletServiceTest {
@@ -199,7 +198,7 @@ class FxWalletServiceTest {
     @DisplayName("잔액이 없는 ACTIVE 외화 지갑을 해지한다")
     void closeFxWallet() {
         FxWallet wallet = createWallet(10L, user, usd);
-        when(fxWalletRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(wallet));
+        when(fxWalletRepository.findByIdAndUserIdForUpdate(10L, 1L)).thenReturn(Optional.of(wallet));
 
         FxWalletRes response = fxWalletService.closeFxWallet(10L, 1L);
 
@@ -213,7 +212,7 @@ class FxWalletServiceTest {
     void closeFxWalletWithNotActiveStatus() {
         FxWallet wallet = createWallet(10L, user, usd);
         wallet.close();
-        when(fxWalletRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(wallet));
+        when(fxWalletRepository.findByIdAndUserIdForUpdate(10L, 1L)).thenReturn(Optional.of(wallet));
 
         assertThatThrownBy(() -> fxWalletService.closeFxWallet(10L, 1L))
                 .isInstanceOf(BusinessException.class)
@@ -226,7 +225,7 @@ class FxWalletServiceTest {
     void closeFxWalletWithRemainingBalance() {
         FxWallet wallet = createWallet(10L, user, usd);
         ReflectionTestUtils.setField(wallet, "balance", BigDecimal.ONE);
-        when(fxWalletRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(wallet));
+        when(fxWalletRepository.findByIdAndUserIdForUpdate(10L, 1L)).thenReturn(Optional.of(wallet));
 
         assertThatThrownBy(() -> fxWalletService.closeFxWallet(10L, 1L))
                 .isInstanceOf(BusinessException.class)

@@ -130,4 +130,27 @@ public class TransactionHistory extends BaseEntity {
         return history;
     }
 
+    public static TransactionHistory createExchange(
+            Account account,
+            TransactionDirection direction,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = null;
+        history.type = TransactionType.EXCHANGE;
+        history.direction = direction;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = null;
+        history.counterpartyName = null;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
 }

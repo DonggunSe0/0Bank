@@ -14,6 +14,7 @@ import com.team10.backend.domain.exchange.repository.ExchangeOrderRepository;
 import com.team10.backend.domain.exchange.repository.ExchangeQuoteRepository;
 import com.team10.backend.domain.exchange.repository.ExchangeRateRepository;
 import com.team10.backend.domain.exchange.type.CurrencyCode;
+import com.team10.backend.domain.exchange.type.CurrencyStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
@@ -55,6 +56,9 @@ public class ExchangeService {
         // 통화 조회
         Currency fromCurrency = findCurrency(fromCurrencyCode);
         Currency toCurrency = findCurrency(toCurrencyCode);
+        validateActiveCurrency(fromCurrency);
+        validateActiveCurrency(toCurrency);
+        validateAmountScale(fromAmount, fromCurrency);
 
         CurrencyCode foreignCurrencyCode = resolveForeignCurrency(fromCurrencyCode, toCurrencyCode);
 
@@ -129,6 +133,22 @@ public class ExchangeService {
     private Currency findCurrency(CurrencyCode currencyCode) {
         return currencyRepository.findByCurrencyCode(currencyCode)
                 .orElseThrow(() -> new BusinessException(ExchangeErrorCode.CURRENCY_NOT_FOUND));
+    }
+
+    private void validateActiveCurrency(Currency currency) {
+        if (currency.getStatus() != CurrencyStatus.ACTIVE) {
+            throw new BusinessException(ExchangeErrorCode.CURRENCY_NOT_SUPPORTED);
+        }
+    }
+
+    private void validateAmountScale(BigDecimal amount, Currency currency) {
+        // 출금 통화가 허용하는 소수 자리까지만 견적을 허용한다.
+        // 예: KRW(decimalPlaces=0)는 1000.5 거부, USD(decimalPlaces=2)는 10.12 허용/10.123 거부.
+        int actualScale = Math.max(amount.stripTrailingZeros().scale(), 0); // 금액 뒤쪽의 의미 없는 0을 제거 10.00 => 10 | 소수 자릿수 반환(음수 자릿수 보정)
+
+        if (actualScale > currency.getDecimalPlaces()) {
+            throw new BusinessException(ExchangeErrorCode.INVALID_EXCHANGE_AMOUNT);
+        }
     }
 
     private CurrencyCode resolveForeignCurrency(CurrencyCode fromCurrencyCode, CurrencyCode toCurrencyCode) {

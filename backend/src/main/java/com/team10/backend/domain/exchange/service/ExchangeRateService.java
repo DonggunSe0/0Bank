@@ -11,6 +11,7 @@ import com.team10.backend.domain.exchange.repository.CurrencyRepository;
 import com.team10.backend.domain.exchange.repository.ExchangeRateCacheRepository;
 import com.team10.backend.domain.exchange.repository.ExchangeRateRepository;
 import com.team10.backend.domain.exchange.type.CurrencyCode;
+import com.team10.backend.domain.exchange.type.CurrencyStatus;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,10 +46,12 @@ public class ExchangeRateService {
 
     // 지원 통화 목록 조회
     public List<CurrencyRes> getCurrencies() {
-        return SUPPORTED_FOREIGN_CURRENCIES.stream()
-                .sorted(Comparator.comparing(Enum::name)) // 통화코드 알파벳순 정렬
-                .map(currencyRepository::findByCurrencyCode)
-                .flatMap(Optional::stream)
+        return currencyRepository.findAllByCurrencyCodeInAndStatus(
+                        SUPPORTED_FOREIGN_CURRENCIES,
+                        CurrencyStatus.ACTIVE
+                )
+                .stream()
+                .sorted(Comparator.comparing(currency -> currency.getCurrencyCode().name()))
                 .map(CurrencyRes::from)
                 .toList();
     }
@@ -97,22 +100,28 @@ public class ExchangeRateService {
     }
 
     // 깨진/부분 캐시 문제 없는지 확인하는 메서드
-    private boolean isCompleteCache(List<ExchangeRateRes> cachedRates) {
+    private boolean isCompleteCache(List<ExchangeRateRes> cachedRates, Set<CurrencyCode> activeCurrencyCodes) {
         Set<CurrencyCode> cachedCurrencyCodes = cachedRates.stream()
                 .map(ExchangeRateRes::currencyCode)
                 .collect(Collectors.toSet());
 
-        return cachedCurrencyCodes.containsAll(SUPPORTED_FOREIGN_CURRENCIES);
+        return cachedCurrencyCodes.containsAll(activeCurrencyCodes);
     }
 
     // 최신 환율 리스트 조회(Redis에서 우선 조회)
     @Transactional(readOnly = true)
     public List<ExchangeRateRes> getLatestRates() {
+        Set<CurrencyCode> activeCurrencyCodes = getActiveForeignCurrencyCodes();
+
         try {
             // Redis 서버가 아예 죽어있으면 예외터져서 DB fallback까지 못감 -> try-catch 필요
-            List<ExchangeRateRes> cachedRates = exchangeRateCacheRepository.findAll();
+            List<ExchangeRateRes> cachedRates = exchangeRateCacheRepository.findAll()
+                    .stream()
+                    .filter(rate -> activeCurrencyCodes.contains(rate.currencyCode()))
+                    .sorted(Comparator.comparing(rate -> rate.currencyCode().name()))
+                    .toList();
 
-            if (isCompleteCache(cachedRates)) {
+            if (isCompleteCache(cachedRates, activeCurrencyCodes)) {
                 return cachedRates;
             }
 
@@ -137,7 +146,15 @@ public class ExchangeRateService {
     // 최신 환율 리스트 조회(DB에서 조회)
     @Transactional(readOnly = true)
     public List<ExchangeRateRes> getLatestRatesFromDb() {
-        List<ExchangeRate> exchangeRates = exchangeRateRepository.findAllByOrderByCurrencyCurrencyCodeAsc();
+        Set<CurrencyCode> activeCurrencyCodes = getActiveForeignCurrencyCodes();
+        if (activeCurrencyCodes.isEmpty()) {
+            return List.of();
+        }
+
+        List<ExchangeRate> exchangeRates = exchangeRateRepository.findAllByActiveCurrencyCodes(
+                activeCurrencyCodes,
+                CurrencyStatus.ACTIVE
+        );
 
         return exchangeRates.stream()
                 .map(ExchangeRateRes::from)
@@ -147,6 +164,7 @@ public class ExchangeRateService {
     // 특정 통화의 최신 환율 조회(Redis에서 우선 조회)
     @Transactional(readOnly = true)
     public ExchangeRateRes getLatestRate(CurrencyCode currencyCode) {
+        validateActiveForeignCurrency(currencyCode);
         
         try {
             Optional<ExchangeRateRes> cachedRate =
@@ -173,6 +191,8 @@ public class ExchangeRateService {
     // 특정 통화의 최신 환율 조회(DB에서 조회)
     @Transactional(readOnly = true)
     public ExchangeRateRes getLatestRateFromDb(CurrencyCode currencyCode) {
+        validateActiveForeignCurrency(currencyCode);
+
         return exchangeRateRepository.findByCurrencyCurrencyCode(currencyCode)
                 .map(ExchangeRateRes::from)
                 .orElseThrow(() -> new BusinessException(ExchangeErrorCode.EXCHANGE_RATE_NOT_FOUND));
@@ -242,6 +262,29 @@ public class ExchangeRateService {
             case JPY -> 0;
             default -> 2;
         };
+    }
+
+    private Set<CurrencyCode> getActiveForeignCurrencyCodes() {
+        return currencyRepository.findAllByCurrencyCodeInAndStatus(
+                        SUPPORTED_FOREIGN_CURRENCIES,
+                        CurrencyStatus.ACTIVE
+                )
+                .stream()
+                .map(Currency::getCurrencyCode)
+                .collect(Collectors.toSet());
+    }
+
+    private void validateActiveForeignCurrency(CurrencyCode currencyCode) {
+        if (currencyCode == CurrencyCode.KRW) {
+            throw new BusinessException(ExchangeErrorCode.CURRENCY_NOT_SUPPORTED);
+        }
+
+        Currency currency = currencyRepository.findByCurrencyCode(currencyCode)
+                .orElseThrow(() -> new BusinessException(ExchangeErrorCode.CURRENCY_NOT_FOUND));
+
+        if (currency.getStatus() != CurrencyStatus.ACTIVE) {
+            throw new BusinessException(ExchangeErrorCode.CURRENCY_NOT_SUPPORTED);
+        }
     }
 
 }

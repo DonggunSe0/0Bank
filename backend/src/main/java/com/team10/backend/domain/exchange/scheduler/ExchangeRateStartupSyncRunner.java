@@ -25,6 +25,7 @@ public class ExchangeRateStartupSyncRunner {
     @EventListener(ApplicationReadyEvent.class)
     public void syncOnStartup() {
         try {
+            log.info("애플리케이션 시작 시 환율 동기화 시작");
             exchangeRateService.syncCurrentRates();
             log.info("애플리케이션 시작 시 환율 동기화 완료");
         } catch (RuntimeException e) {

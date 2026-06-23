@@ -44,4 +44,25 @@ public class FxWalletLedger extends BaseEntity {
     @Column(name = "transacted_at", nullable = false)
     private LocalDateTime transactedAt;
 
+    public static FxWalletLedger create(
+            FxWallet fxWallet,
+            ExchangeOrder exchangeOrder,
+            Currency currency,
+            TransactionDirection direction,
+            BigDecimal amount,
+            BigDecimal balanceBefore,
+            BigDecimal balanceAfter,
+            LocalDateTime transactedAt
+    ) {
+        FxWalletLedger ledger = new FxWalletLedger();
+        ledger.fxWallet = fxWallet;
+        ledger.exchangeOrder = exchangeOrder;
+        ledger.currency = currency;
+        ledger.direction = direction;
+        ledger.amount = amount;
+        ledger.balanceBefore = balanceBefore;
+        ledger.balanceAfter = balanceAfter;
+        ledger.transactedAt = transactedAt;
+        return ledger;
+    }
 }

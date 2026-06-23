@@ -46,7 +46,8 @@ public class IdempotencyService {
                 .orElseGet(() -> createProcessing(userId, operationType, idempotencyKey, requestHash, responseType));
     }
 
-    @Transactional
+    // completeSuccess()는 반드시 비즈니스 처리와 같은 트랜잭션 안에서만 호출돼야 한다.
+    @Transactional(propagation = Propagation.MANDATORY) // 이미 트랜잭션이 있으면 참여, 없으면 예외 발생 -> 이 메서드가 혼자 새 트랜잭션을 열어 성공 기록만 따로 저장하지 못하게 방지
     public void completeSuccess(Long idempotencyId, Object response) {
         Idempotency idempotency = idempotencyRepository.findById(idempotencyId)
                 .orElseThrow();

@@ -14,6 +14,13 @@ public interface FxWalletRepository extends JpaRepository<FxWallet, Long> {
 
     Optional<FxWallet> findByUserIdAndCurrencyCurrencyCode(Long userId, CurrencyCode currencyCode);
 
+    @Query("""
+                select w
+                from FxWallet w
+                join fetch w.currency
+                where w.user.id = :userId
+                order by w.createdAt desc
+            """)
     List<FxWallet> findAllByUserIdOrderByCreatedAtDesc(Long userId);
 
     Optional<FxWallet> findByIdAndUserId(Long fxWalletId, Long userId);

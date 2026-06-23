@@ -36,3 +36,10 @@ services:
       interval: 10s # 10초마다 체크
       timeout: 5s # 5초 내 응답 없으면 실패
       retries: 5 # 5회 연속 실패 시 unhealthy 처리
+
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
