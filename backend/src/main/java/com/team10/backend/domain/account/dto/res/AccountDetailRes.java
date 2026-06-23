@@ -6,7 +6,6 @@ import com.team10.backend.domain.account.type.AccountType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 
 public record AccountDetailRes(
         @Schema(description = "계좌 ID", example = "1")
@@ -35,7 +34,6 @@ public record AccountDetailRes(
 ) {
 
     public static AccountDetailRes from(Account account) {
-        Objects.requireNonNull(account, "account는 null일 수 없습니다.");
 
         return new AccountDetailRes(
                 account.getId(),

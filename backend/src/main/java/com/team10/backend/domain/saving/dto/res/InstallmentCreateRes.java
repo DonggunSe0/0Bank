@@ -5,7 +5,6 @@ import com.team10.backend.domain.saving.type.InstallmentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
-import java.util.Objects;
 
 public record InstallmentCreateRes(
         @Schema(description = "적금 가입 ID", example = "1")
@@ -21,7 +20,6 @@ public record InstallmentCreateRes(
         Long progressRate
 ) {
     public static InstallmentCreateRes from(Installment installment) {
-        Objects.requireNonNull(installment, "installment는 null일 수 없습니다.");
 
         return new InstallmentCreateRes(
                 installment.getId(),

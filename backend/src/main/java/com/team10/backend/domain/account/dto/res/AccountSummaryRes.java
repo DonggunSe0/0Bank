@@ -4,7 +4,6 @@ import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.type.AccountStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.util.Objects;
 
 public record AccountSummaryRes(
         @Schema(description = "계좌 ID", example = "1")
@@ -24,7 +23,6 @@ public record AccountSummaryRes(
 ) {
 
     public static AccountSummaryRes from(Account account) {
-        Objects.requireNonNull(account, "account는 null일 수 없습니다.");
 
         return new AccountSummaryRes(
                 account.getId(),

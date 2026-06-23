@@ -4,7 +4,6 @@ import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.type.DepositStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.util.Objects;
 
 public record DepositSummaryRes(
         @Schema(description = "예금 가입 ID", example = "1")
@@ -24,7 +23,6 @@ public record DepositSummaryRes(
 ) {
 
     public static DepositSummaryRes from(Deposit deposit) {
-        Objects.requireNonNull(deposit, "deposit는 null일 수 없습니다.");
 
         return new DepositSummaryRes(
                 deposit.getId(),

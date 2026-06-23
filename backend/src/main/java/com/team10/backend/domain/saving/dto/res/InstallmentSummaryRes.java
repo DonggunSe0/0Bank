@@ -4,7 +4,6 @@ import com.team10.backend.domain.saving.entity.Installment;
 import com.team10.backend.domain.saving.type.InstallmentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.util.Objects;
 
 public record InstallmentSummaryRes(
         @Schema(description = "적금 가입 ID", example = "1")
@@ -26,7 +25,6 @@ public record InstallmentSummaryRes(
         InstallmentStatus status
 ) {
     public static InstallmentSummaryRes from(Installment installment) {
-        Objects.requireNonNull(installment, "installment는 null일 수 없습니다.");
 
         return new InstallmentSummaryRes(
                 installment.getId(),

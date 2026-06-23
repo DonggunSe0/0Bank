@@ -66,12 +66,12 @@ public class Account extends BaseEntity {
         this.balance += amount;
     }
 
-    public void withdraw(Long amount){
-        if (balance - amount < 0){
+    public void withdraw(Long amount) {
+        if (balance < amount) {
             throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
-        } else {
-            this.balance -= amount;
         }
+
+        this.balance -= amount;
     }
 
     public boolean isActive(){

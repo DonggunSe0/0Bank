@@ -45,6 +45,12 @@ public class Deposit extends BaseEntity {
     @Column(nullable = false, length = 20)
     private DepositStatus status; // 예금 상태
 
+    @Column(nullable = false)
+    private boolean withdrawalLocked; // 출금 제한 여부
+
+    @Column(length = 255)
+    private String withdrawalLockReason; // 출금 제한 사유
+
     public static Deposit create(
             User user,
             SavingProduct savingProduct,
@@ -63,6 +69,21 @@ public class Deposit extends BaseEntity {
         deposit.maturityDate = maturityDate;
         deposit.expectedInterest = expectedInterest;
         deposit.status = DepositStatus.ACTIVE;
+        deposit.withdrawalLocked = false;
+        deposit.withdrawalLockReason = null;
         return deposit;
+    }
+
+    public void updateWithdrawalLock(boolean lockYn, String reason) {
+        this.withdrawalLocked = lockYn;
+        this.withdrawalLockReason = reason;
+    }
+
+    public void cancel() {
+        this.status = DepositStatus.CANCELLED;
+    }
+
+    public void mature() {
+        this.status = DepositStatus.MATURED;
     }
 }

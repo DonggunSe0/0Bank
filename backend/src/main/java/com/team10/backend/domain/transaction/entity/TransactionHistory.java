@@ -153,4 +153,72 @@ public class TransactionHistory extends BaseEntity {
         history.transactedAt = transactedAt;
         return history;
     }
+    public static TransactionHistory createSavingCancelRefund(
+            Account account,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = null;
+        history.type = TransactionType.SAVING_CANCEL_REFUND;
+        history.direction = TransactionDirection.IN;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = null;
+        history.counterpartyName = null;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
+
+    public static TransactionHistory createSavingMaturityPayout(
+            Account account,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = null;
+        history.type = TransactionType.SAVING_MATURITY;
+        history.direction = TransactionDirection.IN;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = null;
+        history.counterpartyName = null;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
+
+    public static TransactionHistory createInstallmentPayment(
+            Account account,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = null;
+        history.type = TransactionType.INSTALLMENT_PAYMENT;
+        history.direction = TransactionDirection.OUT;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = null;
+        history.counterpartyName = null;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
 }

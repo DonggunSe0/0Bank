@@ -5,7 +5,6 @@ import com.team10.backend.domain.saving.type.DepositStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
-import java.util.Objects;
 
 public record DepositDetailRes(
         @Schema(description = "예금 가입 ID", example = "1")
@@ -33,7 +32,6 @@ public record DepositDetailRes(
         DepositStatus status
 ) {
     public static DepositDetailRes from(Deposit deposit) {
-        Objects.requireNonNull(deposit, "deposit는 null일 수 없습니다.");
 
         return new DepositDetailRes(
                 deposit.getId(),

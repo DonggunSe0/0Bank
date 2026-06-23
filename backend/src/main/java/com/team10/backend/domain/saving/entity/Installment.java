@@ -17,6 +17,8 @@ import java.time.LocalDate;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Installment extends BaseEntity {
 
+    private static final int MAX_PAYMENT_RETRY_COUNT = 3;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user; // 가입 사용자
@@ -45,11 +47,32 @@ public class Installment extends BaseEntity {
     private LocalDate maturityDate; // 만기일
 
     @Column(nullable = false)
+    private LocalDate nextPaymentDate; // 다음 정기 납입일
+
+    @Column(nullable = false)
     private boolean autoTransferYn; // 자동이체 여부
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private InstallmentStatus status; // 적금 상태
+
+    @Column(nullable = false)
+    private boolean withdrawalLocked; // 출금 제한 여부
+
+    @Column(length = 255)
+    private String withdrawalLockReason; // 출금 제한 사유
+
+    @Column(nullable = false)
+    private int paymentRetryCount; // 자동이체 실패/재시도 횟수
+
+    @Column
+    private LocalDate nextPaymentRetryDate; // 다음 자동이체 재시도일
+
+    @Column
+    private LocalDate lastPaymentFailedDate; // 마지막 자동이체 실패일
+
+    @Column(length = 255)
+    private String paymentFailureReason; // 자동이체 실패 사유
 
     public static Installment create(
             User user,
@@ -68,14 +91,57 @@ public class Installment extends BaseEntity {
         installment.monthlyAmount = monthlyAmount;
         installment.targetAmount = targetAmount;
         installment.paidAmount = monthlyAmount; // 가입 시 1회차 납입금
+        installment.nextPaymentDate = LocalDate.now().plusMonths(1);
         installment.interestRate = interestRate;
         installment.maturityDate = maturityDate;
         installment.autoTransferYn = autoTransferYn;
         installment.status = InstallmentStatus.ACTIVE;
+        installment.withdrawalLocked = false;
+        installment.withdrawalLockReason = null;
+        installment.paymentRetryCount = 0;
+        installment.nextPaymentRetryDate = null;
+        installment.lastPaymentFailedDate = null;
+        installment.paymentFailureReason = null;
         return installment;
     }
 
     public Long getProgressRate() {
         return paidAmount * 100 / targetAmount;
+    }
+
+    public void updateWithdrawalLock(boolean lockYn, String reason) {
+        this.withdrawalLocked = lockYn;
+        this.withdrawalLockReason = reason;
+    }
+
+    public void payMonthlyAmount() {
+        this.paidAmount += this.monthlyAmount;
+        this.nextPaymentDate = this.nextPaymentDate.plusMonths(1);
+        this.status = InstallmentStatus.ACTIVE;
+        this.paymentRetryCount = 0;
+        this.nextPaymentRetryDate = null;
+        this.lastPaymentFailedDate = null;
+        this.paymentFailureReason = null;
+    }
+
+    public void failPayment(String reason, LocalDate failedDate) {
+        this.status = InstallmentStatus.PAYMENT_FAILED;
+        this.paymentRetryCount += 1;
+        this.lastPaymentFailedDate = failedDate;
+        this.paymentFailureReason = reason;
+
+        if (this.paymentRetryCount < MAX_PAYMENT_RETRY_COUNT) {
+            this.nextPaymentRetryDate = failedDate.plusDays(1);
+        } else {
+            this.nextPaymentRetryDate = null;
+        }
+    }
+
+    public void cancel() {
+        this.status = InstallmentStatus.CANCELLED;
+    }
+
+    public void mature() {
+        this.status = InstallmentStatus.MATURED;
     }
 }

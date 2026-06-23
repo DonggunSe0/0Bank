@@ -5,7 +5,6 @@ import com.team10.backend.domain.saving.type.DepositStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
-import java.util.Objects;
 
 public record DepositCreateRes(
         @Schema(description = "예금 가입 ID", example = "1")
@@ -24,7 +23,6 @@ public record DepositCreateRes(
         Long expectedInterest
 ) {
     public static DepositCreateRes from(Deposit deposit) {
-        Objects.requireNonNull(deposit, "deposit는 null일 수 없습니다.");
 
         return new DepositCreateRes(
                 deposit.getId(),

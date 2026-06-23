@@ -2,11 +2,15 @@ package com.team10.backend.domain.saving.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
+import com.team10.backend.domain.saving.dto.req.EarlyCancelReq;
 import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
+import com.team10.backend.domain.saving.dto.req.MaturityReq;
+import com.team10.backend.domain.saving.dto.req.WithdrawalLockReq;
 import com.team10.backend.domain.saving.dto.res.*;
 import com.team10.backend.domain.saving.service.SavingDepositService;
 import com.team10.backend.domain.saving.type.DepositStatus;
 import com.team10.backend.domain.saving.type.InstallmentStatus;
+import com.team10.backend.domain.saving.type.SavingProductType;
 import com.team10.backend.support.security.AuthenticationPrincipalTestConfig;
 import com.team10.backend.support.security.WithMockLongUser;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -225,6 +230,163 @@ class SavingDepositControllerTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
         verify(savingDepositService).getInstallment(1L, 1L);
+    }
+
+    @Test
+    @DisplayName("예상 이자 조회 API는 예금 또는 적금의 예상 이자를 반환한다")
+    void getInterestPreview() throws Exception {
+        InterestPreviewRes response = new InterestPreviewRes(
+                1L,
+                SavingProductType.INSTALLMENT,
+                1200000L,
+                3.0,
+                19500L,
+                1219500L
+        );
+
+        when(savingDepositService.getInterestPreview(1L, 1L, SavingProductType.INSTALLMENT))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/savings/{savingId}/interest-preview", 1L)
+                        .param("savingType", "INSTALLMENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.savingId").value(1L))
+                .andExpect(jsonPath("$.savingType").value("INSTALLMENT"))
+                .andExpect(jsonPath("$.principal").value(1200000L))
+                .andExpect(jsonPath("$.interestRate").value(3.0))
+                .andExpect(jsonPath("$.expectedInterest").value(19500L))
+                .andExpect(jsonPath("$.expectedTotalAmount").value(1219500L));
+
+        verify(savingDepositService)
+                .getInterestPreview(1L, 1L, SavingProductType.INSTALLMENT);
+    }
+
+    @Test
+    @DisplayName("출금 제한 설정 API는 인증 사용자의 출금 제한 상태를 변경한다")
+    void updateWithdrawalLock() throws Exception {
+        WithdrawalLockReq request = new WithdrawalLockReq(
+                SavingProductType.INSTALLMENT,
+                true,
+                "목표 저축을 위해 제한"
+        );
+        WithdrawalLockRes response = new WithdrawalLockRes(
+                1L,
+                SavingProductType.INSTALLMENT,
+                true,
+                "목표 저축을 위해 제한",
+                LocalDateTime.of(2026, 6, 19, 10, 30)
+        );
+
+        when(savingDepositService.updateWithdrawalLock(eq(1L), eq(1L), any(WithdrawalLockReq.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/savings/{savingId}/withdrawal-lock", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.savingId").value(1L))
+                .andExpect(jsonPath("$.savingType").value("INSTALLMENT"))
+                .andExpect(jsonPath("$.lockYn").value(true))
+                .andExpect(jsonPath("$.reason").value("목표 저축을 위해 제한"))
+                .andExpect(jsonPath("$.updatedAt").value("2026-06-19T10:30:00"));
+
+        verify(savingDepositService)
+                .updateWithdrawalLock(eq(1L), eq(1L), any(WithdrawalLockReq.class));
+    }
+
+    @Test
+    @DisplayName("출금 제한 설정 API는 필수값이 없으면 400을 반환한다")
+    void updateWithdrawalLockWithoutRequiredValue() throws Exception {
+        WithdrawalLockReq request = new WithdrawalLockReq(null, true, "목표 저축");
+
+        mockMvc.perform(post("/api/v1/savings/{savingId}/withdrawal-lock", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("중도 해지 API는 인증 사용자의 예금 또는 적금을 해지한다")
+    void cancelSaving() throws Exception {
+        EarlyCancelReq request = new EarlyCancelReq(SavingProductType.DEPOSIT);
+        EarlyCancelRes response = new EarlyCancelRes(
+                1L,
+                SavingProductType.DEPOSIT,
+                1000000L,
+                17500L,
+                1017500L,
+                "CANCELLED"
+        );
+
+        when(savingDepositService.cancelSaving(eq(1L), eq(1L), any(EarlyCancelReq.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/savings/{savingId}/cancel", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.savingId").value(1L))
+                .andExpect(jsonPath("$.savingType").value("DEPOSIT"))
+                .andExpect(jsonPath("$.principalAmount").value(1000000L))
+                .andExpect(jsonPath("$.interestAmount").value(17500L))
+                .andExpect(jsonPath("$.refundAmount").value(1017500L))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        verify(savingDepositService)
+                .cancelSaving(eq(1L), eq(1L), any(EarlyCancelReq.class));
+    }
+
+    @Test
+    @DisplayName("중도 해지 API는 필수값이 없으면 400을 반환한다")
+    void cancelSavingWithoutRequiredValue() throws Exception {
+        EarlyCancelReq request = new EarlyCancelReq(null);
+
+        mockMvc.perform(post("/api/v1/savings/{savingId}/cancel", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("만기 처리 API는 인증 사용자의 예금 또는 적금을 만기 처리한다")
+    void matureSaving() throws Exception {
+        MaturityReq request = new MaturityReq(SavingProductType.DEPOSIT);
+        MaturityRes response = new MaturityRes(
+                1L,
+                SavingProductType.DEPOSIT,
+                1000000L,
+                35000L,
+                1035000L,
+                "MATURED"
+        );
+
+        when(savingDepositService.matureSaving(eq(1L), eq(1L), any(MaturityReq.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/savings/{savingId}/maturity", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.savingId").value(1L))
+                .andExpect(jsonPath("$.savingType").value("DEPOSIT"))
+                .andExpect(jsonPath("$.principalAmount").value(1000000L))
+                .andExpect(jsonPath("$.interestAmount").value(35000L))
+                .andExpect(jsonPath("$.payoutAmount").value(1035000L))
+                .andExpect(jsonPath("$.status").value("MATURED"));
+
+        verify(savingDepositService)
+                .matureSaving(eq(1L), eq(1L), any(MaturityReq.class));
+    }
+
+    @Test
+    @DisplayName("만기 처리 API는 필수값이 없으면 400을 반환한다")
+    void matureSavingWithoutRequiredValue() throws Exception {
+        MaturityReq request = new MaturityReq(null);
+
+        mockMvc.perform(post("/api/v1/savings/{savingId}/maturity", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
