@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -139,6 +140,54 @@ class CodefExAccountAuthClientTest {
         assertThat(authClient.getAccessToken()).isEqualTo("shared-access-token");
 
         verify(valueOperations, never()).set(any(), any(), any(Duration.class));
+        server.verify();
+    }
+
+    @Test
+    void issuesTokenWhenRedisReadFails() {
+        when(valueOperations.get(REDIS_TOKEN_KEY)).thenThrow(new RuntimeException("redis unavailable"));
+        server.expect(requestTo(OAUTH_TOKEN_URL))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "fallback-access-token",
+                          "expires_in": 3600
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(authClient.getAccessToken()).isEqualTo("fallback-access-token");
+        server.verify();
+    }
+
+    @Test
+    void returnsIssuedTokenWhenRedisWriteFails() {
+        doThrow(new RuntimeException("redis unavailable"))
+                .when(valueOperations)
+                .set(eq(REDIS_TOKEN_KEY), eq("issued-access-token"), eq(Duration.ofSeconds(3300)));
+        server.expect(requestTo(OAUTH_TOKEN_URL))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "issued-access-token",
+                          "expires_in": 3600
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(authClient.getAccessToken()).isEqualTo("issued-access-token");
+        server.verify();
+    }
+
+    @Test
+    void issuesTokenWhenRedisLockFails() {
+        when(valueOperations.setIfAbsent(eq(REDIS_LOCK_KEY), anyString(), eq(Duration.ofSeconds(10))))
+                .thenThrow(new RuntimeException("redis unavailable"));
+        server.expect(requestTo(OAUTH_TOKEN_URL))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "lock-fallback-access-token",
+                          "expires_in": 3600
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(authClient.getAccessToken()).isEqualTo("lock-fallback-access-token");
         server.verify();
     }
 

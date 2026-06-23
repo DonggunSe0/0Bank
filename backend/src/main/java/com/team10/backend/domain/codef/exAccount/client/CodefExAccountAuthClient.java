@@ -77,28 +77,30 @@ public class CodefExAccountAuthClient {
     }
 
     private String readSharedToken() {
-        String token = redisTemplate.opsForValue().get(REDIS_TOKEN_KEY);
-        if (token == null || token.isBlank()) {
+        try {
+            String token = redisTemplate.opsForValue().get(REDIS_TOKEN_KEY);
+            if (token == null || token.isBlank()) {
+                return null;
+            }
+
+            Long remainingTtlSeconds = redisTemplate.getExpire(REDIS_TOKEN_KEY);
+            if (remainingTtlSeconds == null || remainingTtlSeconds <= 0) {
+                return null;
+            }
+
+            tokenCache.set(new TokenCache(
+                    token,
+                    Instant.now().getEpochSecond() + remainingTtlSeconds
+            ));
+            return token;
+        } catch (RuntimeException exception) {
             return null;
         }
-
-        Long remainingTtlSeconds = redisTemplate.getExpire(REDIS_TOKEN_KEY);
-        if (remainingTtlSeconds == null || remainingTtlSeconds <= 0) {
-            return null;
-        }
-
-        tokenCache.set(new TokenCache(
-                token,
-                Instant.now().getEpochSecond() + remainingTtlSeconds
-        ));
-        return token;
     }
 
     private String issueAndCacheAccessTokenWithDistributedLock() {
         String lockValue = UUID.randomUUID().toString();
-        boolean lockAcquired = Boolean.TRUE.equals(
-                redisTemplate.opsForValue().setIfAbsent(REDIS_LOCK_KEY, lockValue, LOCK_TTL)
-        );
+        boolean lockAcquired = tryAcquireLock(lockValue);
 
         if (lockAcquired) {
             try {
@@ -119,8 +121,21 @@ public class CodefExAccountAuthClient {
         return issueAndCacheAccessToken();
     }
 
+    private boolean tryAcquireLock(String lockValue) {
+        try {
+            return Boolean.TRUE.equals(
+                    redisTemplate.opsForValue().setIfAbsent(REDIS_LOCK_KEY, lockValue, LOCK_TTL)
+            );
+        } catch (RuntimeException exception) {
+            return true;
+        }
+    }
+
     private void releaseLock(String lockValue) {
-        redisTemplate.execute(getAndDeleteIfMatchScript, List.of(REDIS_LOCK_KEY), lockValue);
+        try {
+            redisTemplate.execute(getAndDeleteIfMatchScript, List.of(REDIS_LOCK_KEY), lockValue);
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private void sleep(Duration duration) {
@@ -149,16 +164,23 @@ public class CodefExAccountAuthClient {
                     response.accessToken(),
                     Instant.now().getEpochSecond() + cacheableSeconds
             ));
-            redisTemplate.opsForValue().set(
-                    REDIS_TOKEN_KEY,
-                    response.accessToken(),
-                    Duration.ofSeconds(cacheableSeconds)
-            );
+            writeSharedToken(response.accessToken(), cacheableSeconds);
             return response.accessToken();
         } catch (CodefExAccountAuthException exception) {
             throw exception;
         } catch (RestClientException exception) {
             throw new CodefExAccountAuthException("CODEF 외부계좌 OAuth 요청에 실패했습니다.", exception);
+        }
+    }
+
+    private void writeSharedToken(String accessToken, long cacheableSeconds) {
+        try {
+            redisTemplate.opsForValue().set(
+                    REDIS_TOKEN_KEY,
+                    accessToken,
+                    Duration.ofSeconds(cacheableSeconds)
+            );
+        } catch (RuntimeException ignored) {
         }
     }
 
