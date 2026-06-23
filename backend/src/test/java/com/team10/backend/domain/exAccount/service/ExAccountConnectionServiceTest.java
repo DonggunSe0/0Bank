@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -103,6 +104,23 @@ class ExAccountConnectionServiceTest {
         assertThat(captured.getUser()).isEqualTo(user);
         assertThat(captured.getOrganization()).isEqualTo("0004");
         assertThat(captured.encryptedConnectedId()).isEqualTo(encryptedConnectedId);
+    }
+
+    @Test
+    void registerCurrentlyFailsWhenConnectionInsertHitsUniqueConflict() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        EncryptedConnectedId encryptedConnectedId = new EncryptedConnectedId(
+                "ciphertext", "iv", "v1"
+        );
+        when(codefExAccountGateway.register(createRequest)).thenReturn(encryptedConnectedId);
+        when(connectionRepository.findByUserIdAndOrganization(1L, "0004"))
+                .thenReturn(Optional.empty());
+        when(connectionRepository.save(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate external account connection"));
+
+        assertThatThrownBy(() -> service.register(1L, createRequest))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("duplicate external account connection");
     }
 
     @Test

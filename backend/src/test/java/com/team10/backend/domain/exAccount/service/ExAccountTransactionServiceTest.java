@@ -34,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +84,26 @@ class ExAccountTransactionServiceTest {
         assertThat(account.getLastTransactionAt()).isEqualTo(LocalDate.of(2026, 6, 18));
 
         verify(transactionRepository).save(any(ExAccountTransaction.class));
+    }
+
+    @Test
+    @DisplayName("현재 거래내역 upsert는 조회 후 insert 사이 unique 충돌이 나면 그대로 실패한다")
+    void refreshTransactionsCreateCurrentlyFailsOnUniqueConflict() {
+        ExAccountTransactionSyncReq request = createTransactionSyncReq("KB-20260618143000-0001", "스타벅스");
+
+        when(accountRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(account));
+        when(transactionRepository.findByExAccountIdAndTransactionKey(10L, "KB-20260618143000-0001"))
+                .thenReturn(Optional.empty());
+        when(transactionRepository.save(any(ExAccountTransaction.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate external transaction"));
+
+        assertThatThrownBy(() -> exAccountTransactionService.refreshTransactions(
+                1L,
+                10L,
+                List.of(request)
+        ))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("duplicate external transaction");
     }
 
     @Test

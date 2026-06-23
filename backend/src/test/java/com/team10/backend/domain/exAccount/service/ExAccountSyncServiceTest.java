@@ -34,6 +34,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -146,6 +147,32 @@ class ExAccountSyncServiceTest {
         verify(exAccountRepository).save(accountCaptor.capture());
         assertThat(accountCaptor.getValue().getAccountNumberHash()).isEqualTo(ACCOUNT_NUMBER_HASH);
         assertThat(accountCaptor.getValue().getAccountNumberMasked()).isEqualTo("123***7890");
+        verify(candidateStore).remove(1L, "token");
+        verify(candidateStore).releaseClaim(1L, "token", "claim-id");
+    }
+
+    @Test
+    @DisplayName("현재 계좌 upsert는 조회 후 insert 사이 unique 충돌이 나면 그대로 실패한다")
+    void linkAccountCreateCurrentlyFailsOnUniqueConflict() {
+        ExAccountLinkReq request = new ExAccountLinkReq("token", List.of(0));
+        CodefExAccountSnapshot snapshot = snapshot();
+
+        claimToken(1L, "token");
+        when(candidateStore.get(1L, "token")).thenReturn(List.of(snapshot));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(hmacSha256Hasher.hash("1234567890")).thenReturn(ACCOUNT_NUMBER_HASH);
+        when(exAccountRepository.findByUserIdAndOrganizationAndAccountNumberHash(
+                1L,
+                "0004",
+                ACCOUNT_NUMBER_HASH
+        )).thenReturn(Optional.empty());
+        when(exAccountRepository.save(any(ExAccount.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate external account"));
+
+        assertThatThrownBy(() -> exAccountSyncService.linkAccounts(1L, request))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("duplicate external account");
+
         verify(candidateStore).remove(1L, "token");
         verify(candidateStore).releaseClaim(1L, "token", "claim-id");
     }
