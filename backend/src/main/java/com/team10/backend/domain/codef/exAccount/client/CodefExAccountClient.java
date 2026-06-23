@@ -63,11 +63,11 @@ public class CodefExAccountClient {
                         .body(String.class);
                 return responseDecoder.decodeData(responseBody);
             } catch (RestClientResponseException exception) {
-                if (!exception.getStatusCode().is5xxServerError() || attempt == MAX_ATTEMPTS) {
+                if (!shouldRetry(exception, attempt)) {
                     throw new CodefExAccountClientException("CODEF 보유계좌 HTTP 요청에 실패했습니다.", exception);
                 }
             } catch (ResourceAccessException exception) {
-                if (attempt == MAX_ATTEMPTS) {
+                if (!canRetry(attempt)) {
                     throw new CodefExAccountClientException("CODEF 보유계좌 요청 시간이 초과되었습니다.", exception);
                 }
             }
@@ -105,11 +105,11 @@ public class CodefExAccountClient {
             } catch (CodefExAccountRegistrationException exception) {
                 throw exception;
             } catch (RestClientResponseException exception) {
-                if (!exception.getStatusCode().is5xxServerError() || attempt == MAX_ATTEMPTS) {
+                if (!shouldRetry(exception, attempt)) {
                     throw registrationSystemError("CODEF 계정등록 HTTP 요청에 실패했습니다.", exception);
                 }
             } catch (ResourceAccessException exception) {
-                if (attempt == MAX_ATTEMPTS) {
+                if (!canRetry(attempt)) {
                     throw registrationSystemError("CODEF 계정등록 요청 시간이 초과되었습니다.", exception);
                 }
             } catch (CodefExAccountClientException exception) {
@@ -135,6 +135,14 @@ public class CodefExAccountClient {
                 || request.connectedId().isBlank()) {
             throw new CodefExAccountClientException("CODEF 보유계좌 요청값이 올바르지 않습니다.");
         }
+    }
+
+    private boolean shouldRetry(RestClientResponseException exception, int attempt) {
+        return exception.getStatusCode().is5xxServerError() && canRetry(attempt);
+    }
+
+    private boolean canRetry(int attempt) {
+        return attempt < MAX_ATTEMPTS;
     }
 
     /**

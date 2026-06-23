@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.net.SocketTimeoutException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -30,6 +31,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -161,6 +163,26 @@ class CodefExAccountClientTest {
     }
 
     @Test
+    void retriesNetworkAccessFailureOnceAndReturnsAccountList() {
+        String response = URLEncoder.encode("""
+                {
+                  "result": {"code": "CF-00000", "message": "성공"},
+                  "data": {"resDepositTrust": {"resAccount": "1234567890"}}
+                }
+                """, StandardCharsets.UTF_8);
+        server.expect(requestTo(BASE_URL + ACCOUNT_LIST_PATH))
+                .andRespond(withException(new SocketTimeoutException("timeout")));
+        server.expect(requestTo(BASE_URL + ACCOUNT_LIST_PATH))
+                .andRespond(withSuccess(response, MediaType.TEXT_PLAIN));
+
+        JsonNode data = client.getAccountList(validRequest());
+
+        assertThat(data.path("resDepositTrust").path("resAccount").asText())
+                .isEqualTo("1234567890");
+        server.verify();
+    }
+
+    @Test
     void doesNotRetryAuthenticationError() {
         server.expect(requestTo(BASE_URL + ACCOUNT_LIST_PATH))
                 .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
@@ -168,6 +190,31 @@ class CodefExAccountClientTest {
         assertThatThrownBy(() -> client.getAccountList(validRequest()))
                 .isInstanceOf(CodefExAccountClientException.class)
                 .hasMessage("CODEF 보유계좌 HTTP 요청에 실패했습니다.");
+        server.verify();
+    }
+
+    @Test
+    void doesNotRetryRateLimitResponseFromCodef() {
+        server.expect(requestTo(BASE_URL + ACCOUNT_LIST_PATH))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+
+        assertThatThrownBy(() -> client.getAccountList(validRequest()))
+                .isInstanceOf(CodefExAccountClientException.class)
+                .hasMessage("CODEF 보유계좌 HTTP 요청에 실패했습니다.");
+        server.verify();
+    }
+
+    @Test
+    void doesNotRetryCreateConnectionClientError() {
+        server.expect(requestTo(BASE_URL + ACCOUNT_CREATE_PATH))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST));
+
+        assertThatThrownBy(() -> client.createConnection(connectionPayload()))
+                .isInstanceOfSatisfying(CodefExAccountRegistrationException.class, exception -> {
+                    assertThat(exception.getFailure())
+                            .isEqualTo(CodefExAccountRegistrationFailure.SYSTEM_ERROR);
+                    assertThat(exception.getMessage()).isEqualTo("CODEF 계정등록 HTTP 요청에 실패했습니다.");
+                });
         server.verify();
     }
 
