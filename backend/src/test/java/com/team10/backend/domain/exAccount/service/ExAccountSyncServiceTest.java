@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,6 +80,7 @@ class ExAccountSyncServiceTest {
     @DisplayName("Redis에 저장된 후보 정보가 없으면 만료 오류로 실패한다")
     void linkAccountsWithExpiredToken() {
         ExAccountLinkReq request = new ExAccountLinkReq("invalid-token", List.of(0));
+        claimToken(1L, "invalid-token");
         when(candidateStore.get(1L, "invalid-token")).thenReturn(List.of());
 
         assertThatThrownBy(() -> exAccountSyncService.linkAccounts(1L, request))
@@ -96,6 +96,7 @@ class ExAccountSyncServiceTest {
     void linkAccountsWithInvalidIndex() {
         ExAccountLinkReq request = new ExAccountLinkReq("token", List.of(99));
         CodefExAccountSnapshot snapshot = snapshot();
+        claimToken(1L, "token");
         when(candidateStore.get(1L, "token")).thenReturn(List.of(snapshot));
 
         assertThatThrownBy(() -> exAccountSyncService.linkAccounts(1L, request))
@@ -112,6 +113,7 @@ class ExAccountSyncServiceTest {
         ExAccountLinkReq request = new ExAccountLinkReq("token", List.of(0));
         CodefExAccountSnapshot snapshot = snapshot();
 
+        claimToken(1L, "token");
         when(candidateStore.get(1L, "token")).thenReturn(List.of(snapshot));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(hmacSha256Hasher.hash("1234567890")).thenReturn(ACCOUNT_NUMBER_HASH);
@@ -141,6 +143,7 @@ class ExAccountSyncServiceTest {
         assertThat(accountCaptor.getValue().getAccountNumberHash()).isEqualTo(ACCOUNT_NUMBER_HASH);
         assertThat(accountCaptor.getValue().getAccountNumberMasked()).isEqualTo("123***7890");
         verify(candidateStore).remove(1L, "token");
+        verify(candidateStore).releaseClaim(1L, "token", "claim-id");
     }
 
     @Test
@@ -150,6 +153,7 @@ class ExAccountSyncServiceTest {
         CodefExAccountSnapshot snapshot = snapshot();
         ExAccount existingAccount = createExAccount(10L, user, snapshot);
 
+        claimToken(1L, "token");
         when(candidateStore.get(1L, "token")).thenReturn(List.of(snapshot));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(hmacSha256Hasher.hash("1234567890")).thenReturn(ACCOUNT_NUMBER_HASH);
@@ -167,36 +171,23 @@ class ExAccountSyncServiceTest {
         assertThat(response.accountName()).isEqualTo("입출금통장");
         verify(exAccountRepository, never()).save(any());
         verify(candidateStore).remove(1L, "token");
+        verify(candidateStore).releaseClaim(1L, "token", "claim-id");
     }
 
     @Test
-    @DisplayName("현재 구현은 같은 후보 토큰으로 들어온 두 요청이 모두 후보 목록을 읽고 처리할 수 있다")
-    void linkAccountsCurrentlyAllowsSameCandidateTokenToBeReadTwice() {
+    @DisplayName("이미 claim된 후보 토큰은 후보 목록을 읽기 전에 거절한다")
+    void linkAccountsRejectsAlreadyClaimedCandidateTokenBeforeReadingCandidates() {
         ExAccountLinkReq request = new ExAccountLinkReq("token", List.of(0));
-        CodefExAccountSnapshot snapshot = snapshot();
-        ExAccount existingAccount = createExAccount(10L, user, snapshot);
+        when(candidateStore.claim(1L, "token")).thenReturn(Optional.empty());
 
-        when(candidateStore.get(1L, "token")).thenReturn(List.of(snapshot));
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(hmacSha256Hasher.hash("1234567890")).thenReturn(ACCOUNT_NUMBER_HASH);
-        when(exAccountRepository.findByUserIdAndOrganizationAndAccountNumberHash(
-                1L,
-                "0004",
-                ACCOUNT_NUMBER_HASH
-        )).thenReturn(Optional.empty(), Optional.of(existingAccount));
-        when(exAccountRepository.save(any(ExAccount.class))).thenAnswer(invocation -> {
-            ExAccount account = invocation.getArgument(0);
-            ReflectionTestUtils.setField(account, "id", 10L);
-            return account;
-        });
+        assertThatThrownBy(() -> exAccountSyncService.linkAccounts(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ExAccountErrorCode.EX_ACCOUNT_CANDIDATE_ALREADY_CLAIMED);
 
-        List<ExAccountRes> firstResponses = exAccountSyncService.linkAccounts(1L, request);
-        List<ExAccountRes> secondResponses = exAccountSyncService.linkAccounts(1L, request);
-
-        assertThat(firstResponses).hasSize(1);
-        assertThat(secondResponses).hasSize(1);
-        verify(candidateStore, times(2)).get(1L, "token");
-        verify(candidateStore, times(2)).remove(1L, "token");
+        verify(candidateStore, never()).get(1L, "token");
+        verify(candidateStore, never()).remove(1L, "token");
+        verify(candidateStore, never()).releaseClaim(any(), any(), any());
     }
 
     @Test
@@ -205,6 +196,7 @@ class ExAccountSyncServiceTest {
         ExAccountLinkReq request = new ExAccountLinkReq("token", List.of(0));
         CodefExAccountSnapshot snapshot = snapshot();
 
+        when(candidateStore.claim(999L, "token")).thenReturn(Optional.of("claim-id"));
         when(candidateStore.get(999L, "token")).thenReturn(List.of(snapshot));
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
@@ -214,6 +206,11 @@ class ExAccountSyncServiceTest {
                 .isEqualTo(UserErrorCode.USER_NOT_FOUND);
 
         verify(exAccountRepository, never()).save(any());
+        verify(candidateStore).releaseClaim(999L, "token", "claim-id");
+    }
+
+    private void claimToken(Long userId, String token) {
+        when(candidateStore.claim(userId, token)).thenReturn(Optional.of("claim-id"));
     }
 
     private CodefExAccountSnapshot snapshot() {

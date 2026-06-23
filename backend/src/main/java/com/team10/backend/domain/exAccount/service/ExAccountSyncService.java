@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -50,6 +51,19 @@ public class ExAccountSyncService {
             throw new BusinessException(GlobalErrorCode.INVALID_INPUT_VALUE);
         }
 
+        Optional<String> claimId = candidateStore.claim(userId, request.candidateToken());
+        if (claimId.isEmpty()) {
+            throw new BusinessException(ExAccountErrorCode.EX_ACCOUNT_CANDIDATE_ALREADY_CLAIMED);
+        }
+
+        try {
+            return linkClaimedAccounts(userId, request);
+        } finally {
+            candidateStore.releaseClaim(userId, request.candidateToken(), claimId.get());
+        }
+    }
+
+    private List<ExAccountRes> linkClaimedAccounts(Long userId, ExAccountLinkReq request) {
         // 2. Redis 캐시 저장소에서 유저 고유의 원본 CODEF 스냅샷 리스트를 조회
         List<CodefExAccountSnapshot> snapshots = candidateStore.get(userId, request.candidateToken());
         if (snapshots.isEmpty()) {

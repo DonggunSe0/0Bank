@@ -6,11 +6,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountClientException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -18,10 +21,14 @@ import java.util.UUID;
 public class CodefExAccountCandidateStore {
 
     private static final String KEY_PREFIX = "codef:candidate:";
+    private static final String CLAIM_KEY_PREFIX = "codef:candidate:claim:";
     private static final Duration TTL = Duration.ofMinutes(5);
+    private static final Duration CLAIM_TTL = Duration.ofSeconds(60);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    @Qualifier("getAndDeleteIfMatchScript")
+    private final RedisScript<Long> getAndDeleteIfMatchScript;
 
     public String save(Long userId, List<CodefExAccountSnapshot> snapshots) {
         String token = UUID.randomUUID().toString();
@@ -53,7 +60,29 @@ public class CodefExAccountCandidateStore {
         redisTemplate.delete(key);
     }
 
+    public Optional<String> claim(Long userId, String token) {
+        String claimId = UUID.randomUUID().toString();
+        Boolean claimed = redisTemplate.opsForValue()
+                .setIfAbsent(claimKey(userId, token), claimId, CLAIM_TTL);
+        if (Boolean.TRUE.equals(claimed)) {
+            return Optional.of(claimId);
+        }
+        return Optional.empty();
+    }
+
+    public void releaseClaim(Long userId, String token, String claimId) {
+        redisTemplate.execute(
+                getAndDeleteIfMatchScript,
+                List.of(claimKey(userId, token)),
+                claimId
+        );
+    }
+
     private String redisKey(Long userId, String token) {
         return KEY_PREFIX + userId + ":" + token;
+    }
+
+    private String claimKey(Long userId, String token) {
+        return CLAIM_KEY_PREFIX + userId + ":" + token;
     }
 }
