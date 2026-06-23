@@ -83,27 +83,32 @@ class ExAccountTransactionServiceTest {
         assertThat(response.updatedCount()).isZero();
         assertThat(account.getLastTransactionAt()).isEqualTo(LocalDate.of(2026, 6, 18));
 
-        verify(transactionRepository).save(any(ExAccountTransaction.class));
+        verify(transactionRepository).saveAndFlush(any(ExAccountTransaction.class));
     }
 
     @Test
-    @DisplayName("현재 거래내역 upsert는 조회 후 insert 사이 unique 충돌이 나면 그대로 실패한다")
-    void refreshTransactionsCreateCurrentlyFailsOnUniqueConflict() {
+    @DisplayName("거래내역 insert unique 충돌이 나면 다시 조회해 기존 거래내역 스냅샷을 갱신한다")
+    void refreshTransactionsCreateRecoversFromUniqueConflictByUpdatingExistingTransaction() {
         ExAccountTransactionSyncReq request = createTransactionSyncReq("KB-20260618143000-0001", "스타벅스");
+        ExAccountTransaction existingTransaction = createTransaction(100L, "KB-20260618143000-0001", "기존상호");
+        ExAccountDetailRes detail = ExAccountDetailRes.of(ExAccountRes.from(account), List.of());
 
         when(accountRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(account));
         when(transactionRepository.findByExAccountIdAndTransactionKey(10L, "KB-20260618143000-0001"))
-                .thenReturn(Optional.empty());
-        when(transactionRepository.save(any(ExAccountTransaction.class)))
+                .thenReturn(Optional.empty(), Optional.of(existingTransaction));
+        when(transactionRepository.saveAndFlush(any(ExAccountTransaction.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate external transaction"));
+        when(exAccountService.getAccountDetail(1L, 10L)).thenReturn(detail);
 
-        assertThatThrownBy(() -> exAccountTransactionService.refreshTransactions(
+        ExAccountTransactionRefreshRes response = exAccountTransactionService.refreshTransactions(
                 1L,
                 10L,
                 List.of(request)
-        ))
-                .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("duplicate external transaction");
+        );
+
+        assertThat(response.createdCount()).isZero();
+        assertThat(response.updatedCount()).isEqualTo(1);
+        assertThat(existingTransaction.getCounterpartyName()).isEqualTo("스타벅스");
     }
 
     @Test

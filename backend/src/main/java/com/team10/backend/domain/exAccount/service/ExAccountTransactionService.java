@@ -12,6 +12,7 @@ import com.team10.backend.domain.exAccount.repository.ExAccountTransactionReposi
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.exception.GlobalErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,7 +124,15 @@ public class ExAccountTransactionService {
                 .orElse(null);
 
         if (transaction == null) {
-            transactionRepository.save(request.toEntity(account));
+            try {
+                transactionRepository.saveAndFlush(request.toEntity(account));
+            } catch (DataIntegrityViolationException exception) {
+                ExAccountTransaction concurrentTransaction = transactionRepository
+                        .findByExAccountIdAndTransactionKey(account.getId(), request.transactionKey())
+                        .orElseThrow(() -> exception);
+                request.applyTo(concurrentTransaction);
+                return false;
+            }
             return true;
         }
 
