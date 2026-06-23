@@ -5,7 +5,7 @@ import com.team10.backend.global.exception.GlobalErrorCode;
 import com.team10.backend.global.idempotency.annotation.Idempotent;
 import com.team10.backend.global.idempotency.entity.Idempotency;
 import com.team10.backend.global.idempotency.service.IdempotencyRequestHasher;
-import com.team10.backend.global.idempotency.service.IdempotencyReservationFacade;
+import com.team10.backend.global.idempotency.service.IdempotencyReservationService;
 import com.team10.backend.global.idempotency.service.IdempotencyReserveResult;
 import com.team10.backend.global.idempotency.service.IdempotencyService;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +35,7 @@ public class IdempotencyAspect {
 
     private final IdempotencyService idempotencyService;
     private final IdempotencyRequestHasher idempotencyRequestHasher;
-    private final IdempotencyReservationFacade idempotencyReservationFacade;
+    private final IdempotencyReservationService idempotencyReservationService;
     private final TransactionTemplate transactionTemplate;
 
     private final SpelExpressionParser parser = new SpelExpressionParser(); // 문자열로 된 SpEL 표현식을 읽는 객체
@@ -52,7 +52,7 @@ public class IdempotencyAspect {
 
         String requestHash = generateRequestHash(joinPoint, idempotent);
 
-        IdempotencyReserveResult<?> reserveResult = idempotencyReservationFacade.reserveOrResolveDuplicate(
+        IdempotencyReserveResult<?> reserveResult = idempotencyReservationService.reserveOrResolveDuplicate(
                 userId,
                 idempotent.operationType(),
                 idempotencyKey,

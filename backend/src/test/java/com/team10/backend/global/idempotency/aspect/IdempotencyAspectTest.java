@@ -8,7 +8,7 @@ import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.idempotency.annotation.Idempotent;
 import com.team10.backend.global.idempotency.entity.Idempotency;
 import com.team10.backend.global.idempotency.service.IdempotencyRequestHasher;
-import com.team10.backend.global.idempotency.service.IdempotencyReservationFacade;
+import com.team10.backend.global.idempotency.service.IdempotencyReservationService;
 import com.team10.backend.global.idempotency.service.IdempotencyReserveResult;
 import com.team10.backend.global.idempotency.service.IdempotencyService;
 import com.team10.backend.global.idempotency.type.IdempotencyOperationType;
@@ -41,7 +41,7 @@ class IdempotencyAspectTest {
     private IdempotencyRequestHasher idempotencyRequestHasher;
 
     @Mock
-    private IdempotencyReservationFacade idempotencyReservationFacade;
+    private IdempotencyReservationService idempotencyReservationService;
 
     @Mock
     private TransactionTemplate transactionTemplate;
@@ -63,7 +63,7 @@ class IdempotencyAspectTest {
         givenJoinPoint(method);
         when(idempotencyRequestHasher.generate(IdempotencyOperationType.TOPUP, 1L, 5_000L, "입금 메모"))
                 .thenReturn("request-hash");
-        when(idempotencyReservationFacade.reserveOrResolveDuplicate(
+        when(idempotencyReservationService.reserveOrResolveDuplicate(
                 1L,
                 IdempotencyOperationType.TOPUP,
                 "deposit-key",
@@ -76,8 +76,8 @@ class IdempotencyAspectTest {
         Object result = aspect.handle(joinPoint, idempotent);
 
         assertSame(response, result);
-        InOrder inOrder = inOrder(idempotencyReservationFacade, joinPoint, idempotencyService);
-        inOrder.verify(idempotencyReservationFacade).reserveOrResolveDuplicate(
+        InOrder inOrder = inOrder(idempotencyReservationService, joinPoint, idempotencyService);
+        inOrder.verify(idempotencyReservationService).reserveOrResolveDuplicate(
                 1L,
                 IdempotencyOperationType.TOPUP,
                 "deposit-key",
@@ -99,7 +99,7 @@ class IdempotencyAspectTest {
         givenJoinPoint(method);
         when(idempotencyRequestHasher.generate(IdempotencyOperationType.TOPUP, 1L, 5_000L, "입금 메모"))
                 .thenReturn("request-hash");
-        when(idempotencyReservationFacade.reserveOrResolveDuplicate(
+        when(idempotencyReservationService.reserveOrResolveDuplicate(
                 1L,
                 IdempotencyOperationType.TOPUP,
                 "deposit-key",
@@ -126,7 +126,7 @@ class IdempotencyAspectTest {
         givenJoinPoint(method);
         when(idempotencyRequestHasher.generate(IdempotencyOperationType.TOPUP, 1L, 5_000L, "입금 메모"))
                 .thenReturn("request-hash");
-        when(idempotencyReservationFacade.reserveOrResolveDuplicate(
+        when(idempotencyReservationService.reserveOrResolveDuplicate(
                 1L,
                 IdempotencyOperationType.TOPUP,
                 "deposit-key",
@@ -150,7 +150,7 @@ class IdempotencyAspectTest {
         return new IdempotencyAspect(
                 idempotencyService,
                 idempotencyRequestHasher,
-                idempotencyReservationFacade,
+                idempotencyReservationService,
                 transactionTemplate
         );
     }
