@@ -7,11 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 1원 송금 비동기 처리 결과를 DB에 반영하는 전담 서비스.
- * {@link OneWonTransferProcessor}(비동기 메서드)에서 self-injection 없이 @Transactional을
- * 사용하기 위해 별도 클래스로 분리했다 — OcrService/OcrPersistenceService와 동일한 패턴.
- */
+/** 1원 송금 비동기 처리 결과를 DB에 반영하는 전담 서비스. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -28,11 +24,7 @@ public class OneWonPersistenceService {
         });
     }
 
-    /**
-     * 비동기 송금 실패 — 재시도 가능한 GOVERNMENT_VERIFIED로 되돌리고 사유만 기록한다.
-     * 호출 시점(비동기 스레드, AFTER_COMMIT 리스너)에 활성 트랜잭션이 없는 경우가 대부분이지만,
-     * 어느 컨텍스트에서 호출되어도 독립적으로 커밋되도록 REQUIRES_NEW를 명시한다.
-     */
+    /** 비동기 송금 실패 — GOVERNMENT_VERIFIED로 복구. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(Long verificationId, String reason) {
         identityVerificationRepository.findById(verificationId).ifPresent(v -> {

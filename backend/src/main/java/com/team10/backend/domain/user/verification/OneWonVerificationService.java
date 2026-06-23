@@ -38,13 +38,7 @@ public class OneWonVerificationService {
     // RedisScriptConfig에서 공용으로 정의 — LoginAttemptService의 실패 카운터와 동일한 스크립트
     private final RedisScript<Long> incrAndExpireScript;
 
-    /**
-     * 1원 인증 시작 동시 요청 방지용 락 획득.
-     * 같은 유저가 거의 동시에 두 번 호출하면 실제 송금(sendOneWon)이 중복 실행될 수 있어
-     * userId 기준으로 짧은 TTL의 락을 건다 (SET NX 방식, 원자적).
-     *
-     * @return 락 획득 성공 시 true, 이미 처리 중이면 false
-     */
+    /** 1원 인증 시작 동시 요청 방지 락(SET NX). */
     public boolean tryAcquireStartLock(Long userId) {
         Boolean acquired = redisTemplate.opsForValue()
                 .setIfAbsent(LOCK_PREFIX + userId, "1", LOCK_TTL);

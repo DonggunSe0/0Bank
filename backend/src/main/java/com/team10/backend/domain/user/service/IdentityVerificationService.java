@@ -100,12 +100,7 @@ public class IdentityVerificationService {
         );
     }
 
-    /**
-     * 1원 송금 요청 접수. 실제 은행 API 호출(최대 30초 블로킹, CodefBankRestClientConfig readTimeout)은
-     * 요청 스레드를 점유하지 않도록 트랜잭션 커밋 후 OneWonTransferRequestedEventListener가 비동기로 처리한다
-     * (OcrService와 동일한 accept-동기/처리-비동기 패턴). 동시 요청 방지 락은 비동기 처리가 끝날 때까지
-     * 유지해야 하므로, 정상적으로 비동기 처리에 넘긴 경우(kickedOff)에는 여기서 해제하지 않는다.
-     */
+    /** 1원 송금 요청 접수(비동기 처리, kickedOff 락 해제 위임). */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OneWonStartRes startOneWonVerification(Long userId, OneWonStartReq request) {
         // 동시 요청 방지 — 같은 유저가 거의 동시에 두 번 호출하면 실제 송금이 중복 실행될 수 있음

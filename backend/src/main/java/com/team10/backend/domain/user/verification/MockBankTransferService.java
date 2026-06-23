@@ -3,11 +3,7 @@ package com.team10.backend.domain.user.verification;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/**
- * 실제 은행 API 대신 사용하는 1원 송금 Mock 서비스.
- *
- * <p>실제 연동 시 이 클래스를 은행 Open API 클라이언트로 교체한다.
- */
+/** 실제 은행 API 대신 사용하는 1원 송금 Mock 서비스. */
 @Slf4j
 @Service
 public class MockBankTransferService implements BankTransferService {

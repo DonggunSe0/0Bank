@@ -51,6 +51,7 @@ backend/application-*.properties
 backend/src/main/resources/application-dev.yml
 backend/src/main/resources/application-secret.yml
 backend/src/main/resources/*.json
+backend/set-redis-password.bat
 
 # Docker data
 backend/db/mysql/data/

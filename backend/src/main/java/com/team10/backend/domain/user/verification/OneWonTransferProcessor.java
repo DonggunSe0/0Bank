@@ -6,12 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-/**
- * 1원 송금 비동기 처리 서비스.
- * 은행 API 응답을 건당 최대 30초까지 기다려야 하므로(CodefBankRestClientConfig readTimeout=30s),
- * 요청 스레드(Tomcat worker)를 점유하지 않도록 별도 스레드풀(oneWonExecutor)에서 실행한다.
- * OcrService와 동일한 "accept 동기 / 처리 비동기" 패턴.
- */
+/** 1원 송금 비동기 처리 서비스(별도 스레드풀). */
 @Slf4j
 @Service
 @RequiredArgsConstructor

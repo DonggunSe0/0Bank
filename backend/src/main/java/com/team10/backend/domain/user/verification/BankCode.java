@@ -10,17 +10,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * CODEF 기관코드 및 은행별 점검 시간 매핑.
- *
- * <p>1원 송금 요청 전 {@link #isMaintenance(LocalTime)} 으로 점검 여부를 확인한다.
- *
- * <h2>점검 시간 기준</h2>
- * <pre>
- * - 대부분의 은행: 매일 23:30 ~ 00:30 (자정 전후 1시간)
- * - 인터넷전문은행(카카오·케이·토스): 점검 없음
- * </pre>
- */
+/** CODEF 기관코드 및 은행별 점검 시간 매핑. */
 @Getter
 @RequiredArgsConstructor
 public enum BankCode {
@@ -72,25 +62,12 @@ public enum BankCode {
     private static final Map<String, BankCode> CODE_INDEX =
             Arrays.stream(values()).collect(Collectors.toMap(BankCode::getCode, Function.identity()));
 
-    /**
-     * CODEF 기관코드로 BankCode를 조회한다.
-     *
-     * @param code 3자리 기관코드 문자열
-     * @return 매핑된 BankCode, 없으면 empty
-     */
+    /** CODEF 기관코드로 BankCode를 조회한다(없으면 empty). */
     public static Optional<BankCode> fromCode(String code) {
         return Optional.ofNullable(CODE_INDEX.get(code));
     }
 
-    /**
-     * 주어진 시각이 점검 시간대에 해당하는지 확인한다.
-     *
-     * <p>점검 구간이 자정을 넘는 경우(start > end)를 처리한다.
-     * 예) 23:30 ~ 00:30 → time >= 23:30 OR time < 00:30
-     *
-     * @param time 현재 시각
-     * @return 점검 중이면 true
-     */
+    /** 주어진 시각이 점검 시간대인지 확인(자정 넘는 구간 처리). */
     public boolean isMaintenance(LocalTime time) {
         if (maintenanceStart == null || maintenanceEnd == null) {
             return false;

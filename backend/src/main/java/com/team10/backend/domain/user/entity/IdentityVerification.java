@@ -9,12 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * 다단계 본인인증 세션을 추적하는 엔티티.
- *
- * 각 인증 시도는 하나의 레코드로 관리된다.
- * OCR → 행안부 검증 → 1원 송금 의 단계별 상태를 status 필드로 추적한다.
- */
+/** 다단계 본인인증 세션을 추적하는 엔티티(OCR → 행안부 검증 → 1원 송금). */
 @Getter
 @Entity
 @Table(name = "identity_verifications")
@@ -29,11 +24,7 @@ public class IdentityVerification extends BaseEntity {
     @Column(length = 50)
     private String ocrName;
 
-    /**
-     * OCR로 추출한 주민등록번호의 마스킹 표시용 값 (앞 6자리 + "-*******").
-     * 뒷자리(민감한 일련번호) 평문은 애플리케이션 어디에서도 저장 후 다시 읽지 않으므로
-     * {@link #completeOcr} 시점에 즉시 마스킹해 저장한다 — 가역 암호화가 필요 없다.
-     */
+    /** OCR 주민등록번호 마스킹 표시값(앞 6자리만 노출). */
     @Column(length = 20)
     private String ocrResidentNumber;
 
@@ -69,12 +60,7 @@ public class IdentityVerification extends BaseEntity {
                 .build();
     }
 
-    /**
-     * OCR 파싱 성공 시 결과를 기록하고 다음 단계로 전환.
-     * 주민번호 평문은 어떤 필드에도 저장하지 않고, 마스킹된 표시값과 단방향 해시만 남긴다.
-     *
-     * @param residentNumberHash {@link HmacHasher#hash}로 계산한 주민번호 전체 원문의 해시
-     */
+    /** OCR 결과 기록 및 다음 단계 전환. 주민번호는 마스킹 표시값+단방향 해시만 저장한다. */
     public void completeOcr(String name, String residentNumber, String issueDate, String residentNumberHash) {
         this.ocrName = name;
         this.ocrResidentNumber = mask(residentNumber);
@@ -110,11 +96,7 @@ public class IdentityVerification extends BaseEntity {
         this.status = VerificationStatus.ONE_WON_PENDING;
     }
 
-    /**
-     * 비동기 1원 송금 실패 — 재시도 가능하도록 GOVERNMENT_VERIFIED로 되돌리고 사유만 기록한다.
-     * {@link #fail}과 달리 종료 상태(FAILED)로 보내지 않아, 사용자가 OCR부터 다시 시작하지 않고
-     * 1원 송금만 재요청할 수 있다.
-     */
+    /** 비동기 1원 송금 실패 시 GOVERNMENT_VERIFIED로 복구(재시도 가능). */
     public void revertOneWonRequest(String reason) {
         this.failureReason = reason;
         this.status = VerificationStatus.GOVERNMENT_VERIFIED;

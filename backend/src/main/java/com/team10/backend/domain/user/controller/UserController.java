@@ -16,6 +16,9 @@ import com.team10.backend.domain.user.service.UserProfileService;
 import com.team10.backend.domain.user.service.UserService;
 import com.team10.backend.domain.user.dto.req.UserProfileReq;
 import com.team10.backend.domain.user.dto.res.UserProfileRes;
+import com.team10.backend.global.exception.BusinessException;
+import com.team10.backend.global.exception.GlobalErrorCode;
+import com.team10.backend.global.jwt.JwtProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -58,7 +61,15 @@ public class UserController {
             @Valid @RequestBody ChangePasswordReq request,
             @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        userService.changePassword(userId, request, authHeader);
+        // userId가 resolve됐다면 JwtAuthenticationFilter가 이미 이 Authorization 헤더로 인증을
+        // 마쳤다는 뜻이라 이론상 null일 수 없지만, 방어적으로 검증해 실패 시 비즈니스 예외로 끊는다.
+        // 트랜잭션(서비스 호출) 시작 전 컨트롤러 단에서 처리해야 withdraw/changePassword 본 동작이
+        // 끝난 뒤에 예외가 터져 롤백되는 상황을 피할 수 있다.
+        String accessToken = JwtProvider.resolveBearerToken(authHeader);
+        if (accessToken == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        userService.changePassword(userId, request, accessToken);
         return ResponseEntity.noContent().build();
     }
 
@@ -68,7 +79,11 @@ public class UserController {
             @AuthenticationPrincipal Long userId,
             @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        userService.withdraw(userId, authHeader);
+        String accessToken = JwtProvider.resolveBearerToken(authHeader);
+        if (accessToken == null) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        userService.withdraw(userId, accessToken);
         return ResponseEntity.noContent().build();
     }
 

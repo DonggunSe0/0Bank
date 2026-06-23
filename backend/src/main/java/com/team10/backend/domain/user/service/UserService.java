@@ -136,14 +136,14 @@ public class UserService {
     }
 
     @Transactional
-    public void withdraw(Long userId, String authHeader) {
+    public void withdraw(Long userId, String accessToken) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
         user.withdraw();
         refreshTokenService.delete(userId);
 
         // AT 블랙리스트 등록 — 탈퇴 즉시 기존 토큰 무효화
-        blacklistAccessToken(JwtProvider.resolveBearerToken(authHeader), userId, "Withdraw");
+        blacklistAccessToken(accessToken, userId, "Withdraw");
     }
 
     public TokenRefreshRes refresh(TokenRefreshReq request, String refreshToken) {
@@ -169,7 +169,7 @@ public class UserService {
     }
 
     @Transactional
-    public void changePassword(Long userId, ChangePasswordReq request, String authHeader) {
+    public void changePassword(Long userId, ChangePasswordReq request, String accessToken) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 
@@ -183,7 +183,7 @@ public class UserService {
         refreshTokenService.delete(userId);
 
         // 현재 AT도 블랙리스트 등록 — RT만 지우면 탈취자가 AT 만료 전까지 계속 접근 가능
-        blacklistAccessToken(JwtProvider.resolveBearerToken(authHeader), userId, "ChangePassword");
+        blacklistAccessToken(accessToken, userId, "ChangePassword");
     }
 
     public void logout(Long userId, String accessToken) {
@@ -194,7 +194,12 @@ public class UserService {
 
     /** AT를 블랙리스트에 등록한다 (파싱 실패 등은 무시 — 호출부의 본 동작은 이미 끝난 상태) */
     private void blacklistAccessToken(String accessToken, Long userId, String context) {
-        if (accessToken == null) return;
+        // 정상 흐름에서는 호출부(컨트롤러)가 이미 null을 걸러내 도달하지 않는다.
+        // 그래도 향후 다른 호출부가 추가될 경우를 대비해, 조용히 묻히지 않도록 로그는 남긴다.
+        if (accessToken == null) {
+            log.warn("[{}] accessToken이 없어 AT 블랙리스트 등록을 건너뜀 — userId={}", context, userId);
+            return;
+        }
         try {
             String jti = jwtProvider.extractJti(accessToken);
             long remainingSeconds = jwtProvider.getRemainingExpirySeconds(accessToken);

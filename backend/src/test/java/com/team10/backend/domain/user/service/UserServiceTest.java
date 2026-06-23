@@ -426,7 +426,7 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("AT 블랙리스트 등록 — Authorization 헤더 전달 시")
+        @DisplayName("AT 블랙리스트 등록 — accessToken 전달 시")
         void blacklistsAccessToken() {
             ChangePasswordReq req = new ChangePasswordReq("OldPass1!", "NewPass1!");
 
@@ -436,7 +436,9 @@ class UserServiceTest {
             when(jwtProvider.extractJti("access-token")).thenReturn("jti-123");
             when(jwtProvider.getRemainingExpirySeconds("access-token")).thenReturn(3600L);
 
-            userService.changePassword(1L, req, "Bearer access-token");
+            // resolveBearerToken은 이제 컨트롤러 단에서 끝나므로, 서비스는 이미 resolve된
+            // accessToken("Bearer " 접두사 제거 후 값)을 그대로 받는다.
+            userService.changePassword(1L, req, "access-token");
 
             verify(tokenBlocklistService).block("jti-123", 3600L);
         }

@@ -11,11 +11,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.concurrent.RejectedExecutionException;
 
-/**
- * 1원 송금 요청 트랜잭션이 커밋된 후 실제 비동기 송금 처리를 시작한다.
- * OcrSubmittedEventListener와 동일한 패턴 — 리스너 자체는 동기지만 호출하는 processAsync가
- * @Async이므로 즉시 반환된다.
- */
+/** 1원 송금 요청 커밋 후 비동기 송금을 시작한다. */
 @Slf4j
 @Component
 @RequiredArgsConstructor
