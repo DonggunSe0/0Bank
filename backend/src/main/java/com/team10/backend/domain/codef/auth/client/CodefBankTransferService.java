@@ -6,11 +6,8 @@ import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.verification.BankTransferService;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.net.URLDecoder;
@@ -24,24 +21,15 @@ import java.util.Map;
 @Primary
 public class CodefBankTransferService implements BankTransferService {
 
-    // 운영 전환 시 development.codef.io → api 도메인으로 교체
-    private static final String TRANSFER_AUTH_URL =
-            "https://development.codef.io/v1/kr/bank/a/account/transfer-authentication";
     // inPrintType=9: 고객사 직접 입력 — inPrintContent에 지정한 코드를 입금자명으로 사용
     private static final String IN_PRINT_TYPE_CUSTOM = "9";
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private final CodefAuthClient codefAuthClient;
-    private final RestClient codefBankTransferRestClient;
+    private final CodefBankTransferExchange codefBankTransferExchange;
 
-    // one-won-transfer 용 자격증명으로 발급된 토큰을 사용 (CodefAuthClientConfig 참고).
-    public CodefBankTransferService(
-            @Qualifier("oneWonTransfer") CodefAuthClient codefAuthClient,
-            RestClient codefBankTransferRestClient
-    ) {
-        this.codefAuthClient = codefAuthClient;
-        this.codefBankTransferRestClient = codefBankTransferRestClient;
+    public CodefBankTransferService(CodefBankTransferExchange codefBankTransferExchange) {
+        this.codefBankTransferExchange = codefBankTransferExchange;
     }
 
     @Override
@@ -82,16 +70,7 @@ public class CodefBankTransferService implements BankTransferService {
         body.put("inPrintContent", verificationCode);
 
         try {
-            String token = codefAuthClient.getAccessToken();
-
-            String response = codefBankTransferRestClient.post()
-                    .uri(TRANSFER_AUTH_URL)
-                    .header("Authorization", "Bearer " + token)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(String.class);
-
+            String response = codefBankTransferExchange.requestTransfer(body);
             String decoded = URLDecoder.decode(response != null ? response : "", StandardCharsets.UTF_8);
             return OBJECT_MAPPER.readValue(decoded, Map.class);
 

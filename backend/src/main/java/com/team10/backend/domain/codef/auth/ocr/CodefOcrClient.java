@@ -2,15 +2,11 @@ package com.team10.backend.domain.codef.auth.ocr;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.team10.backend.domain.codef.auth.client.CodefAuthClient;
 import com.team10.backend.domain.codef.auth.client.CodefAuthException;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.net.URLDecoder;
@@ -19,24 +15,17 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
-/** CODEF 신분증 OCR 클라이언트 (POST /v1/kr/etc/a/ocr/registration-card) */
+/** CODEF 신분증 OCR 클라이언트. */
 @Slf4j
 @Component
 public class CodefOcrClient {
 
-    private static final String OCR_URL = "https://development.codef.io/v1/kr/etc/a/ocr/registration-card";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private final CodefAuthClient codefAuthClient;
-    private final RestClient restClient;
+    private final CodefOcrExchange codefOcrExchange;
 
-    // account-inquiry 용 자격증명으로 발급된 토큰을 사용 (CodefAuthClientConfig 참고).
-    public CodefOcrClient(
-            @Qualifier("accountInquiry") CodefAuthClient codefAuthClient,
-            RestClient restClient
-    ) {
-        this.codefAuthClient = codefAuthClient;
-        this.restClient = restClient;
+    public CodefOcrClient(CodefOcrExchange codefOcrExchange) {
+        this.codefOcrExchange = codefOcrExchange;
     }
 
     /**
@@ -95,16 +84,7 @@ public class CodefOcrClient {
         body.put("image_save", "0");
 
         try {
-            String token = codefAuthClient.getAccessToken();
-
-            String response = restClient.post()
-                    .uri(OCR_URL)
-                    .header("Authorization", "Bearer " + token)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(String.class);
-
+            String response = codefOcrExchange.requestOcr(body);
             String decoded = URLDecoder.decode(response != null ? response : "", StandardCharsets.UTF_8);
             return OBJECT_MAPPER.readValue(decoded, Map.class);
 

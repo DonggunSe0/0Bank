@@ -10,41 +10,18 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * CODEF OAuth Access Token 발급/캐싱.
- *
- * <p>CODEF는 상품(계좌조회/OCR, 1원송금)마다 별도로 자격증명을 발급하므로, 이 클래스는
- * {@code @Component}로 단일 공유 빈을 두지 않고 용도(purpose)별로 인스턴스를 분리해
- * {@code CodefAuthClientConfig}에서 빈으로 등록한다. purpose는 Redis 캐시/락 키의
- * 네임스페이스로도 쓰여, 서로 다른 용도의 토큰이 같은 Redis 키를 두고 충돌하지 않는다.
- *
- * <h2>분산서버 대응 — 2단계 캐시 + 분산 락</h2>
- * <p>인스턴스 로컬 {@link AtomicReference}만 쓰면 인스턴스마다 캐시가 따로 생겨, 인스턴스 수만큼
- * 중복으로 토큰을 발급받게 된다. 이를 막기 위해 Redis를 인스턴스 간 공유 캐시(L2)로 두고,
- * 캐시가 비어 있을 때만 Redis 분산 락(SET NX)을 잡아 실제 발급 API 호출을 1번으로 합친다.
- * <ol>
- *   <li>L1 — 인스턴스 로컬 {@code AtomicReference}: 대부분의 호출은 여기서 끝나 Redis도 거치지 않는다.</li>
- *   <li>L2 — Redis 공유 캐시: 다른 인스턴스가 이미 받아온 토큰이 있으면 그대로 재사용한다.</li>
- *   <li>L1, L2 모두 미스일 때만 분산 락을 잡고 CODEF OAuth API를 호출한다.
- *       락을 못 잡은 인스턴스는 잠시 대기 후 Redis를 재확인하고, 끝까지 못 받으면
- *       (락 보유 인스턴스 지연/실패 대비) 가용성을 위해 직접 발급을 시도한다.</li>
- * </ol>
- *
- * <h2>락 해제 안전성</h2>
- * <p>락 값에 매 시도마다 새로 생성한 UUID를 넣고, 해제 시 {@code getAndDeleteIfMatchScript}로
- * "내가 쓴 값일 때만" 원자적으로 지운다. 단순히 키를 무조건 DEL하면, 발급 호출이
- * {@link #LOCK_TTL}보다 길어져 락이 자동 만료된 사이 다른 인스턴스가 새로 잡은 락을
- * 실수로 지워버릴 수 있다 — 그 경우 세 번째 인스턴스까지 동시에 락을 잡게 된다.
- */
+/** CODEF OAuth Access Token 발급/캐싱(용도별 분리, 2단계 캐시+분산락). */
 @Slf4j
 public class CodefAuthClient {
 
     private static final Duration EXPIRY_BUFFER = Duration.ofMinutes(5);
     private static final Duration LOCK_TTL = Duration.ofSeconds(10);
-    private static final Duration LOCK_WAIT_INTERVAL = Duration.ofMillis(100);
-    private static final int LOCK_WAIT_RETRIES = 10; // 최대 1초 대기
+    private static final Duration LOCK_WAIT_BASE_INTERVAL = Duration.ofMillis(50);
+    private static final Duration LOCK_WAIT_MAX_INTERVAL = Duration.ofMillis(250);
+    private static final int LOCK_WAIT_RETRIES = 6; // 지수 백오프 + jitter로 최대 약 1.1초 대기
 
     // purpose로 네임스페이스를 나눠 용도별 인스턴스가 같은 Redis 키를 두고 충돌하지 않게 한다.
     private final String redisKey;
@@ -121,11 +98,7 @@ public class CodefAuthClient {
         return token;
     }
 
-    /**
-     * 분산 락을 잡고 CODEF OAuth API를 호출한다. 락을 못 잡으면 다른 인스턴스가 발급 중인 것으로
-     * 보고 Redis에 새 토큰이 올라오는지 잠깐 기다린다. 끝까지 안 올라오면(락 보유 인스턴스 지연/실패)
-     * 가용성을 위해 직접 발급한다 — 이 경우 드물게 중복 발급이 발생할 수 있다.
-     */
+    /** 분산 락 획득 후 토큰 발급, 대기/재확인/직접발급 폴백 로직. */
     private String fetchWithDistributedLock() {
         String lockValue = UUID.randomUUID().toString();
         boolean lockAcquired = Boolean.TRUE.equals(
@@ -140,8 +113,8 @@ public class CodefAuthClient {
         }
 
         log.info("[CODEF] 다른 인스턴스가 토큰 발급 중 — 대기 후 재확인");
-        for (int i = 0; i < LOCK_WAIT_RETRIES; i++) {
-            sleep(LOCK_WAIT_INTERVAL);
+        for (int attempt = 0; attempt < LOCK_WAIT_RETRIES; attempt++) {
+            sleep(nextBackoff(attempt));
             String shared = readSharedToken();
             if (shared != null) {
                 log.info("[CODEF] 토큰 재사용 (대기 중 다른 인스턴스 발급 완료)");
@@ -161,6 +134,16 @@ public class CodefAuthClient {
         redisTemplate.execute(getAndDeleteIfMatchScript, List.of(lockKey), lockValue);
     }
 
+    /** 락 재확인 대기 시간을 지수 백오프+equal jitter로 계산 — 여러 인스턴스의 폴링이 한 박자로 몰리는 thundering herd를 방지한다. */
+    private Duration nextBackoff(int attempt) {
+        long capMillis = LOCK_WAIT_MAX_INTERVAL.toMillis();
+        long baseMillis = LOCK_WAIT_BASE_INTERVAL.toMillis();
+        long exp = Math.min(capMillis, baseMillis << attempt);
+        long half = exp / 2;
+        long jittered = half + ThreadLocalRandom.current().nextLong(half + 1);
+        return Duration.ofMillis(jittered);
+    }
+
     private void sleep(Duration duration) {
         try {
             Thread.sleep(duration.toMillis());
@@ -175,33 +158,31 @@ public class CodefAuthClient {
     }
 
     private String fetchAndCacheToken() {
-        try {
-            String credentials = Base64.getEncoder().encodeToString(
-                    (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
+        String credentials = Base64.getEncoder().encodeToString(
+                (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
 
-            CodefOAuthExchange.CodefTokenResponse response = codefOAuthExchange.issueToken(
-                    "Basic " + credentials,
-                    "grant_type=client_credentials&scope=read"
-            );
+        // 4xx/5xx는 CodefHttpServiceConfig의 defaultStatusHandler가 이미 BusinessException(CODEF_TOKEN_ISSUE_FAILED)으로
+        // 변환해 던지므로 여기서 따로 잡지 않고 그대로 전파한다. 네트워크 단계 실패(타임아웃 등)도 감싸지 않고 그대로 전파한다.
+        CodefOAuthExchange.CodefTokenResponse response = codefOAuthExchange.issueToken(
+                "Basic " + credentials,
+                "grant_type=client_credentials&scope=read"
+        );
 
-            if (response == null || response.accessToken() == null || response.expiresIn() == null) {
-                throw new IllegalStateException("access_token 또는 expires_in 누락");
-            }
-
-            long cacheableSeconds = response.expiresIn() - EXPIRY_BUFFER.toSeconds();
-            tokenCache.set(new TokenCache(response.accessToken(), Instant.now().getEpochSecond() + cacheableSeconds));
-
-            // 버퍼를 빼고도 양수로 남는 만큼만 Redis에 공유 — 너무 짧으면 다른 인스턴스와
-            // 공유할 가치가 없으니 로컬 캐시에만 두고 다음 호출에서 바로 재발급되게 둔다.
-            if (cacheableSeconds > 0) {
-                redisTemplate.opsForValue().set(redisKey, response.accessToken(), Duration.ofSeconds(cacheableSeconds));
-            }
-
-            log.info("[CODEF] 토큰 발급 완료");
-            return response.accessToken();
-        } catch (Exception e) {
-            // 호출부에서 각자의 도메인 예외로 변환하도록 그대로 전파 (BusinessException이면 호출부에서 가로채지 못함)
-            throw new CodefAuthException("CODEF 토큰 응답 파싱 실패", e);
+        // 200 OK인데 본문이 비정상인 경우만 — HTTP 에러가 아니므로 defaultStatusHandler가 잡지 못한다.
+        if (response == null || response.accessToken() == null || response.expiresIn() == null) {
+            throw new CodefAuthException("CODEF 토큰 응답 파싱 실패: access_token 또는 expires_in 누락", null);
         }
+
+        long cacheableSeconds = response.expiresIn() - EXPIRY_BUFFER.toSeconds();
+        tokenCache.set(new TokenCache(response.accessToken(), Instant.now().getEpochSecond() + cacheableSeconds));
+
+        // 버퍼를 빼고도 양수로 남는 만큼만 Redis에 공유 — 너무 짧으면 다른 인스턴스와
+        // 공유할 가치가 없으니 로컬 캐시에만 두고 다음 호출에서 바로 재발급되게 둔다.
+        if (cacheableSeconds > 0) {
+            redisTemplate.opsForValue().set(redisKey, response.accessToken(), Duration.ofSeconds(cacheableSeconds));
+        }
+
+        log.info("[CODEF] 토큰 발급 완료");
+        return response.accessToken();
     }
 }

@@ -1,5 +1,7 @@
 package com.team10.backend.domain.codef.auth.client;
 
+import com.team10.backend.domain.user.exception.UserErrorCode;
+import com.team10.backend.global.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -139,14 +141,25 @@ class CodefAuthClientTest {
         }
 
         @Test
-        @DisplayName("OAuth 호출 자체가 실패하면 CodefAuthException으로 변환된다")
-        void exchangeThrows_throwsCodefAuthException() {
+        @DisplayName("4xx/5xx 응답(CodefHttpServiceConfig의 defaultStatusHandler가 이미 변환) — BusinessException을 감싸지 않고 그대로 전파한다")
+        void exchangeThrowsBusinessException_propagatesAsIs() {
             when(codefOAuthExchange.issueToken(anyString(), anyString()))
-                    .thenThrow(new RuntimeException("network error"));
+                    .thenThrow(new BusinessException(UserErrorCode.CODEF_TOKEN_ISSUE_FAILED));
 
             assertThatThrownBy(() -> codefAuthClient.getAccessToken())
-                    .isInstanceOf(CodefAuthException.class)
-                    .hasMessageContaining("CODEF 토큰 응답 파싱 실패");
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(UserErrorCode.CODEF_TOKEN_ISSUE_FAILED);
+        }
+
+        @Test
+        @DisplayName("네트워크 단계 등 예기치 못한 예외는 감싸지 않고 그대로 전파한다")
+        void exchangeThrowsUnexpectedException_propagatesAsIs() {
+            RuntimeException networkError = new RuntimeException("network error");
+            when(codefOAuthExchange.issueToken(anyString(), anyString()))
+                    .thenThrow(networkError);
+
+            assertThatThrownBy(() -> codefAuthClient.getAccessToken())
+                    .isSameAs(networkError);
         }
 
         @Test
