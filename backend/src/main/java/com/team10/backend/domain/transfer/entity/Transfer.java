@@ -22,12 +22,12 @@ import lombok.NoArgsConstructor;
 public class Transfer extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "from_account_id", nullable = false)
-    private Account fromAccount;
+    @JoinColumn(name = "sender_account_id", nullable = false)
+    private Account senderAccount;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "to_account_id", nullable = false)
-    private Account toAccount;
+    @JoinColumn(name = "receiver_account_id", nullable = false)
+    private Account receiverAccount;
 
     @Column(nullable = false)
     private Long amount;
@@ -36,6 +36,33 @@ public class Transfer extends BaseEntity {
     @Column(nullable = false, length = 20)
     private TransferStatus status;
 
-    @Column(length = 255)
+    @Column(length = 255, nullable = true)
     private String memo;
+
+    public Transfer(Account senderAccount, Account receiverAccount, Long amount, TransferStatus status, String memo){
+        this.senderAccount = senderAccount;
+        this.receiverAccount = receiverAccount;
+        this.status = status;
+        this.amount = amount;
+        this.memo = memo;
+    }
+
+    public static Transfer success(Account senderAccount, Account receiverAccount, Long amount, String memo){
+        return new Transfer(
+                senderAccount,
+                receiverAccount,
+                amount,
+                TransferStatus.SUCCESS,
+                memo
+        );
+    }
+    public static Transfer failed(Account senderAccount, Account receiverAccount, Long amount, String memo){
+        return new Transfer(
+                senderAccount,
+                receiverAccount,
+                amount,
+                TransferStatus.FAILED,
+                memo
+        );
+    }
 }

@@ -2,10 +2,11 @@ spring:
   # 운영 DB 설정 - ec2 instance
   # datasource:
 
-  jpa:
-    hibernate:
-      ddl-auto: validate # 운영 환경에서는 db 자동 업데이트 금지
+  data:
+    redis:
+      password: ${REDIS_PASSWORD} # 운영 서버 환경변수로 주입, 기본값 없음(누락 시 기동 실패)
 
+  jpa:
     show-sql: false
 
     properties:
@@ -13,6 +14,10 @@ spring:
         format_sql: false
         highlight_sql: false
         use_sql_comments: false
+
+# RT 쿠키 Secure 플래그 — 운영은 반드시 HTTPS이므로 true
+cookie:
+  secure: true
 
 # 운영 환경에서는 로그 출력을 최소화
 logging:
@@ -22,4 +27,18 @@ logging:
     org.hibernate.orm.jdbc.bind: INFO
     org.hibernate.orm.jdbc.extract: INFO
     org.springframework.transaction.interceptor: INFO
+
+codef:
+  account-inquiry:
+    service-type: ${CODEF_ACCOUNT_INQUIRY_SERVICE_TYPE:PRODUCTION}
+    client-id: ${CODEF_ACCOUNT_INQUIRY_CLIENT_ID:}
+    client-secret: ${CODEF_ACCOUNT_INQUIRY_CLIENT_SECRET:}
+    public-key: ${CODEF_ACCOUNT_INQUIRY_PUBLIC_KEY:}
+    base-url: ${CODEF_ACCOUNT_INQUIRY_BASE_URL:}
+    account-create-path: /v1/account/create
+    account-list-path: /v1/kr/bank/p/account/account-list
+    bank-transaction-path: /v1/kr/bank/p/account/transaction-list
+  connected-id-crypto:
+    secret-key: ${CODEF_CONNECTED_ID_ENCRYPTION_KEY:}
+    key-version: ${CODEF_CONNECTED_ID_ENCRYPTION_KEY_VERSION:v1}
 

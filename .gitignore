@@ -48,6 +48,10 @@ backend/db_dev.trace.db
 
 # Sensitive config (중요: 전체 .properties 금지)
 backend/application-*.properties
+backend/src/main/resources/application-dev.yml
+backend/src/main/resources/application-secret.yml
+backend/src/main/resources/*.json
+backend/set-redis-password.bat
 
 # Docker data
 backend/db/mysql/data/
@@ -67,8 +71,12 @@ frontend/dist/
 frontend/build/
 frontend/.next/
 frontend/out/
+frontend/.vercel/
+frontend/.turbo/
 frontend/.env.local
 frontend/.env.*.local
+frontend-test/
+*.tsbuildinfo
 
 ############################
 # Coverage / Test
@@ -87,8 +95,14 @@ backend/.gradle-home/
 **/.terraform/*
 **/*.tfstate
 **/*.tfstate.*
-
-**/.tfvars
+**/*.tfvars
+**/*.tfvars.json
 **/secrets.tf
+**/crash.log
+**/crash.*.log
+**/*.tfplan
 
 node_modules/
+
+# QueryDSL generated sources
+backend/src/main/generated/

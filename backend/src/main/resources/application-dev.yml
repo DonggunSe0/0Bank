@@ -5,9 +5,6 @@ spring:
     password: app1234
 
   jpa:
-    hibernate:
-      ddl-auto: update # prod 환경에서 반드시 validate or none 으로 수정
-
     show-sql: true # jpa가 실행한 sql문 콘솔에 출력
 
     properties:
@@ -16,8 +13,22 @@ spring:
         highlight_sql: true
         use_sql_comments: true
 
-# 로그 향상
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # password는 application-secret.yml(gitignore)에서 주입 — 하드코딩된 기본값을 두지 않음
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
 logging:
   level:
     org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.jdbc.extract: TRACE
+    com.team10.backend.domain.user.ocr: DEBUG
