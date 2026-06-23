@@ -149,7 +149,6 @@ class ExAccountConnectionServiceTest {
 
     @Test
     void registerDoesNotCallCodefWhenUserOrganizationRateLimitIsExceeded() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         doThrow(new BusinessException(
                 ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_REGISTER_RATE_LIMIT_EXCEEDED
         )).when(rateLimitService).checkRegister(1L, "0004");

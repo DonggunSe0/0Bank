@@ -78,19 +78,27 @@ public class CodefExAccountAuthClient {
 
     private String readSharedToken() {
         try {
-            String token = redisTemplate.opsForValue().get(REDIS_TOKEN_KEY);
-            if (token == null || token.isBlank()) {
+            String value = redisTemplate.opsForValue().get(REDIS_TOKEN_KEY);
+            if (value == null || value.isBlank()) {
                 return null;
             }
 
-            Long remainingTtlSeconds = redisTemplate.getExpire(REDIS_TOKEN_KEY);
-            if (remainingTtlSeconds == null || remainingTtlSeconds <= 0) {
+            int lastColonIndex = value.lastIndexOf(':');
+            if (lastColonIndex == -1) {
+                return null;
+            }
+
+            String token = value.substring(0, lastColonIndex);
+            String validUntilStr = value.substring(lastColonIndex + 1);
+            long validUntilEpochSecond = Long.parseLong(validUntilStr);
+
+            if (Instant.now().getEpochSecond() >= validUntilEpochSecond) {
                 return null;
             }
 
             tokenCache.set(new TokenCache(
                     token,
-                    Instant.now().getEpochSecond() + remainingTtlSeconds
+                    validUntilEpochSecond
             ));
             return token;
         } catch (RuntimeException exception) {
@@ -175,9 +183,11 @@ public class CodefExAccountAuthClient {
 
     private void writeSharedToken(String accessToken, long cacheableSeconds) {
         try {
+            long validUntilEpochSecond = Instant.now().getEpochSecond() + cacheableSeconds;
+            String value = accessToken + ":" + validUntilEpochSecond;
             redisTemplate.opsForValue().set(
                     REDIS_TOKEN_KEY,
-                    accessToken,
+                    value,
                     Duration.ofSeconds(cacheableSeconds)
             );
         } catch (RuntimeException ignored) {

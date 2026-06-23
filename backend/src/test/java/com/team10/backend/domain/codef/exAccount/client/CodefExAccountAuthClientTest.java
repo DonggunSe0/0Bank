@@ -87,7 +87,7 @@ class CodefExAccountAuthClientTest {
         assertThat(authClient.getAccessToken()).isEqualTo("account-access-token");
         verify(valueOperations).set(
                 eq(REDIS_TOKEN_KEY),
-                eq("account-access-token"),
+                org.mockito.ArgumentMatchers.argThat(val -> val.startsWith("account-access-token:")),
                 eq(Duration.ofSeconds(3300))
         );
         verify(redisTemplate).execute(
@@ -119,8 +119,8 @@ class CodefExAccountAuthClientTest {
 
     @Test
     void reusesSharedRedisTokenWhenLocalCacheIsEmpty() {
-        when(valueOperations.get(REDIS_TOKEN_KEY)).thenReturn("shared-access-token");
-        when(redisTemplate.getExpire(REDIS_TOKEN_KEY)).thenReturn(1200L);
+        long validUntil = java.time.Instant.now().getEpochSecond() + 1200;
+        when(valueOperations.get(REDIS_TOKEN_KEY)).thenReturn("shared-access-token:" + validUntil);
 
         assertThat(authClient.getAccessToken()).isEqualTo("shared-access-token");
 
@@ -132,10 +132,10 @@ class CodefExAccountAuthClientTest {
     void waitsForSharedRedisTokenWhenAnotherInstanceOwnsLock() {
         when(valueOperations.setIfAbsent(eq(REDIS_LOCK_KEY), anyString(), eq(Duration.ofSeconds(10))))
                 .thenReturn(false);
+        long validUntil = java.time.Instant.now().getEpochSecond() + 1200;
         when(valueOperations.get(REDIS_TOKEN_KEY))
                 .thenReturn(null)
-                .thenReturn("shared-access-token");
-        when(redisTemplate.getExpire(REDIS_TOKEN_KEY)).thenReturn(1200L);
+                .thenReturn("shared-access-token:" + validUntil);
 
         assertThat(authClient.getAccessToken()).isEqualTo("shared-access-token");
 
@@ -162,7 +162,7 @@ class CodefExAccountAuthClientTest {
     void returnsIssuedTokenWhenRedisWriteFails() {
         doThrow(new RuntimeException("redis unavailable"))
                 .when(valueOperations)
-                .set(eq(REDIS_TOKEN_KEY), eq("issued-access-token"), eq(Duration.ofSeconds(3300)));
+                .set(eq(REDIS_TOKEN_KEY), anyString(), eq(Duration.ofSeconds(3300)));
         server.expect(requestTo(OAUTH_TOKEN_URL))
                 .andRespond(withSuccess("""
                         {

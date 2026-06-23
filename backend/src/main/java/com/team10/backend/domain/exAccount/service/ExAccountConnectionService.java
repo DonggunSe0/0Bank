@@ -56,28 +56,28 @@ public class ExAccountConnectionService {
                 Duration.ofSeconds(10),
                 Duration.ofSeconds(10),
                 ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_CONCURRENT_REQUEST,
-                () -> transactionTemplate.execute(status -> {
-                    // 1. 유저 검증
-                    User user = userRepository.findById(userId)
-                            .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-
+                () -> {
+                    // 트랜잭션 외부에서 실행: Rate limit 체크 및 외부 API 호출 (커넥션 풀 고사 방지)
                     rateLimitService.checkRegister(userId, request.organization());
-
-                    // 2. CODEF API에 계정을 등록하고, 발급된 connectedId를 AES-GCM 알고리즘으로 양방향 암호화 처리
                     EncryptedConnectedId encryptedConnectedId = codefExAccountGateway.register(request);
 
-                    // 3. 기존에 해당 기관 연결 정보가 있었다면 갱신하고, 없었다면 신규 저장 처리 (Upsert)
-                    ExAccountConnection connection = connectionRepository
-                            .findByUserIdAndOrganization(userId, request.organization())
-                            .map(existing -> updateConnection(existing, encryptedConnectedId))
-                            .orElseGet(() -> ExAccountConnection.create(
-                                    user,
-                                    request.organization(),
-                                    encryptedConnectedId
-                            ));
-                    ExAccountConnection saved = connectionRepository.saveAndFlush(connection);
-                    return new ExAccountConnectionRes(saved.getOrganization(), saved.getStatus());
-                })
+                    // 트랜잭션 내부에서 실행: DB 조회 및 저장
+                    return transactionTemplate.execute(status -> {
+                        User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+
+                        ExAccountConnection connection = connectionRepository
+                                .findByUserIdAndOrganization(userId, request.organization())
+                                .map(existing -> updateConnection(existing, encryptedConnectedId))
+                                .orElseGet(() -> ExAccountConnection.create(
+                                        user,
+                                        request.organization(),
+                                        encryptedConnectedId
+                                ));
+                        ExAccountConnection saved = connectionRepository.saveAndFlush(connection);
+                        return new ExAccountConnectionRes(saved.getOrganization(), saved.getStatus());
+                    });
+                }
         );
     }
 
