@@ -64,9 +64,15 @@ public class IdempotencyAspect {
 
         // 최초 응답이 201 CREATED면 replay도 201 CREATED로 반환
         if (reserveResult.replay()) {
-            return ResponseEntity
-                    .status(resolveReplayStatusCode(reserveResult.responseStatusCode()))
-                    .body(reserveResult.storedResponse());
+            Class<?> returnType = ((MethodSignature) joinPoint.getSignature()).getReturnType();
+
+            if (ResponseEntity.class.isAssignableFrom(returnType)) {
+                return ResponseEntity
+                        .status(resolveReplayStatusCode(reserveResult.responseStatusCode()))
+                        .body(reserveResult.storedResponse());
+            }
+
+            return reserveResult.storedResponse(); // ResponseEntity 타입 아닌경우 그냥 DTO 반환 (방어적 로직)
         }
 
         Idempotency idempotency = reserveResult.idempotency();
