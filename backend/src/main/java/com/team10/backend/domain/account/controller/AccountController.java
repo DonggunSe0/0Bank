@@ -2,8 +2,11 @@ package com.team10.backend.domain.account.controller;
 
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordSetReq;
 import com.team10.backend.domain.account.dto.res.AccountCreateRes;
 import com.team10.backend.domain.account.dto.res.AccountDetailRes;
+import com.team10.backend.domain.account.dto.res.AccountPasswordRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.service.AccountService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,6 +46,32 @@ public class AccountController {
             @Valid @RequestBody AccountNicknameUpdateReq request
     ){
         AccountDetailRes response = accountService.updateNickname(userId, accountId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "계좌 비밀번호 설정", description = "인증 사용자가 본인 소유 활성 계좌의 비밀번호를 설정합니다.")
+    @PostMapping("/{accountId}/password")
+    public ResponseEntity<AccountPasswordRes> setPassword(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long accountId,
+            @Valid @RequestBody AccountPasswordSetReq request
+    ) {
+        AccountPasswordRes response =
+                accountService.setPassword(userId, accountId, request);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "계좌 비밀번호 변경", description = "현재 계좌 비밀번호 검증 후 새 비밀번호로 변경합니다.")
+    @PatchMapping("/{accountId}/password")
+    public ResponseEntity<AccountPasswordRes> changePassword(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long accountId,
+            @Valid @RequestBody AccountPasswordChangeReq request
+    ) {
+        AccountPasswordRes response =
+                accountService.changePassword(userId, accountId, request);
+
         return ResponseEntity.ok(response);
     }
 

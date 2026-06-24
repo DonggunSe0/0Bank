@@ -2,8 +2,11 @@ package com.team10.backend.domain.account.service;
 
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordSetReq;
 import com.team10.backend.domain.account.dto.res.AccountCreateRes;
 import com.team10.backend.domain.account.dto.res.AccountDetailRes;
+import com.team10.backend.domain.account.dto.res.AccountPasswordRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
@@ -14,6 +17,7 @@ import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +31,7 @@ public class AccountService {
     private static final int MAX_ACCOUNT_NUMBER_GENERATION_RETRY = 10;
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public AccountCreateRes createAccount(Long userId, AccountCreateReq request) {
@@ -64,6 +69,52 @@ public class AccountService {
         account.updateNickname(request.nickname());
 
         return AccountDetailRes.from(account);
+    }
+
+    @Transactional
+    public AccountPasswordRes setPassword(
+            Long userId,
+            Long accountId,
+            AccountPasswordSetReq request
+    ) {
+        Account account = accountRepository.findByIdAndUserIdForUpdate(accountId, userId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (!account.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        if (account.getAccountPasswordHash() != null) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_PASSWORD_ALREADY_SET);
+        }
+
+        account.changePassword(passwordEncoder.encode(request.accountPassword()));
+
+        return AccountPasswordRes.from(account);
+    }
+
+    @Transactional
+    public AccountPasswordRes changePassword(
+            Long userId,
+            Long accountId,
+            AccountPasswordChangeReq request
+    ) {
+        Account account = accountRepository.findByIdAndUserIdForUpdate(accountId, userId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (!account.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        if (request.currentPassword().equals(request.newPassword())) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_PASSWORD_SAME);
+        }
+
+        account.verifyPassword(passwordEncoder, request.currentPassword());
+
+        account.changePassword(passwordEncoder.encode(request.newPassword()));
+
+        return AccountPasswordRes.from(account);
     }
 
     @Transactional

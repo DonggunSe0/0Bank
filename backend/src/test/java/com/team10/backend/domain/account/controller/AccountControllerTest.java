@@ -13,8 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordSetReq;
 import com.team10.backend.domain.account.dto.res.AccountCreateRes;
 import com.team10.backend.domain.account.dto.res.AccountDetailRes;
+import com.team10.backend.domain.account.dto.res.AccountPasswordRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.service.AccountService;
 import com.team10.backend.domain.account.type.AccountStatus;
@@ -115,6 +118,65 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
         verify(accountService).updateNickname(eq(1L), eq(1L), any(AccountNicknameUpdateReq.class));
+    }
+
+
+    @Test
+    @DisplayName("계좌 비밀번호 설정 API는 인증 사용자와 accountId, 요청 본문을 받아 설정 결과를 반환한다")
+    void setPassword() throws Exception {
+        AccountPasswordSetReq request = new AccountPasswordSetReq("123456");
+        AccountPasswordRes response = new AccountPasswordRes(1L, true);
+
+        when(accountService.setPassword(eq(1L), eq(1L), any(AccountPasswordSetReq.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/accounts/{accountId}/password", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountId").value(1L))
+                .andExpect(jsonPath("$.passwordSet").value(true));
+
+        verify(accountService).setPassword(eq(1L), eq(1L), any(AccountPasswordSetReq.class));
+    }
+
+    @Test
+    @DisplayName("계좌 비밀번호 설정 API는 비밀번호가 숫자 6자리가 아니면 400을 반환한다")
+    void setPasswordWithInvalidFormat() throws Exception {
+        AccountPasswordSetReq request = new AccountPasswordSetReq("abc123");
+
+        mockMvc.perform(post("/api/v1/accounts/{accountId}/password", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("계좌 비밀번호 변경 API는 현재 비밀번호와 새 비밀번호를 받아 변경 결과를 반환한다")
+    void changePassword() throws Exception {
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("123456", "654321");
+        AccountPasswordRes response = new AccountPasswordRes(1L, true);
+
+        when(accountService.changePassword(eq(1L), eq(1L), any(AccountPasswordChangeReq.class))).thenReturn(response);
+
+        mockMvc.perform(patch("/api/v1/accounts/{accountId}/password", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountId").value(1L))
+                .andExpect(jsonPath("$.passwordSet").value(true));
+
+        verify(accountService).changePassword(eq(1L), eq(1L), any(AccountPasswordChangeReq.class));
+    }
+
+    @Test
+    @DisplayName("계좌 비밀번호 변경 API는 새 비밀번호가 숫자 6자리가 아니면 400을 반환한다")
+    void changePasswordWithInvalidNewPassword() throws Exception {
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("123456", "abcdef");
+
+        mockMvc.perform(patch("/api/v1/accounts/{accountId}/password", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

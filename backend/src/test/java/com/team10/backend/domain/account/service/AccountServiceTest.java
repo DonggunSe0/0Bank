@@ -3,13 +3,17 @@ package com.team10.backend.domain.account.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
+import com.team10.backend.domain.account.dto.req.AccountPasswordSetReq;
 import com.team10.backend.domain.account.dto.res.AccountCreateRes;
 import com.team10.backend.domain.account.dto.res.AccountDetailRes;
+import com.team10.backend.domain.account.dto.res.AccountPasswordRes;
 import com.team10.backend.domain.account.dto.res.AccountSummaryRes;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
@@ -30,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +45,9 @@ class AccountServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private AccountService accountService;
@@ -197,6 +205,162 @@ class AccountServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+
+    @Test
+    @DisplayName("계좌 비밀번호를 최초 설정한다")
+    void setPassword() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        AccountPasswordSetReq request = new AccountPasswordSetReq("123456");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.encode("123456")).thenReturn("encoded-password");
+
+        AccountPasswordRes response = accountService.setPassword(1L, 1L, request);
+
+        assertThat(response.accountId()).isEqualTo(1L);
+        assertThat(response.passwordSet()).isTrue();
+        assertThat(account.getAccountPasswordHash()).isEqualTo("encoded-password");
+    }
+
+    @Test
+    @DisplayName("이미 비밀번호가 설정된 계좌는 최초 설정에 실패한다")
+    void setPasswordAlreadySet() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+        AccountPasswordSetReq request = new AccountPasswordSetReq("123456");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.setPassword(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_PASSWORD_ALREADY_SET);
+
+        verify(passwordEncoder, never()).encode(any(String.class));
+    }
+
+    @Test
+    @DisplayName("현재 비밀번호가 일치하면 계좌 비밀번호를 변경한다")
+    void changePassword() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("123456", "654321");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("123456", "encoded-password")).thenReturn(true);
+        when(passwordEncoder.encode("654321")).thenReturn("new-encoded-password");
+
+        AccountPasswordRes response = accountService.changePassword(1L, 1L, request);
+
+        assertThat(response.accountId()).isEqualTo(1L);
+        assertThat(response.passwordSet()).isTrue();
+        assertThat(account.getAccountPasswordHash()).isEqualTo("new-encoded-password");
+    }
+
+    @Test
+    @DisplayName("현재 비밀번호와 새 비밀번호가 같으면 계좌 비밀번호 변경에 실패한다")
+    void changePasswordSameAsCurrent() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("123456", "123456");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.changePassword(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_PASSWORD_SAME);
+
+        assertThat(account.getAccountPasswordHash()).isEqualTo("encoded-password");
+        verify(passwordEncoder, never()).matches(any(String.class), any(String.class));
+        verify(passwordEncoder, never()).encode(any(String.class));
+    }
+
+    @Test
+    @DisplayName("현재 비밀번호가 일치하지 않으면 계좌 비밀번호 변경에 실패한다")
+    void changePasswordMismatch() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("000000", "654321");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("000000", "encoded-password")).thenReturn(false);
+
+        assertThatThrownBy(() -> accountService.changePassword(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_PASSWORD_MISMATCH);
+
+        assertThat(account.getAccountPasswordHash()).isEqualTo("encoded-password");
+        verify(passwordEncoder, never()).encode(any(String.class));
+    }
+
+    @Test
+    @DisplayName("내 계좌가 아니거나 존재하지 않는 계좌는 비밀번호 설정에 실패한다")
+    void setPasswordWithNotFoundAccount() {
+        AccountPasswordSetReq request = new AccountPasswordSetReq("123456");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(999L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.setPassword(1L, 999L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("ACTIVE 상태가 아닌 계좌는 비밀번호를 설정할 수 없다")
+    void setPasswordWithNotActiveStatus() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "status", AccountStatus.CLOSED);
+        AccountPasswordSetReq request = new AccountPasswordSetReq("123456");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.setPassword(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+
+        verify(passwordEncoder, never()).encode(any(String.class));
+    }
+
+    @Test
+    @DisplayName("비밀번호가 설정되지 않은 계좌는 비밀번호 변경에 실패한다")
+    void changePasswordWithoutPasswordSet() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("123456", "654321");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.changePassword(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_PASSWORD_NOT_SET);
+
+        verify(passwordEncoder, never()).matches(any(String.class), any(String.class));
+        verify(passwordEncoder, never()).encode(any(String.class));
+    }
+
+    @Test
+    @DisplayName("ACTIVE 상태가 아닌 계좌는 비밀번호를 변경할 수 없다")
+    void changePasswordWithNotActiveStatus() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "status", AccountStatus.CLOSED);
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+        AccountPasswordChangeReq request = new AccountPasswordChangeReq("123456", "654321");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> accountService.changePassword(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+
+        verify(passwordEncoder, never()).matches(any(String.class), any(String.class));
+        verify(passwordEncoder, never()).encode(any(String.class));
     }
 
     @Test

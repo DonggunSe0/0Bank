@@ -1,5 +1,6 @@
 package com.team10.backend.domain.account.entity;
 
+import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.type.AccountStatus;
 import com.team10.backend.domain.account.type.AccountType;
 import com.team10.backend.domain.transfer.exception.TransferErrorCode;
@@ -10,6 +11,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Getter
 @Entity
@@ -34,6 +36,9 @@ public class Account extends BaseEntity {
     @Column(nullable = false)
     private Long balance; // 계좌 잔액
 
+    @Column(length = 255)
+    private String accountPasswordHash; // 계좌 비밀번호 해시
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AccountStatus status; // 계좌 상태
@@ -56,6 +61,24 @@ public class Account extends BaseEntity {
 
     public void updateNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    public void changePassword(String accountPasswordHash) {
+        this.accountPasswordHash = accountPasswordHash;
+    }
+
+    public void verifyPassword(PasswordEncoder encoder, String rawPassword) {
+        if (rawPassword == null || rawPassword.isBlank()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_PASSWORD_MISMATCH);
+        }
+
+        if (accountPasswordHash == null) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_PASSWORD_NOT_SET);
+        }
+
+        if (!encoder.matches(rawPassword, accountPasswordHash)) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_PASSWORD_MISMATCH);
+        }
     }
 
     public void close() {
