@@ -3,6 +3,7 @@ package com.team10.backend.domain.transfer.service;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
+import com.team10.backend.domain.account.type.AccountType;
 import com.team10.backend.domain.transaction.entity.TransactionHistory;
 import com.team10.backend.domain.transaction.repository.TransactionHistoryRepository;
 import com.team10.backend.domain.transfer.dto.res.TopUpRes;
@@ -44,6 +45,9 @@ public class TransferBusinessService {
         if (!account.isActive()) {
             throw new BusinessException(TransferErrorCode.ACCOUNT_NOT_ACTIVE);
         }
+
+        // 일반 입금 대상 계좌도 입출금계좌만 허용
+        validateReceiverCanTransferIn(account);
 
         // 입금 전 잔액 캡쳐
         Long balanceBefore = account.getBalance();
@@ -94,6 +98,8 @@ public class TransferBusinessService {
         validateAccountsActive(senderAccount, receiverAccount);
         // 일반 송금 출금 계좌는 입출금계좌만 허용
         validateSenderCanTransferOut(senderAccount);
+        // 일반 송금 수취 계좌도 입출금계좌만 허용
+        validateReceiverCanTransferIn(receiverAccount);
         // 출금 계좌 비밀번호 일치 여부 확인
         validateAccountPassword(senderAccount, accountPassword);
 
@@ -214,7 +220,13 @@ public class TransferBusinessService {
 
     private void validateSenderCanTransferOut(Account senderAccount) {
         if (!senderAccount.getAccountType().canTransferOut()) {
-            throw new BusinessException(TransferErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
+            throw new BusinessException(TransferErrorCode.INVALID_SENDER_ACCOUNT_TYPE);
+        }
+    }
+
+    private void validateReceiverCanTransferIn(Account receiverAccount) {
+        if (receiverAccount.getAccountType() != AccountType.DEPOSIT) {
+            throw new BusinessException(TransferErrorCode.INVALID_RECEIVER_ACCOUNT_TYPE);
         }
     }
 
