@@ -30,7 +30,7 @@ public class TransferController {
             @AuthenticationPrincipal Long userId,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody DepositReq request) {
-        TopUpRes response = transferService.topUp(userId, idempotencyKey, request.accountId(), request.amount(), request.memo());
+        TopUpRes response = transferService.topUp(userId, request.accountId(), request.amount(), request.memo());
         return ResponseEntity.ok(response);
     }
 
@@ -43,7 +43,6 @@ public class TransferController {
             @Valid @RequestBody TransferReq request) {
         TransferRes response = transferService.transfer(
                 userId,
-                idempotencyKey,
                 request.senderAccountId(),
                 request.receiverAccountNumber(),
                 request.accountPassword(),
