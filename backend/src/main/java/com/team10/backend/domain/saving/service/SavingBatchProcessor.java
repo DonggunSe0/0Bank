@@ -1,6 +1,7 @@
 package com.team10.backend.domain.saving.service;
 
 import com.team10.backend.domain.account.entity.Account;
+import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.saving.dto.res.MaturityRes;
 import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.entity.Installment;
@@ -206,6 +207,10 @@ public class SavingBatchProcessor {
     }
 
     private void saveMaturityPayoutHistory(Account withdrawAccount, Long payoutAmount, String memo) {
+        if (!withdrawAccount.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
         Long balanceBefore = withdrawAccount.getBalance();
         withdrawAccount.deposit(payoutAmount);
         Long balanceAfter = withdrawAccount.getBalance();

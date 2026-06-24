@@ -92,6 +92,8 @@ public class TransferBusinessService {
         validateDifferentAccounts(senderAccount, receiverAccount);
         // 두 계좌 모두 ACTIVE인지 확인
         validateAccountsActive(senderAccount, receiverAccount);
+        // 일반 송금 출금 계좌는 입출금계좌만 허용
+        validateSenderCanTransferOut(senderAccount);
         // 출금 계좌 비밀번호 일치 여부 확인
         validateAccountPassword(senderAccount, accountPassword);
 
@@ -207,6 +209,12 @@ public class TransferBusinessService {
     private void validateAccountsActive(Account senderAccount, Account receiverAccount) {
         if (!senderAccount.isActive() || !receiverAccount.isActive()) {
             throw new BusinessException(TransferErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+    }
+
+    private void validateSenderCanTransferOut(Account senderAccount) {
+        if (!senderAccount.getAccountType().canTransferOut()) {
+            throw new BusinessException(TransferErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
         }
     }
 

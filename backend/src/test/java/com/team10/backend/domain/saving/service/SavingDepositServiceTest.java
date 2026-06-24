@@ -198,6 +198,23 @@ class SavingDepositServiceTest {
     }
 
     @Test
+    @DisplayName("입출금계좌가 아닌 계좌로는 예금에 가입할 수 없다")
+    void createDepositWithSavingWithdrawAccount() {
+        DepositCreateReq request = new DepositCreateReq(1L, 1L, 1000000L);
+        Account savingAccount = createSavingAccount(1L, AccountType.SAVING_DEPOSIT, 2000000L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
+                .thenReturn(Optional.of(depositProduct));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(savingAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
+    }
+
+    @Test
     @DisplayName("최소 가입 금액보다 작으면 예금 가입에 실패한다")
     void createDepositWithLessThanMinAmount() {
         DepositCreateReq request = new DepositCreateReq(1L, 1L, 50000L);
@@ -907,6 +924,23 @@ class SavingDepositServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+    @Test
+    @DisplayName("입출금계좌가 아닌 계좌로는 적금에 가입할 수 없다")
+    void createInstallmentWithSavingWithdrawAccount() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 100000L, 1200000L, true);
+        Account savingAccount = createSavingAccount(1L, AccountType.SAVING_INSTALLMENT, 2000000L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(savingAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
     }
 
     @Test

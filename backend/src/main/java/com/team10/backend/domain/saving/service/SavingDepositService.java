@@ -159,6 +159,10 @@ public class SavingDepositService {
             throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
         }
 
+        if (!withdrawAccount.getAccountType().canTransferOut()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
+        }
+
         return withdrawAccount;
     }
 
@@ -407,6 +411,10 @@ public class SavingDepositService {
     }
 
     private void saveCancelRefundHistory(Account withdrawAccount, Long refundAmount, String memo) {
+        if (!withdrawAccount.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
         Long balanceBefore = withdrawAccount.getBalance();
         withdrawAccount.deposit(refundAmount);
         Long balanceAfter = withdrawAccount.getBalance();
