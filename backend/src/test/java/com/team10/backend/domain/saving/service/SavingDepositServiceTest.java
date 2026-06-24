@@ -133,6 +133,20 @@ class SavingDepositServiceTest {
         assertThat(savingAccount.getAccountType()).isEqualTo(AccountType.SAVING_DEPOSIT);
         assertThat(savingAccount.getBalance()).isEqualTo(1000000L);
 
+        ArgumentCaptor<TransactionHistory> historyCaptor = forClass(TransactionHistory.class);
+        verify(transactionHistoryRepository, times(2)).save(historyCaptor.capture());
+        List<TransactionHistory> histories = historyCaptor.getAllValues();
+        assertThat(histories.get(0).getType()).isEqualTo(TransactionType.SAVING_DEPOSIT_SIGNUP);
+        assertThat(histories.get(0).getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(histories.get(0).getAmount()).isEqualTo(1000000L);
+        assertThat(histories.get(0).getBalanceBefore()).isEqualTo(2000000L);
+        assertThat(histories.get(0).getBalanceAfter()).isEqualTo(1000000L);
+        assertThat(histories.get(1).getType()).isEqualTo(TransactionType.SAVING_DEPOSIT_SIGNUP);
+        assertThat(histories.get(1).getDirection()).isEqualTo(TransactionDirection.IN);
+        assertThat(histories.get(1).getAmount()).isEqualTo(1000000L);
+        assertThat(histories.get(1).getBalanceBefore()).isZero();
+        assertThat(histories.get(1).getBalanceAfter()).isEqualTo(1000000L);
+
         verify(depositRepository).save(any(Deposit.class));
     }
 
@@ -532,8 +546,17 @@ class SavingDepositServiceTest {
         assertThat(deposit.getStatus()).isEqualTo(DepositStatus.CANCELLED);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory savingHistory = histories.get(0);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(savingHistory.getAmount()).isEqualTo(1000000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(1000000L);
+        assertThat(savingHistory.getBalanceAfter()).isZero();
+        assertThat(savingHistory.getMemo()).isEqualTo("예금 중도 해지 출금");
+
+        TransactionHistory history = histories.get(1);
         assertThat(history.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
         assertThat(history.getDirection()).isEqualTo(TransactionDirection.IN);
         assertThat(history.getAmount()).isEqualTo(1008750L);
@@ -567,8 +590,17 @@ class SavingDepositServiceTest {
         assertThat(installment.getStatus()).isEqualTo(InstallmentStatus.CANCELLED);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory savingHistory = histories.get(0);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(savingHistory.getAmount()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceAfter()).isZero();
+        assertThat(savingHistory.getMemo()).isEqualTo("적금 중도 해지 출금");
+
+        TransactionHistory history = histories.get(1);
         assertThat(history.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
         assertThat(history.getDirection()).isEqualTo(TransactionDirection.IN);
         assertThat(history.getAmount()).isEqualTo(100750L);
@@ -861,6 +893,20 @@ class SavingDepositServiceTest {
         Account savingAccount = accountCaptor.getValue();
         assertThat(savingAccount.getAccountType()).isEqualTo(AccountType.SAVING_INSTALLMENT);
         assertThat(savingAccount.getBalance()).isEqualTo(100000L);
+
+        ArgumentCaptor<TransactionHistory> historyCaptor = forClass(TransactionHistory.class);
+        verify(transactionHistoryRepository, times(2)).save(historyCaptor.capture());
+        List<TransactionHistory> histories = historyCaptor.getAllValues();
+        assertThat(histories.get(0).getType()).isEqualTo(TransactionType.SAVING_INSTALLMENT_SIGNUP);
+        assertThat(histories.get(0).getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(histories.get(0).getAmount()).isEqualTo(100000L);
+        assertThat(histories.get(0).getBalanceBefore()).isEqualTo(2000000L);
+        assertThat(histories.get(0).getBalanceAfter()).isEqualTo(1900000L);
+        assertThat(histories.get(1).getType()).isEqualTo(TransactionType.SAVING_INSTALLMENT_SIGNUP);
+        assertThat(histories.get(1).getDirection()).isEqualTo(TransactionDirection.IN);
+        assertThat(histories.get(1).getAmount()).isEqualTo(100000L);
+        assertThat(histories.get(1).getBalanceBefore()).isZero();
+        assertThat(histories.get(1).getBalanceAfter()).isEqualTo(100000L);
 
         verify(installmentRepository).save(any(Installment.class));
     }

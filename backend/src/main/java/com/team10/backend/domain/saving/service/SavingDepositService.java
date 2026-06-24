@@ -19,6 +19,7 @@ import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.domain.saving.type.SavingProductType;
 import com.team10.backend.domain.transaction.entity.TransactionHistory;
 import com.team10.backend.domain.transaction.repository.TransactionHistoryRepository;
+import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
@@ -45,8 +46,14 @@ public class SavingDepositService {
     private static final int MAX_ACCOUNT_NUMBER_GENERATION_RETRY = 10;
     private static final String DEPOSIT_ACCOUNT_NICKNAME = "예금 계좌";
     private static final String INSTALLMENT_ACCOUNT_NICKNAME = "적금 계좌";
+    private static final String DEPOSIT_SIGNUP_WITHDRAW_MEMO = "예금 가입 출금";
+    private static final String DEPOSIT_SIGNUP_DEPOSIT_MEMO = "예금 계좌 입금";
+    private static final String INSTALLMENT_SIGNUP_WITHDRAW_MEMO = "적금 가입 1회차 출금";
+    private static final String INSTALLMENT_SIGNUP_DEPOSIT_MEMO = "적금 계좌 1회차 입금";
     private static final String DEPOSIT_CANCEL_REFUND_MEMO = "예금 중도 해지 반환";
     private static final String INSTALLMENT_CANCEL_REFUND_MEMO = "적금 중도 해지 반환";
+    private static final String DEPOSIT_CANCEL_WITHDRAW_MEMO = "예금 중도 해지 출금";
+    private static final String INSTALLMENT_CANCEL_WITHDRAW_MEMO = "적금 중도 해지 출금";
 
     private final TransactionHistoryRepository transactionHistoryRepository;
     private final DepositRepository depositRepository;
@@ -68,13 +75,22 @@ public class SavingDepositService {
         LocalDate maturityDate = LocalDate.now(clock)
                 .plusMonths(savingProduct.getPeriodMonth());
 
+        Long withdrawBalanceBefore = withdrawAccount.getBalance();
         withdrawAccount.withdraw(request.amount());
+        Long withdrawBalanceAfter = withdrawAccount.getBalance();
 
         Account savingAccount = createSavingAccount(
                 user,
                 DEPOSIT_ACCOUNT_NICKNAME,
                 AccountType.SAVING_DEPOSIT,
                 request.amount()
+        );
+        saveDepositSignupHistories(
+                withdrawAccount,
+                savingAccount,
+                request.amount(),
+                withdrawBalanceBefore,
+                withdrawBalanceAfter
         );
 
         // 원금 × 연이율 × 가입개월수 ÷ 1년 개월수 ÷ 퍼센트 변환값
@@ -114,13 +130,22 @@ public class SavingDepositService {
                 .plusMonths(savingProduct.getPeriodMonth());
 
         // 적금 가입할 때 출금 계좌에서 1회차 월 납입액을 빼는 코드
+        Long withdrawBalanceBefore = withdrawAccount.getBalance();
         withdrawAccount.withdraw(request.monthlyAmount());
+        Long withdrawBalanceAfter = withdrawAccount.getBalance();
 
         Account savingAccount = createSavingAccount(
                 user,
                 INSTALLMENT_ACCOUNT_NICKNAME,
                 AccountType.SAVING_INSTALLMENT,
                 request.monthlyAmount()
+        );
+        saveInstallmentSignupHistories(
+                withdrawAccount,
+                savingAccount,
+                request.monthlyAmount(),
+                withdrawBalanceBefore,
+                withdrawBalanceAfter
         );
 
         Installment installment = Installment.create(
@@ -345,8 +370,21 @@ public class SavingDepositService {
         Long interestAmount = calculateDepositEarlyCancelInterest(deposit);
         Long refundAmount = deposit.getPrincipal() + interestAmount;
 
-        closeSavingAccount(deposit.getSavingAccount(), deposit.getPrincipal());
-        saveCancelRefundHistory(deposit.getWithdrawAccount(), refundAmount, DEPOSIT_CANCEL_REFUND_MEMO);
+        Account savingAccount = deposit.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, deposit.getPrincipal());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveCancelWithdrawHistory(
+                savingAccount,
+                deposit.getPrincipal(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                DEPOSIT_CANCEL_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveCancelRefundHistory(deposit.getWithdrawAccount(), refundAmount, DEPOSIT_CANCEL_REFUND_MEMO, transactedAt);
         deposit.cancel();
 
         return EarlyCancelRes.fromDeposit(deposit, interestAmount, refundAmount);
@@ -361,8 +399,26 @@ public class SavingDepositService {
         Long interestAmount = calculateInstallmentEarlyCancelInterest(installment);
         Long refundAmount = installment.getPaidAmount() + interestAmount;
 
-        closeSavingAccount(installment.getSavingAccount(), installment.getPaidAmount());
-        saveCancelRefundHistory(installment.getWithdrawAccount(), refundAmount, INSTALLMENT_CANCEL_REFUND_MEMO);
+        Account savingAccount = installment.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, installment.getPaidAmount());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveCancelWithdrawHistory(
+                savingAccount,
+                installment.getPaidAmount(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                INSTALLMENT_CANCEL_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveCancelRefundHistory(
+                installment.getWithdrawAccount(),
+                refundAmount,
+                INSTALLMENT_CANCEL_REFUND_MEMO,
+                transactedAt
+        );
         installment.cancel();
 
         return EarlyCancelRes.fromInstallment(installment, interestAmount, refundAmount);
@@ -410,7 +466,91 @@ public class SavingDepositService {
         savingAccount.close();
     }
 
-    private void saveCancelRefundHistory(Account withdrawAccount, Long refundAmount, String memo) {
+    private void saveDepositSignupHistories(
+            Account withdrawAccount,
+            Account savingAccount,
+            Long amount,
+            Long withdrawBalanceBefore,
+            Long withdrawBalanceAfter
+    ) {
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        transactionHistoryRepository.save(TransactionHistory.createSavingDepositSignup(
+                withdrawAccount,
+                TransactionDirection.OUT,
+                amount,
+                withdrawBalanceBefore,
+                withdrawBalanceAfter,
+                DEPOSIT_SIGNUP_WITHDRAW_MEMO,
+                transactedAt
+        ));
+        transactionHistoryRepository.save(TransactionHistory.createSavingDepositSignup(
+                savingAccount,
+                TransactionDirection.IN,
+                amount,
+                0L,
+                savingAccount.getBalance(),
+                DEPOSIT_SIGNUP_DEPOSIT_MEMO,
+                transactedAt
+        ));
+    }
+
+    private void saveInstallmentSignupHistories(
+            Account withdrawAccount,
+            Account savingAccount,
+            Long amount,
+            Long withdrawBalanceBefore,
+            Long withdrawBalanceAfter
+    ) {
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        transactionHistoryRepository.save(TransactionHistory.createSavingInstallmentSignup(
+                withdrawAccount,
+                TransactionDirection.OUT,
+                amount,
+                withdrawBalanceBefore,
+                withdrawBalanceAfter,
+                INSTALLMENT_SIGNUP_WITHDRAW_MEMO,
+                transactedAt
+        ));
+        transactionHistoryRepository.save(TransactionHistory.createSavingInstallmentSignup(
+                savingAccount,
+                TransactionDirection.IN,
+                amount,
+                0L,
+                savingAccount.getBalance(),
+                INSTALLMENT_SIGNUP_DEPOSIT_MEMO,
+                transactedAt
+        ));
+    }
+
+    private void saveCancelWithdrawHistory(
+            Account savingAccount,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory transactionHistory = TransactionHistory.createSavingCancelRefund(
+                savingAccount,
+                TransactionDirection.OUT,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+
+        transactionHistoryRepository.save(transactionHistory);
+    }
+
+    private void saveCancelRefundHistory(
+            Account withdrawAccount,
+            Long refundAmount,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
         if (!withdrawAccount.isActive()) {
             throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
         }
@@ -421,11 +561,12 @@ public class SavingDepositService {
 
         TransactionHistory transactionHistory = TransactionHistory.createSavingCancelRefund(
                 withdrawAccount,
+                TransactionDirection.IN,
                 refundAmount,
                 balanceBefore,
                 balanceAfter,
                 memo,
-                LocalDateTime.now(clock)
+                transactedAt
         );
 
         transactionHistoryRepository.save(transactionHistory);

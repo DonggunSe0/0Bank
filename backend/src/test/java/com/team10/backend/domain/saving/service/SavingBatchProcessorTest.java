@@ -34,6 +34,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,8 +106,17 @@ class SavingBatchProcessorTest {
         assertThat(deposit.getStatus()).isEqualTo(DepositStatus.MATURED);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory savingHistory = histories.get(0);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.SAVING_MATURITY);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(savingHistory.getAmount()).isEqualTo(1000000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(1000000L);
+        assertThat(savingHistory.getBalanceAfter()).isZero();
+        assertThat(savingHistory.getMemo()).isEqualTo("예금 만기 출금");
+
+        TransactionHistory history = histories.get(1);
         assertThat(history.getType()).isEqualTo(TransactionType.SAVING_MATURITY);
         assertThat(history.getDirection()).isEqualTo(TransactionDirection.IN);
         assertThat(history.getAmount()).isEqualTo(1035000L);
@@ -137,8 +148,17 @@ class SavingBatchProcessorTest {
         assertThat(installment.getStatus()).isEqualTo(InstallmentStatus.MATURED);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory savingHistory = histories.get(0);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.SAVING_MATURITY);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(savingHistory.getAmount()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceAfter()).isZero();
+        assertThat(savingHistory.getMemo()).isEqualTo("적금 만기 출금");
+
+        TransactionHistory history = histories.get(1);
         assertThat(history.getType()).isEqualTo(TransactionType.SAVING_MATURITY);
         assertThat(history.getDirection()).isEqualTo(TransactionDirection.IN);
         assertThat(history.getAmount()).isEqualTo(119500L);
@@ -193,14 +213,23 @@ class SavingBatchProcessorTest {
         assertThat(installment.getStatus()).isEqualTo(InstallmentStatus.ACTIVE);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
-        assertThat(history.getType()).isEqualTo(TransactionType.INSTALLMENT_PAYMENT);
-        assertThat(history.getDirection()).isEqualTo(TransactionDirection.OUT);
-        assertThat(history.getAmount()).isEqualTo(100000L);
-        assertThat(history.getBalanceBefore()).isEqualTo(2000000L);
-        assertThat(history.getBalanceAfter()).isEqualTo(1900000L);
-        assertThat(history.getMemo()).isEqualTo("적금 월 납입 자동이체");
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory withdrawHistory = histories.get(0);
+        assertThat(withdrawHistory.getType()).isEqualTo(TransactionType.INSTALLMENT_PAYMENT);
+        assertThat(withdrawHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(withdrawHistory.getAmount()).isEqualTo(100000L);
+        assertThat(withdrawHistory.getBalanceBefore()).isEqualTo(2000000L);
+        assertThat(withdrawHistory.getBalanceAfter()).isEqualTo(1900000L);
+        assertThat(withdrawHistory.getMemo()).isEqualTo("적금 월 납입 자동이체");
+
+        TransactionHistory savingHistory = histories.get(1);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.INSTALLMENT_PAYMENT);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.IN);
+        assertThat(savingHistory.getAmount()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceAfter()).isEqualTo(200000L);
+        assertThat(savingHistory.getMemo()).isEqualTo("적금 계좌 월 납입 입금");
     }
 
     @Test
@@ -222,14 +251,23 @@ class SavingBatchProcessorTest {
         assertThat(installment.getStatus()).isEqualTo(InstallmentStatus.ACTIVE);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
-        assertThat(history.getType()).isEqualTo(TransactionType.INSTALLMENT_PAYMENT);
-        assertThat(history.getDirection()).isEqualTo(TransactionDirection.OUT);
-        assertThat(history.getAmount()).isEqualTo(100000L);
-        assertThat(history.getBalanceBefore()).isEqualTo(2000000L);
-        assertThat(history.getBalanceAfter()).isEqualTo(1900000L);
-        assertThat(history.getMemo()).isEqualTo("적금 월 납입 자동이체");
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory withdrawHistory = histories.get(0);
+        assertThat(withdrawHistory.getType()).isEqualTo(TransactionType.INSTALLMENT_PAYMENT);
+        assertThat(withdrawHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(withdrawHistory.getAmount()).isEqualTo(100000L);
+        assertThat(withdrawHistory.getBalanceBefore()).isEqualTo(2000000L);
+        assertThat(withdrawHistory.getBalanceAfter()).isEqualTo(1900000L);
+        assertThat(withdrawHistory.getMemo()).isEqualTo("적금 월 납입 자동이체");
+
+        TransactionHistory savingHistory = histories.get(1);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.INSTALLMENT_PAYMENT);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.IN);
+        assertThat(savingHistory.getAmount()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceAfter()).isEqualTo(200000L);
+        assertThat(savingHistory.getMemo()).isEqualTo("적금 계좌 월 납입 입금");
     }
 
     @Test

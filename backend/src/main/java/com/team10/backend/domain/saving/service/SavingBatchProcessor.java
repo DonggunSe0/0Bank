@@ -12,6 +12,7 @@ import com.team10.backend.domain.saving.type.DepositStatus;
 import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.domain.transaction.entity.TransactionHistory;
 import com.team10.backend.domain.transaction.repository.TransactionHistoryRepository;
+import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -29,7 +30,10 @@ public class SavingBatchProcessor {
     private static final int PERCENT_DIVISOR = 100;
     private static final String DEPOSIT_MATURITY_PAYOUT_MEMO = "예금 만기 지급";
     private static final String INSTALLMENT_MATURITY_PAYOUT_MEMO = "적금 만기 지급";
+    private static final String DEPOSIT_MATURITY_WITHDRAW_MEMO = "예금 만기 출금";
+    private static final String INSTALLMENT_MATURITY_WITHDRAW_MEMO = "적금 만기 출금";
     private static final String INSTALLMENT_PAYMENT_MEMO = "적금 월 납입 자동이체";
+    private static final String INSTALLMENT_PAYMENT_DEPOSIT_MEMO = "적금 계좌 월 납입 입금";
 
     private final TransactionHistoryRepository transactionHistoryRepository;
     private final DepositRepository depositRepository;
@@ -93,8 +97,21 @@ public class SavingBatchProcessor {
         Long interestAmount = deposit.getExpectedInterest();
         Long payoutAmount = deposit.getPrincipal() + interestAmount;
 
-        closeSavingAccount(deposit.getSavingAccount(), deposit.getPrincipal());
-        saveMaturityPayoutHistory(deposit.getWithdrawAccount(), payoutAmount, DEPOSIT_MATURITY_PAYOUT_MEMO);
+        Account savingAccount = deposit.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, deposit.getPrincipal());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveMaturityWithdrawHistory(
+                savingAccount,
+                deposit.getPrincipal(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                DEPOSIT_MATURITY_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveMaturityPayoutHistory(deposit.getWithdrawAccount(), payoutAmount, DEPOSIT_MATURITY_PAYOUT_MEMO, transactedAt);
         deposit.mature();
 
         return MaturityRes.fromDeposit(deposit, interestAmount, payoutAmount);
@@ -127,8 +144,26 @@ public class SavingBatchProcessor {
         Long interestAmount = calculateInstallmentExpectedInterest(installment);
         Long payoutAmount = installment.getPaidAmount() + interestAmount;
 
-        closeSavingAccount(installment.getSavingAccount(), installment.getPaidAmount());
-        saveMaturityPayoutHistory(installment.getWithdrawAccount(), payoutAmount, INSTALLMENT_MATURITY_PAYOUT_MEMO);
+        Account savingAccount = installment.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, installment.getPaidAmount());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveMaturityWithdrawHistory(
+                savingAccount,
+                installment.getPaidAmount(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                INSTALLMENT_MATURITY_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveMaturityPayoutHistory(
+                installment.getWithdrawAccount(),
+                payoutAmount,
+                INSTALLMENT_MATURITY_PAYOUT_MEMO,
+                transactedAt
+        );
         installment.mature();
 
         return MaturityRes.fromInstallment(installment, interestAmount, payoutAmount);
@@ -162,22 +197,37 @@ public class SavingBatchProcessor {
     private void payInstallment(Installment installment, Account withdrawAccount) {
         Long paymentAmount = installment.getMonthlyAmount();
         Long balanceBefore = withdrawAccount.getBalance();
+        Account savingAccount = installment.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
 
         withdrawAccount.withdraw(paymentAmount);
-        installment.getSavingAccount().deposit(paymentAmount);
+        savingAccount.deposit(paymentAmount);
 
         Long balanceAfter = withdrawAccount.getBalance();
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
 
         TransactionHistory transactionHistory = TransactionHistory.createInstallmentPayment(
                 withdrawAccount,
+                TransactionDirection.OUT,
                 paymentAmount,
                 balanceBefore,
                 balanceAfter,
                 INSTALLMENT_PAYMENT_MEMO,
-                LocalDateTime.now(clock)
+                transactedAt
+        );
+        TransactionHistory savingAccountHistory = TransactionHistory.createInstallmentPayment(
+                savingAccount,
+                TransactionDirection.IN,
+                paymentAmount,
+                savingBalanceBefore,
+                savingBalanceAfter,
+                INSTALLMENT_PAYMENT_DEPOSIT_MEMO,
+                transactedAt
         );
 
         transactionHistoryRepository.save(transactionHistory);
+        transactionHistoryRepository.save(savingAccountHistory);
         installment.payMonthlyAmount();
     }
 
@@ -206,7 +256,33 @@ public class SavingBatchProcessor {
         savingAccount.close();
     }
 
-    private void saveMaturityPayoutHistory(Account withdrawAccount, Long payoutAmount, String memo) {
+    private void saveMaturityWithdrawHistory(
+            Account savingAccount,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory transactionHistory = TransactionHistory.createSavingMaturityPayout(
+                savingAccount,
+                TransactionDirection.OUT,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+
+        transactionHistoryRepository.save(transactionHistory);
+    }
+
+    private void saveMaturityPayoutHistory(
+            Account withdrawAccount,
+            Long payoutAmount,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
         if (!withdrawAccount.isActive()) {
             throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
         }
@@ -217,11 +293,12 @@ public class SavingBatchProcessor {
 
         TransactionHistory transactionHistory = TransactionHistory.createSavingMaturityPayout(
                 withdrawAccount,
+                TransactionDirection.IN,
                 payoutAmount,
                 balanceBefore,
                 balanceAfter,
                 memo,
-                LocalDateTime.now(clock)
+                transactedAt
         );
 
         transactionHistoryRepository.save(transactionHistory);
