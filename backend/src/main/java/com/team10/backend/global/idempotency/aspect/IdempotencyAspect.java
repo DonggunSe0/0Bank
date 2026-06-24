@@ -8,6 +8,7 @@ import com.team10.backend.global.idempotency.service.IdempotencyRequestHasher;
 import com.team10.backend.global.idempotency.service.IdempotencyReservationService;
 import com.team10.backend.global.idempotency.service.IdempotencyReserveResult;
 import com.team10.backend.global.idempotency.service.IdempotencyService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -37,6 +38,7 @@ public class IdempotencyAspect {
     private final IdempotencyRequestHasher idempotencyRequestHasher;
     private final IdempotencyReservationService idempotencyReservationService;
     private final TransactionTemplate transactionTemplate;
+    private final HttpServletRequest httpServletRequest;
 
     private final SpelExpressionParser parser = new SpelExpressionParser(); // 문자열로 된 SpEL 표현식을 읽는 객체
     private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer(); // 메서드 파라미터 이름을 알아내는 도구
