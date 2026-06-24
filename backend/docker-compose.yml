@@ -42,19 +42,17 @@ services:
     container_name: redis
     restart: always # 컨테이너 종료 시 자동 재시작
 
-    # requirepass로 비인증 접근 차단. REDIS_PASSWORD는 .env(gitignore)로 주입하며 기본값 없음 —
-    # application-secret.yml의 spring.data.redis.password와 동일한 값을 써야 로컬에서 연결된다.
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    environment:
+      TZ: Asia/Seoul
 
     ports:
-      - "6379:6379" # 호스트포트:컨테이너포트 (localhost:6379 으로 접속)
+      - "127.0.0.1:6379:6379" # 로컬 개발용 Redis. 외부 인터페이스에는 노출하지 않음
 
     # 로그인 실패 횟수, 1원송금 시도 제한, RT/분산락 등 모두 TTL 기반 임시 데이터라 영속화 볼륨은 두지 않음
 
-    # Redis 정상 기동 여부 확인 (requirepass 설정 후에는 인증 없이 ping하면 NOAUTH로 실패함)
+    # Redis 정상 기동 여부 확인
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-
