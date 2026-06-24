@@ -3,6 +3,7 @@ package com.team10.backend.domain.user.entity;
 import com.team10.backend.domain.user.type.AgeGroup;
 import com.team10.backend.domain.user.type.FinancialInterest;
 import com.team10.backend.domain.user.type.OccupationStatus;
+import com.team10.backend.domain.user.type.Region;
 import com.team10.backend.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -26,8 +27,9 @@ public class UserProfile extends BaseEntity {
     @Column(length = 20)
     private AgeGroup ageGroup;
 
-    @Column(length = 50)
-    private String region;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Region region;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
@@ -42,7 +44,7 @@ public class UserProfile extends BaseEntity {
 
     public static UserProfile create(User user,
                                      AgeGroup ageGroup,
-                                     String region,
+                                     Region region,
                                      OccupationStatus occupationStatus,
                                      Set<FinancialInterest> financialInterests) {
         UserProfile profile = new UserProfile();
@@ -55,7 +57,7 @@ public class UserProfile extends BaseEntity {
     }
 
     public void update(AgeGroup ageGroup,
-                       String region,
+                       Region region,
                        OccupationStatus occupationStatus,
                        Set<FinancialInterest> financialInterests) {
         this.ageGroup = ageGroup;

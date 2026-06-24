@@ -21,6 +21,7 @@ import com.team10.backend.domain.user.service.UserService;
 import com.team10.backend.domain.user.type.AgeGroup;
 import com.team10.backend.domain.user.type.FinancialInterest;
 import com.team10.backend.domain.user.type.OccupationStatus;
+import com.team10.backend.domain.user.type.Region;
 import com.team10.backend.domain.user.type.TermsType;
 import com.team10.backend.domain.user.type.VerificationStatus;
 import com.team10.backend.global.jwt.JwtProvider;
@@ -259,9 +260,9 @@ class UserControllerTest {
         @DisplayName("프로필 등록 — 201")
         void success() throws Exception {
             UserProfileReq req = new UserProfileReq(
-                    AgeGroup.TWENTIES, "서울", OccupationStatus.EMPLOYED,
+                    AgeGroup.TWENTIES, Region.SEOUL, OccupationStatus.EMPLOYED,
                     Set.of(FinancialInterest.SAVINGS));
-            UserProfileRes res = new UserProfileRes(1L, AgeGroup.TWENTIES, "서울",
+            UserProfileRes res = new UserProfileRes(1L, AgeGroup.TWENTIES, Region.SEOUL,
                     OccupationStatus.EMPLOYED, Set.of(FinancialInterest.SAVINGS));
             when(userProfileService.create(eq(1L), any())).thenReturn(res);
 
@@ -272,7 +273,7 @@ class UserControllerTest {
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.userId").value(1L))
                     .andExpect(jsonPath("$.ageGroup").value("TWENTIES"))
-                    .andExpect(jsonPath("$.region").value("서울"));
+                    .andExpect(jsonPath("$.region").value("SEOUL"));
         }
     }
 

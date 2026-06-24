@@ -4,13 +4,14 @@ import com.team10.backend.domain.user.entity.UserProfile;
 import com.team10.backend.domain.user.type.AgeGroup;
 import com.team10.backend.domain.user.type.FinancialInterest;
 import com.team10.backend.domain.user.type.OccupationStatus;
+import com.team10.backend.domain.user.type.Region;
 
 import java.util.Set;
 
 public record UserProfileRes(
         Long userId,
         AgeGroup ageGroup,
-        String region,
+        Region region,
         OccupationStatus occupationStatus,
         Set<FinancialInterest> financialInterests
 ) {
