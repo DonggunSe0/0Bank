@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
@@ -18,16 +19,37 @@ import java.io.IOException;
 @Component
 public class RequestCachingFilter extends OncePerRequestFilter {
 
-
+    // method가 POST / PUT / PATCH 이고 Content-Type이 application/json인 요청만 wrapping
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        ContentCachingRequestWrapper wrappedRequest =
-                new ContentCachingRequestWrapper(request, 1024 * 1024); // request body를 최대 1MB까지 캐싱
+        if (isJsonWriteRequest(request)) {
+            ContentCachingRequestWrapper wrappedRequest =
+                    new ContentCachingRequestWrapper(request, 1024 * 1024); // request body를 최대 1MB까지 캐싱
 
-        filterChain.doFilter(wrappedRequest, response);
+            filterChain.doFilter(wrappedRequest, response);
+            return;
+        }
+
+        filterChain.doFilter(request, response);
     }
+
+    private boolean isJsonWriteRequest(HttpServletRequest request) {
+        return isWriteMethod(request.getMethod()) && isJsonContentType(request.getContentType());
+    }
+
+    private boolean isWriteMethod(String method) {
+        return "POST".equalsIgnoreCase(method)
+                || "PUT".equalsIgnoreCase(method)
+                || "PATCH".equalsIgnoreCase(method);
+    }
+
+    private boolean isJsonContentType(String contentType) {
+        return contentType != null
+                && contentType.startsWith(MediaType.APPLICATION_JSON_VALUE); // 실제 요청 Ex. application/json;charset=UTF-8
+    }
+
 }
