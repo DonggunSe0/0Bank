@@ -172,17 +172,9 @@ resource "aws_security_group" "app_data" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "Spring App #1"
-    from_port       = 8081
-    to_port         = 8081
-    protocol        = "tcp"
-    security_groups = [aws_security_group.edge.id]
-  }
-
-  ingress {
-    description     = "Spring App #2"
-    from_port       = 8082
-    to_port         = 8082
+    description     = "Nginx LB"
+    from_port       = 8090
+    to_port         = 8090
     protocol        = "tcp"
     security_groups = [aws_security_group.edge.id]
   }
@@ -359,7 +351,7 @@ resource "aws_instance" "app_data" {
   subnet_id = aws_subnet.public.id
 
   # App-Data 서버용 Security Group을 연결합니다.
-  # Spring 포트 8081/8082는 Edge Security Group에서만 접근할 수 있습니다.
+  # Nginx LB 포트 8090은 Edge Security Group에서만 접근할 수 있습니다.
   vpc_security_group_ids = [aws_security_group.app_data.id]
 
   # Public Subnet에 배치된 EC2에 Public IP를 자동 할당합니다.

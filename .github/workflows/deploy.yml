@@ -83,10 +83,12 @@ jobs:
 
             wait_for_health() {
               name="$1"
-              port="$2"
 
               for attempt in $(seq 1 30); do
-                if curl -fsS "http://127.0.0.1:${port}/actuator/health/readiness" >/dev/null; then
+                if sudo docker run --rm \
+                  --network app-data_default \
+                  curlimages/curl:8.11.1 \
+                  -fsS "http://${name}:8080/actuator/health/readiness" >/dev/null; then
                   echo "${name} is healthy"
                   return 0
                 fi
@@ -97,25 +99,31 @@ jobs:
 
               echo "${name} failed readiness check"
               sudo docker logs "$name" || true
+              sudo docker rm -f "$name" || true
               return 1
             }
 
             deploy_backend() {
               name="$1"
-              port="$2"
+              new_name="${name}-new"
 
-              sudo docker stop "$name" || true
-              sudo docker rm "$name" || true
+              sudo docker rm -f "$new_name" || true
 
               sudo docker run -d \
-                --name "$name" \
+                --name "$new_name" \
                 --restart unless-stopped \
                 --network app-data_default \
                 --env-file /dockerProjects/app-data/.env \
-                -p "${port}:8080" \
                 "$IMAGE"
 
-              wait_for_health "$name" "$port"
+              wait_for_health "$new_name"
+
+              sudo docker rm -f "$name" || true
+              sudo docker rename "$new_name" "$name"
+            
+              if sudo docker ps --format '{{.Names}}' | grep -q '^nginx-lb$'; then
+                sudo docker exec nginx-lb nginx -s reload
+              fi
             }
 
             sudo docker login ghcr.io \
@@ -124,7 +132,12 @@ jobs:
 
             sudo docker pull "$IMAGE"
 
-            deploy_backend backend-1 8081
-            deploy_backend backend-2 8082
+            deploy_backend backend-1
+            deploy_backend backend-2
+            
+            sudo docker compose \
+              --env-file /dockerProjects/app-data/.env \
+              -f /dockerProjects/app-data/docker-compose.yml \
+              up -d nginx-lb
 
             sudo docker image prune -f

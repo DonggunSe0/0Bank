@@ -2,7 +2,6 @@ import { apiFetch } from '../api'
 import type {
   InvestmentAccount,
   InvestmentAccountCloseResult,
-  InvestmentAccountOpenVerification,
   InvestmentAccountUpdateResult,
 } from '../types'
 
@@ -14,16 +13,9 @@ export async function getInvestmentAccount(accountId: string | number): Promise<
   return apiFetch<InvestmentAccount>(`/api/v1/investment/accounts/${accountId}`)
 }
 
-export async function issueInvestmentAccountOpenVerification(): Promise<InvestmentAccountOpenVerification> {
-  return apiFetch<InvestmentAccountOpenVerification>('/api/v1/investment/accounts/open-verification', {
-    method: 'POST',
-  })
-}
-
 export async function createInvestmentAccount(data: {
   nickname?: string
   accountPassword: string
-  verificationKey: string
   currencyCode: 'KRW'
 }): Promise<InvestmentAccount> {
   return apiFetch<InvestmentAccount>('/api/v1/investment/accounts', {

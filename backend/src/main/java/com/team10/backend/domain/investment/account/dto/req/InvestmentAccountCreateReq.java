@@ -17,10 +17,6 @@ public record InvestmentAccountCreateReq(
         @Pattern(regexp = "\\d{6}", message = "투자 계좌 비밀번호는 숫자 6자리여야 합니다.")
         String accountPassword,
 
-        @Schema(description = "투자 계좌 개설 인증키")
-        @NotBlank(message = "투자 계좌 개설 인증키는 필수입니다.")
-        String verificationKey,
-
         @Schema(description = "투자 계좌 화폐 종류", allowableValues = {"KRW"})
         @NotNull(message = "투자 계좌 화폐는 필수입니다.")
         CurrencyCode currencyCode

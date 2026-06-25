@@ -13,7 +13,6 @@ import com.team10.backend.domain.investment.account.dto.req.InvestmentAccountUpd
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountCloseRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountCreateRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountDetailRes;
-import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountOpenVerificationRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountSummaryRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountUpdateRes;
 import com.team10.backend.domain.investment.account.entity.InvestmentAccount;
@@ -51,9 +50,6 @@ class InvestmentAccountServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
-
-    @Mock
-    private InvestmentAccountOpenVerificationKeyService verificationKeyService;
 
     @Mock
     private InvestmentHoldingRepository investmentHoldingRepository;
@@ -120,39 +116,13 @@ class InvestmentAccountServiceTest {
     }
 
     @Test
-    @DisplayName("본인인증 완료 사용자는 투자 계좌 개설 인증키를 발급받을 수 있다")
-    void issueOpenVerificationKey() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(verifiedUser));
-        when(verificationKeyService.generateAndStore(1L)).thenReturn("verification-key");
-        when(verificationKeyService.ttlSeconds()).thenReturn(600L);
-
-        InvestmentAccountOpenVerificationRes response =
-                investmentAccountService.issueOpenVerificationKey(1L);
-
-        assertThat(response.verificationKey()).isEqualTo("verification-key");
-        assertThat(response.expiresInSeconds()).isEqualTo(600L);
-    }
-
-    @Test
-    @DisplayName("본인인증 미완료 사용자는 투자 계좌 개설 인증키를 발급받을 수 없다")
-    void issueOpenVerificationKeyWithoutIdentityVerification() {
-        when(userRepository.findById(2L)).thenReturn(Optional.of(unverifiedUser));
-
-        assertThatThrownBy(() -> investmentAccountService.issueOpenVerificationKey(2L))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(InvestmentErrorCode.IDENTITY_VERIFICATION_REQUIRED);
-    }
-
-    @Test
-    @DisplayName("본인인증과 개설 인증키 검증을 통과하면 투자 계좌를 개설한다")
+    @DisplayName("본인인증 완료 사용자는 투자 계좌를 개설할 수 있다")
     void createAccount() {
         InvestmentAccountCreateReq request =
-                new InvestmentAccountCreateReq("모의투자 계좌", "123456", "verification-key", CurrencyCode.KRW);
+                new InvestmentAccountCreateReq("모의투자 계좌", "123456", CurrencyCode.KRW);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(verifiedUser));
         when(investmentAccountRepository.existsByAccountNumber(any(String.class))).thenReturn(false);
-        when(verificationKeyService.verifyAndDelete(1L, "verification-key")).thenReturn(true);
         when(passwordEncoder.encode("123456")).thenReturn("encoded-password");
         when(investmentAccountRepository.save(any(InvestmentAccount.class))).thenAnswer(invocation -> {
             InvestmentAccount account = invocation.getArgument(0);
@@ -178,7 +148,7 @@ class InvestmentAccountServiceTest {
     @DisplayName("존재하지 않는 사용자는 투자 계좌를 개설할 수 없다")
     void createAccountWithNotFoundUser() {
         InvestmentAccountCreateReq request =
-                new InvestmentAccountCreateReq("모의투자 계좌", "123456", "verification-key", CurrencyCode.KRW);
+                new InvestmentAccountCreateReq("모의투자 계좌", "123456", CurrencyCode.KRW);
 
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
@@ -192,7 +162,7 @@ class InvestmentAccountServiceTest {
     @DisplayName("본인인증 미완료 사용자는 투자 계좌를 개설할 수 없다")
     void createAccountWithoutIdentityVerification() {
         InvestmentAccountCreateReq request =
-                new InvestmentAccountCreateReq("모의투자 계좌", "123456", "verification-key", CurrencyCode.KRW);
+                new InvestmentAccountCreateReq("모의투자 계좌", "123456", CurrencyCode.KRW);
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(unverifiedUser));
 
@@ -203,28 +173,10 @@ class InvestmentAccountServiceTest {
     }
 
     @Test
-    @DisplayName("개설 인증키가 유효하지 않으면 투자 계좌를 개설할 수 없다")
-    void createAccountWithInvalidVerificationKey() {
-        InvestmentAccountCreateReq request =
-                new InvestmentAccountCreateReq("모의투자 계좌", "123456", "invalid-key", CurrencyCode.KRW);
-
-        when(userRepository.findById(1L)).thenReturn(Optional.of(verifiedUser));
-        when(investmentAccountRepository.existsByAccountNumber(any(String.class))).thenReturn(false);
-        when(verificationKeyService.verifyAndDelete(1L, "invalid-key")).thenReturn(false);
-
-        assertThatThrownBy(() -> investmentAccountService.createAccount(1L, request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(InvestmentErrorCode.INVESTMENT_ACCOUNT_OPEN_VERIFICATION_KEY_INVALID);
-
-        verify(investmentAccountRepository, never()).save(any(InvestmentAccount.class));
-    }
-
-    @Test
     @DisplayName("계좌번호 생성 최대 시도 횟수를 초과하면 투자 계좌 개설에 실패한다")
     void createAccountWithAccountNumberGenerationFailed() {
         InvestmentAccountCreateReq request =
-                new InvestmentAccountCreateReq("모의투자 계좌", "123456", "verification-key", CurrencyCode.KRW);
+                new InvestmentAccountCreateReq("모의투자 계좌", "123456", CurrencyCode.KRW);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(verifiedUser));
         when(investmentAccountRepository.existsByAccountNumber(any(String.class))).thenReturn(true);
@@ -233,8 +185,6 @@ class InvestmentAccountServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(InvestmentErrorCode.INVESTMENT_ACCOUNT_NUMBER_GENERATION_FAILED);
-
-        verify(verificationKeyService, never()).verifyAndDelete(any(Long.class), any(String.class));
     }
 
     @Test

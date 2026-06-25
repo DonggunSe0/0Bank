@@ -23,6 +23,7 @@ fi
 mkdir -p /dockerProjects/app-data
 mkdir -p /dockerProjects/mysql/data
 mkdir -p /dockerProjects/redis/data
+mkdir -p /dockerProjects/nginx-lb
 
 cat > /dockerProjects/app-data/docker-compose.yml <<'COMPOSE'
 ${compose_yml}
@@ -32,5 +33,27 @@ cat > /dockerProjects/app-data/.env <<'ENV'
 MYSQL_ROOT_PASSWORD=${mysql_root_password}
 REDIS_PASSWORD=${redis_password}
 ENV
+
+cat > /dockerProjects/nginx-lb/default.conf <<'NGINX'
+upstream spring_backend {
+    server backend-1:8080 max_fails=1 fail_timeout=5s;
+    server backend-2:8080 max_fails=1 fail_timeout=5s;
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://spring_backend;
+
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
 
 docker compose --env-file /dockerProjects/app-data/.env -f /dockerProjects/app-data/docker-compose.yml up -d

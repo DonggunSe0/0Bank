@@ -2,54 +2,35 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, BarChart3, KeyRound } from 'lucide-react'
+import { ArrowLeft, BarChart3, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  createInvestmentAccount,
-  issueInvestmentAccountOpenVerification,
-} from '@/lib/api/investments'
+import { useAuth } from '@/contexts/AuthContext'
+import { createInvestmentAccount } from '@/lib/api/investments'
 import { ApiRequestError } from '@/lib/api'
 
 export default function NewInvestmentAccountPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const [nickname, setNickname] = useState('')
   const [accountPassword, setAccountPassword] = useState('')
-  const [verificationKey, setVerificationKey] = useState('')
-  const [expiresInSeconds, setExpiresInSeconds] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
-  const [issuing, setIssuing] = useState(false)
   const [error, setError] = useState('')
-
-  async function handleIssueVerificationKey() {
-    setError('')
-    setIssuing(true)
-    try {
-      const response = await issueInvestmentAccountOpenVerification()
-      setVerificationKey(response.verificationKey)
-      setExpiresInSeconds(response.expiresInSeconds)
-      toast.success('개설 인증키가 발급되었습니다.')
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : '개설 인증키를 발급하지 못했습니다.')
-    } finally {
-      setIssuing(false)
-    }
-  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setError('')
 
-    if (!/^\d{6}$/.test(accountPassword)) {
-      setError('투자 계좌 비밀번호는 숫자 6자리여야 합니다.')
+    if (!user?.identityVerified) {
+      setError('본인인증을 완료한 회원만 투자 계좌를 개설할 수 있습니다.')
       return
     }
-    if (!verificationKey.trim()) {
-      setError('개설 인증키를 먼저 발급받아 주세요.')
+    if (!/^\d{6}$/.test(accountPassword)) {
+      setError('투자 계좌 비밀번호는 숫자 6자리여야 합니다.')
       return
     }
 
@@ -58,7 +39,6 @@ export default function NewInvestmentAccountPage() {
       const account = await createInvestmentAccount({
         nickname: nickname.trim() || undefined,
         accountPassword,
-        verificationKey,
         currencyCode: 'KRW',
       })
       toast.success('투자 계좌가 개설되었습니다.')
@@ -105,28 +85,23 @@ export default function NewInvestmentAccountPage() {
             </Alert>
           )}
 
-          <div className="mb-4 rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">개설 인증키</p>
-                <p className="text-xs text-muted-foreground">
-                  {verificationKey
-                    ? `유효시간 ${expiresInSeconds ?? '-'}초`
-                    : '계좌 개설 전 인증키를 발급받아 주세요.'}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleIssueVerificationKey}
-                disabled={issuing}
-              >
-                <KeyRound data-icon="inline-start" />
-                {issuing ? '발급 중' : '발급'}
-              </Button>
-            </div>
-          </div>
+          {!user?.identityVerified && (
+            <Alert className="mb-4">
+              <ShieldCheck className="size-4" />
+              <AlertDescription className="flex flex-col gap-3">
+                <span>본인인증을 완료한 회원만 투자 계좌를 개설할 수 있습니다.</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => router.push('/identity')}
+                >
+                  본인인증 하러가기
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -153,7 +128,7 @@ export default function NewInvestmentAccountPage() {
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || !user?.identityVerified}>
               {loading ? '개설 중...' : '투자 계좌 개설하기'}
             </Button>
           </form>

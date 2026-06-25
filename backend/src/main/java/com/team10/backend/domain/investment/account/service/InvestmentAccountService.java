@@ -6,7 +6,6 @@ import com.team10.backend.domain.investment.account.dto.req.InvestmentAccountUpd
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountCloseRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountCreateRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountDetailRes;
-import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountOpenVerificationRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountSummaryRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountUpdateRes;
 import com.team10.backend.domain.investment.account.entity.InvestmentAccount;
@@ -35,7 +34,6 @@ public class InvestmentAccountService {
     private final InvestmentAccountRepository investmentAccountRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final InvestmentAccountOpenVerificationKeyService verificationKeyService;
     private final InvestmentHoldingRepository investmentHoldingRepository;
 
     public List<InvestmentAccountSummaryRes> getAccounts(Long userId) {
@@ -52,24 +50,10 @@ public class InvestmentAccountService {
         return InvestmentAccountDetailRes.from(account);
     }
 
-    public InvestmentAccountOpenVerificationRes issueOpenVerificationKey(Long userId) {
-        User user = getVerifiedUser(userId);
-        String verificationKey = verificationKeyService.generateAndStore(user.getId());
-
-        return new InvestmentAccountOpenVerificationRes(
-                verificationKey,
-                verificationKeyService.ttlSeconds()
-        );
-    }
-
     @Transactional
     public InvestmentAccountCreateRes createAccount(Long userId, InvestmentAccountCreateReq request) {
         User user = getVerifiedUser(userId);
         String accountNumber = generateUniqueAccountNumber();
-
-        if (!verificationKeyService.verifyAndDelete(userId, request.verificationKey())) {
-            throw new BusinessException(InvestmentErrorCode.INVESTMENT_ACCOUNT_OPEN_VERIFICATION_KEY_INVALID);
-        }
 
         InvestmentAccount account = InvestmentAccount.create(
                 user,

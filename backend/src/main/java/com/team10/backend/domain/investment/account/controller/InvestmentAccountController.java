@@ -6,7 +6,6 @@ import com.team10.backend.domain.investment.account.dto.req.InvestmentAccountUpd
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountCloseRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountCreateRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountDetailRes;
-import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountOpenVerificationRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountSummaryRes;
 import com.team10.backend.domain.investment.account.dto.res.InvestmentAccountUpdateRes;
 import com.team10.backend.domain.investment.account.service.InvestmentAccountService;
@@ -55,16 +54,7 @@ public class InvestmentAccountController {
         return ResponseEntity.ok(investmentAccountService.getAccount(userId, accountId));
     }
 
-    @Operation(summary = "투자 계좌 개설 인증키 발급", description = "본인인증이 완료된 인증 사용자에게 투자 계좌 개설 인증키를 발급합니다.")
-    @PostMapping("/open-verification")
-    public ResponseEntity<InvestmentAccountOpenVerificationRes> issueOpenVerificationKey(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal Long userId
-    ) {
-        return ResponseEntity.ok(investmentAccountService.issueOpenVerificationKey(userId));
-    }
-
-    @Operation(summary = "투자 계좌 개설", description = "본인인증과 개설 인증키 검증을 완료한 인증 사용자의 투자 계좌를 개설합니다.")
+    @Operation(summary = "투자 계좌 개설", description = "본인인증이 완료된 인증 사용자의 투자 계좌를 개설합니다.")
     @PostMapping
     public ResponseEntity<InvestmentAccountCreateRes> createAccount(
             @Parameter(hidden = true)
