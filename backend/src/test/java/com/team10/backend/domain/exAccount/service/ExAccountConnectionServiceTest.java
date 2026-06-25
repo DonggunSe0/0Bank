@@ -2,6 +2,9 @@ package com.team10.backend.domain.exAccount.service;
 
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
 import com.team10.backend.domain.codef.exAccount.dto.req.CodefExAccountConnectionCreateReq;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountClientException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationFailure;
 import com.team10.backend.domain.codef.exAccount.service.CodefExAccountGateway;
 import com.team10.backend.domain.codef.exAccount.store.CodefExAccountCandidateStore;
 import com.team10.backend.domain.exAccount.type.ExAccountConnectionStatus;
@@ -162,6 +165,22 @@ class ExAccountConnectionServiceTest {
     }
 
     @Test
+    void registerMapsProviderCredentialFailureToBusinessError() {
+        when(codefExAccountGateway.register(createRequest))
+                .thenThrow(new CodefExAccountRegistrationException(
+                        CodefExAccountRegistrationFailure.CREDENTIAL_INVALID,
+                        "invalid credential"
+                ));
+
+        assertThatThrownBy(() -> service.register(1L, createRequest))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_CREDENTIAL_INVALID));
+
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
     @DisplayName("후보 조회는 사용자+기관 단위 CODEF 보유계좌 조회 호출 지점이다")
     void getsProviderAccountsAndReturnsMaskedCandidates() {
         ExAccountConnection connection = connection("ciphertext");
@@ -171,7 +190,7 @@ class ExAccountConnectionServiceTest {
         when(connectionRepository.findByUserIdAndOrganization(1L, "0004"))
                 .thenReturn(Optional.of(connection));
         when(codefExAccountGateway.getAccountSnapshots(
-                "0004", connection.encryptedConnectedId()
+                "0004", connection.encryptedConnectedId(), "990101"
         )).thenReturn(List.of(snapshot));
         
         when(candidateStore.save(1L, List.of(snapshot))).thenReturn("mock-token");
@@ -187,7 +206,8 @@ class ExAccountConnectionServiceTest {
         assertThat(result.accounts().getFirst().accountNoMasked()).doesNotContain("1234567890");
         assertThat(connection.getLastSyncedAt()).isNotNull();
         verify(rateLimitService).checkAccountList(1L, "0004");
-        verify(codefExAccountGateway).getAccountSnapshots("0004", connection.encryptedConnectedId());
+        verify(codefExAccountGateway).getAccountSnapshots(
+                "0004", connection.encryptedConnectedId(), "990101");
     }
 
     @Test
@@ -204,7 +224,22 @@ class ExAccountConnectionServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(
                                 ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_ACCOUNT_LIST_RATE_LIMIT_EXCEEDED));
 
-        verify(codefExAccountGateway, never()).getAccountSnapshots(any(), any());
+        verify(codefExAccountGateway, never()).getAccountSnapshots(any(), any(), any());
+    }
+
+    @Test
+    void getLinkCandidatesMapsProviderAccountListFailureToBusinessError() {
+        ExAccountConnection connection = connection("ciphertext");
+        when(connectionRepository.findByUserIdAndOrganization(1L, "0004"))
+                .thenReturn(Optional.of(connection));
+        when(codefExAccountGateway.getAccountSnapshots(
+                "0004", connection.encryptedConnectedId(), "990101"
+        )).thenThrow(new CodefExAccountClientException("bad provider response"));
+
+        assertThatThrownBy(() -> service.getLinkCandidates(1L, "0004"))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_INVALID_RESPONSE));
     }
 
     @Test
@@ -213,7 +248,7 @@ class ExAccountConnectionServiceTest {
         when(connectionRepository.findByUserIdAndOrganization(1L, "0004"))
                 .thenReturn(Optional.of(connection));
         when(codefExAccountGateway.getAccountSnapshots(
-                "0004", connection.encryptedConnectedId()
+                "0004", connection.encryptedConnectedId(), "990101"
         )).thenReturn(List.of());
 
         ExAccountCandidateListRes result = service.getLinkCandidates(1L, "0004");
@@ -231,7 +266,7 @@ class ExAccountConnectionServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(
                                 ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_NOT_FOUND));
-        verify(codefExAccountGateway, never()).getAccountSnapshots(any(), any());
+        verify(codefExAccountGateway, never()).getAccountSnapshots(any(), any(), any());
     }
 
     @Test
@@ -245,7 +280,7 @@ class ExAccountConnectionServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(
                                 ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_INACTIVE));
-        verify(codefExAccountGateway, never()).getAccountSnapshots(any(), any());
+        verify(codefExAccountGateway, never()).getAccountSnapshots(any(), any(), any());
     }
 
     private ExAccountConnection connection(String ciphertext) {

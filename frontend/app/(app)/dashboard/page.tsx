@@ -20,14 +20,16 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/contexts/AuthContext'
-import { getAccounts } from '@/lib/api/accounts'
+import { getAccounts, getExternalAccounts } from '@/lib/api/accounts'
 import { getTransactions } from '@/lib/api/transactions'
 import { formatCurrency, formatDateTime } from '@/lib/format'
 import type { Account, Transaction } from '@/lib/types'
+import type { ExternalAccount } from '@/lib/api/accounts'
 
 export default function DashboardPage() {
   const { user } = useAuth()
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [externalAccounts, setExternalAccounts] = useState<ExternalAccount[]>([])
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -36,8 +38,12 @@ export default function DashboardPage() {
     if (!user) return
     async function load() {
       try {
-        const accs = await getAccounts()
+        const [accs, externalAccs] = await Promise.all([
+          getAccounts(),
+          getExternalAccounts(),
+        ])
         setAccounts(accs)
+        setExternalAccounts(externalAccs)
         if (accs.length > 0) {
           const page = await getTransactions(accs[0].id, { page: 0, sortDirection: 'DESC' })
           setRecentTxns(page.content.slice(0, 4))
@@ -51,8 +57,33 @@ export default function DashboardPage() {
     load()
   }, [user])
 
-  const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0)
+  const totalBalance =
+    accounts.reduce((sum, a) => sum + a.balance, 0) +
+    externalAccounts.reduce((sum, a) => sum + a.balance, 0)
   const activeAccounts = accounts.filter((a) => a.status === 'ACTIVE')
+  const activeExternalAccounts = externalAccounts.filter((a) => a.status === 'ACTIVE')
+  const accountSummaryItems = [
+    ...accounts.map((account) => ({
+      id: `internal-${account.id}`,
+      href: `/accounts/${account.id}`,
+      name: account.nickname,
+      number: account.accountNumber,
+      balance: account.balance,
+      status: account.status,
+      statusLabel: account.status === 'ACTIVE' ? '정상' : account.status === 'SUSPENDED' ? '정지' : '해지',
+      external: false,
+    })),
+    ...externalAccounts.map((account) => ({
+      id: `external-${account.id}`,
+      href: null,
+      name: account.accountAlias || account.accountName,
+      number: `${account.organization} ${account.accountNoMasked}`,
+      balance: account.balance,
+      status: account.status,
+      statusLabel: account.status === 'ACTIVE' ? '정상' : account.status === 'CLOSED' ? '해지' : '확인 필요',
+      external: true,
+    })),
+  ]
 
   const quickActions = [
     { href: '/accounts/new', label: '계좌 만들기', icon: Plus },
@@ -96,7 +127,7 @@ export default function DashboardPage() {
               </p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              {loading ? '' : `활성 계좌 ${activeAccounts.length}개`}
+              {loading ? '' : `활성 계좌 ${activeAccounts.length + activeExternalAccounts.length}개`}
             </p>
           </CardContent>
         </Card>
@@ -173,7 +204,7 @@ export default function DashboardPage() {
               <Skeleton className="h-14 w-full" />
               <Skeleton className="h-14 w-full" />
             </div>
-          ) : accounts.length === 0 ? (
+          ) : accountSummaryItems.length === 0 ? (
             <div className="py-6 text-center">
               <p className="text-sm text-muted-foreground mb-3">등록된 계좌가 없습니다.</p>
               <Button size="sm" nativeButton={false} render={<Link href="/accounts/new" />}>
@@ -182,34 +213,44 @@ export default function DashboardPage() {
               </Button>
             </div>
           ) : (
-            accounts.slice(0, 3).map((acc, i) => (
+            accountSummaryItems.slice(0, 3).map((acc, i) => (
               <div key={acc.id}>
                 {i > 0 && <Separator className="my-0" />}
-                <Link
-                  href={`/accounts/${acc.id}`}
-                  className="flex items-center justify-between py-3 hover:bg-muted/50 rounded-md px-1 -mx-1 transition-colors"
-                >
+                <div className="flex items-center justify-between py-3 rounded-md px-1 -mx-1 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center">
                       <CreditCard className="size-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-foreground">{acc.nickname}</p>
-                      <p className="text-xs text-muted-foreground">{acc.accountNumber}</p>
+                      {acc.href ? (
+                        <Link href={acc.href} className="text-sm font-medium text-foreground hover:text-primary">
+                          {acc.name}
+                        </Link>
+                      ) : (
+                        <p className="text-sm font-medium text-foreground">{acc.name}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{acc.number}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-foreground tabular-nums">
                       {formatCurrency(acc.balance)}
                     </p>
-                    <Badge
-                      variant={acc.status === 'ACTIVE' ? 'default' : 'secondary'}
-                      className="text-xs h-5"
-                    >
-                      {acc.status === 'ACTIVE' ? '정상' : acc.status === 'SUSPENDED' ? '정지' : '해지'}
-                    </Badge>
+                    <div className="flex justify-end gap-1">
+                      {acc.external && (
+                        <Badge variant="outline" className="text-xs h-5">
+                          외부
+                        </Badge>
+                      )}
+                      <Badge
+                        variant={acc.status === 'ACTIVE' ? 'default' : 'secondary'}
+                        className="text-xs h-5"
+                      >
+                        {acc.statusLabel}
+                      </Badge>
+                    </div>
                   </div>
-                </Link>
+                </div>
               </div>
             ))
           )}

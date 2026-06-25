@@ -16,6 +16,7 @@ import com.team10.backend.global.security.HmacSha256Hasher;
 import com.team10.backend.global.lock.DistributedLockTemplate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -50,6 +51,7 @@ public class ExAccountSyncService {
      * 3. 검증된 원본 데이터를 바탕으로 DB에 Upsert(신규 저장 또는 기존 정보 갱신)를 수행합니다.
      * 4. claim에 성공한 토큰은 성공/실패와 관계없이 Redis에서 즉시 파기합니다.
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<ExAccountRes> linkAccounts(Long userId, ExAccountLinkReq request) {
         // 1. 요청 파라미터(토큰 유무 등) 기본 유효성 검사
         if (request == null || request.candidateToken() == null || request.candidateToken().isBlank()) {

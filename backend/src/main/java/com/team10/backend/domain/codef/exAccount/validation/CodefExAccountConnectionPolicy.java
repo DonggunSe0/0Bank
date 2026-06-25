@@ -14,7 +14,11 @@ import java.util.Optional;
 
 public enum CodefExAccountConnectionPolicy {
 
-    KB_ID_PASSWORD("0004");
+    KB_ID_PASSWORD("0004"),
+    SHINHAN_ID_PASSWORD("0088"),
+    NH_ID_PASSWORD("0011"),
+    WOORI_ID_PASSWORD("0020"),
+    HANA_ID_PASSWORD("0081");
 
     private static final String BUSINESS_TYPE = "BK";
     private static final String CLIENT_TYPE = "P";

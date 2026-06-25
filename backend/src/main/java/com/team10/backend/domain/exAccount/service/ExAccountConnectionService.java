@@ -2,6 +2,11 @@ package com.team10.backend.domain.exAccount.service;
 
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
 import com.team10.backend.domain.codef.exAccount.dto.req.CodefExAccountConnectionCreateReq;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountAuthException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountClientException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountCryptoException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationFailure;
 import com.team10.backend.domain.codef.exAccount.service.CodefExAccountGateway;
 import com.team10.backend.domain.codef.exAccount.store.CodefExAccountCandidateStore;
 import com.team10.backend.domain.exAccount.dto.res.ExAccountCandidateListRes;
@@ -19,12 +24,14 @@ import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.lock.DistributedLockTemplate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,6 +39,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ExAccountConnectionService {
+    private static final DateTimeFormatter CODEF_BIRTH_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("yyMMdd");
 
     private final UserRepository userRepository;
     private final ExAccountConnectionRepository connectionRepository;
@@ -46,6 +55,7 @@ public class ExAccountConnectionService {
     /**
      * 사용자의 특정 금융기관 계정 인증 정보(connectedId)를 등록하고 DB에 저장(암호화)합니다.
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ExAccountConnectionRes register(
             Long userId,
             CodefExAccountConnectionCreateReq request
@@ -59,7 +69,7 @@ public class ExAccountConnectionService {
                 () -> {
                     // 트랜잭션 외부에서 실행: Rate limit 체크 및 외부 API 호출 (커넥션 풀 고사 방지)
                     rateLimitService.checkRegister(userId, request.organization());
-                    EncryptedConnectedId encryptedConnectedId = codefExAccountGateway.register(request);
+                    EncryptedConnectedId encryptedConnectedId = registerWithProvider(request);
 
                     // 트랜잭션 내부에서 실행: DB 조회 및 저장
                     return transactionTemplate.execute(status -> {
@@ -93,8 +103,7 @@ public class ExAccountConnectionService {
         rateLimitService.checkAccountList(userId, organization);
 
         // 2. 암호화된 connectedId를 복호화하여 CODEF API로부터 실시간 보유 계좌 스냅샷 데이터 획득
-        List<CodefExAccountSnapshot> snapshots = codefExAccountGateway
-                .getAccountSnapshots(organization, connection.encryptedConnectedId());
+        List<CodefExAccountSnapshot> snapshots = getAccountSnapshotsWithProvider(connection, organization);
 
         // 3. 커넥션의 최종 동기화 시각 업데이트
         connection.markSynced(LocalDateTime.now(ZoneOffset.UTC));
@@ -152,5 +161,55 @@ public class ExAccountConnectionService {
     ) {
         existing.replaceConnectedId(encryptedConnectedId);
         return existing;
+    }
+
+    private EncryptedConnectedId registerWithProvider(CodefExAccountConnectionCreateReq request) {
+        try {
+            return codefExAccountGateway.register(request);
+        } catch (CodefExAccountRegistrationException exception) {
+            throw new BusinessException(toErrorCode(exception), exception);
+        } catch (CodefExAccountAuthException | CodefExAccountCryptoException | CodefExAccountClientException exception) {
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_UNAVAILABLE,
+                    exception
+            );
+        }
+    }
+
+    private List<CodefExAccountSnapshot> getAccountSnapshotsWithProvider(
+            ExAccountConnection connection,
+            String organization
+    ) {
+        try {
+            return codefExAccountGateway.getAccountSnapshots(
+                    organization,
+                    connection.encryptedConnectedId(),
+                    connection.getUser().getBirthDate().format(CODEF_BIRTH_DATE_FORMATTER)
+            );
+        } catch (CodefExAccountAuthException | CodefExAccountCryptoException exception) {
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_UNAVAILABLE,
+                    exception
+            );
+        } catch (CodefExAccountClientException exception) {
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_INVALID_RESPONSE,
+                    exception
+            );
+        }
+    }
+
+    private ExAccountConnectionErrorCode toErrorCode(CodefExAccountRegistrationException exception) {
+        CodefExAccountRegistrationFailure failure = exception.getFailure();
+        if (failure == CodefExAccountRegistrationFailure.CREDENTIAL_INVALID) {
+            return ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_CREDENTIAL_INVALID;
+        }
+        if (failure == CodefExAccountRegistrationFailure.ADDITIONAL_AUTH_REQUIRED) {
+            return ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_ADDITIONAL_AUTH_REQUIRED;
+        }
+        if (failure == CodefExAccountRegistrationFailure.INVALID_RESPONSE) {
+            return ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_INVALID_RESPONSE;
+        }
+        return ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_UNAVAILABLE;
     }
 }

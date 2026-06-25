@@ -73,12 +73,13 @@ class CodefExAccountGatewayTest {
                 .thenReturn(data);
         when(snapshotMapper.toSnapshots("0004", data)).thenReturn(List.of());
 
-        gateway.getAccountSnapshots("0004", encrypted);
+        gateway.getAccountSnapshots("0004", encrypted, "950101");
 
         ArgumentCaptor<CodefExAccountListRequest> captor =
                 ArgumentCaptor.forClass(CodefExAccountListRequest.class);
         verify(codefExAccountClient).getAccountList(captor.capture());
         assertThat(captor.getValue().connectedId()).isEqualTo("plain-connected-id");
+        assertThat(captor.getValue().birthDate()).isEqualTo("950101");
         assertThat(captor.getValue().toString()).doesNotContain("plain-connected-id");
     }
 

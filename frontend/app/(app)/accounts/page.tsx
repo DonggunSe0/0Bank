@@ -9,19 +9,22 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/contexts/AuthContext'
-import { getAccounts } from '@/lib/api/accounts'
+import { getAccounts, getExternalAccounts } from '@/lib/api/accounts'
 import { formatCurrency, maskAccountNumber } from '@/lib/format'
 import type { Account } from '@/lib/types'
+import type { ExternalAccount } from '@/lib/api/accounts'
 
 const statusLabel: Record<string, string> = {
   ACTIVE: '정상',
   SUSPENDED: '정지',
   CLOSED: '해지',
+  UNKNOWN: '확인 필요',
 }
 
 export default function AccountsPage() {
   const { user } = useAuth()
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [externalAccounts, setExternalAccounts] = useState<ExternalAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -29,8 +32,12 @@ export default function AccountsPage() {
     if (!user) return
     async function load() {
       try {
-        const accs = await getAccounts()
+        const [accs, externalAccs] = await Promise.all([
+          getAccounts(),
+          getExternalAccounts(),
+        ])
         setAccounts(accs)
+        setExternalAccounts(externalAccs)
       } catch (err) {
         setError('계좌 정보를 불러오지 못했습니다.')
       } finally {
@@ -40,13 +47,15 @@ export default function AccountsPage() {
     load()
   }, [user])
 
+  const totalCount = accounts.length + externalAccounts.length
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">내 계좌</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {loading ? '' : `총 ${accounts.length}개 계좌`}
+            {loading ? '' : `총 ${totalCount}개 계좌`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -73,7 +82,7 @@ export default function AccountsPage() {
             <Skeleton key={i} className="h-24 w-full rounded-lg" />
           ))}
         </div>
-      ) : accounts.length === 0 ? (
+      ) : totalCount === 0 ? (
         <Card className="border-border">
           <CardContent className="py-12 text-center">
             <CreditCard className="size-10 text-muted-foreground mx-auto mb-3" />
@@ -127,6 +136,43 @@ export default function AccountsPage() {
                 </CardContent>
               </Card>
             </Link>
+          ))}
+          {externalAccounts.map((acc) => (
+            <Card key={`external-${acc.id}`} className="border-border">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-full bg-muted flex items-center justify-center">
+                      <CreditCard className="size-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {acc.accountAlias || acc.accountName}
+                        </p>
+                        <Badge variant="outline" className="text-xs h-5">
+                          외부
+                        </Badge>
+                        <Badge
+                          variant={acc.status === 'ACTIVE' ? 'default' : 'secondary'}
+                          className="text-xs h-5"
+                        >
+                          {statusLabel[acc.status] ?? acc.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {acc.organization} {acc.accountNoMasked}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-base font-bold text-foreground tabular-nums">
+                      {formatCurrency(acc.balance)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
