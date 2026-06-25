@@ -13,6 +13,10 @@ import com.team10.backend.domain.user.dto.res.UserRes;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.repository.UserRepository;
+import com.team10.backend.domain.user.type.AgeGroup;
+import com.team10.backend.domain.user.type.FinancialInterest;
+import com.team10.backend.domain.user.type.OccupationStatus;
+import com.team10.backend.domain.user.type.Region;
 import com.team10.backend.domain.user.type.UserStatus;
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.jwt.JwtProvider;
@@ -35,6 +39,7 @@ import org.springframework.transaction.TransactionStatus;
 import java.lang.reflect.Constructor;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,6 +56,7 @@ class UserServiceTest {
     @Mock JwtProvider jwtProvider;
     @Mock RefreshTokenService refreshTokenService;
     @Mock UserConsentService userConsentService;
+    @Mock UserProfileService userProfileService;
     @Mock LoginAttemptService loginAttemptService;
     @Mock TokenBlocklistService tokenBlocklistService;
     @Mock PortOneClient portOneClient;
@@ -98,6 +104,7 @@ class UserServiceTest {
             assertThat(res.email()).isEqualTo("test@test.com");
             assertThat(res.name()).isEqualTo("홍길동");
             verify(userConsentService).saveAll(any(), eq(true), eq(true), eq(true), eq(false));
+            verify(userProfileService).create(eq(1L), any());
         }
 
         @Test
@@ -527,6 +534,7 @@ class UserServiceTest {
     private UserCreateReq signupReq(String email, String name, String phone, LocalDate birthDate) {
         return new UserCreateReq(
                 "portone-id", email, "Password1!", name, phone, birthDate,
+                AgeGroup.TWENTIES, Region.SEOUL, OccupationStatus.EMPLOYED, Set.of(FinancialInterest.SAVINGS),
                 true, true, true, false);
     }
 

@@ -252,7 +252,6 @@ class TransferIdempotencyE2ETest {
         assertEquals(2, transactionHistoryRepository.count());
 
         // then 4. 기존 멱등성 레코드는 SUCCESS 상태를 유지해야 한다.
-        // 충돌 요청이 기존 성공 기록을 FAILED 등으로 오염시키면 안 된다.
         Idempotency idempotency = idempotencyRepository
                 .findByUser_IdAndIdempotencyKey(sender.getId(), conflictKey)
                 .orElseThrow();

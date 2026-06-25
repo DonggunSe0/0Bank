@@ -9,6 +9,8 @@ import com.team10.backend.domain.exchange.dto.res.ExchangeRateRes;
 import com.team10.backend.domain.exchange.service.ExchangeRateService;
 import com.team10.backend.domain.exchange.service.ExchangeService;
 import com.team10.backend.domain.exchange.type.CurrencyCode;
+import com.team10.backend.global.idempotency.annotation.Idempotent;
+import com.team10.backend.global.idempotency.type.IdempotencyOperationType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -64,6 +66,7 @@ public class ExchangeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @Idempotent(operationType = IdempotencyOperationType.EXCHANGE_ORDER)
     @PostMapping("/currencies/orders")
     @Operation(description = "환전 주문 실행")
     public ResponseEntity<ExchangeOrderRes> createExchangeOrder(
@@ -73,7 +76,6 @@ public class ExchangeController {
     ) {
         ExchangeOrderRes response = exchangeService.createExchangeOrder(
                 userId,
-                idempotencyKey,
                 request.exchangeQuoteId(),
                 request.krwAccountId(),
                 request.fxWalletId()

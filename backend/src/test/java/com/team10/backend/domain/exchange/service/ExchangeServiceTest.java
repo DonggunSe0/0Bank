@@ -3,6 +3,8 @@ package com.team10.backend.domain.exchange.service;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.type.AccountType;
 import com.team10.backend.domain.exchange.calculator.ExchangeCalculator;
+import com.team10.backend.domain.exchange.controller.ExchangeController;
+import com.team10.backend.domain.exchange.dto.req.ExchangeOrderCreateReq;
 import com.team10.backend.domain.exchange.dto.res.ExchangeOrderRes;
 import com.team10.backend.domain.exchange.entity.Currency;
 import com.team10.backend.domain.exchange.entity.ExchangeOrder;
@@ -167,7 +169,6 @@ class ExchangeServiceTest {
 
         ExchangeOrderRes response = exchangeService.createExchangeOrder(
                 1L,
-                "exchange-order-key",
                 10L,
                 20L,
                 30L
@@ -178,24 +179,19 @@ class ExchangeServiceTest {
     }
 
     @Test
-    @DisplayName("환전 주문 오케스트레이터에 멱등성 설정이 적용되어 있다")
+    @DisplayName("환전 주문 컨트롤러에 멱등성 설정이 적용되어 있다")
     void createExchangeOrderHasIdempotentAnnotation() throws NoSuchMethodException {
-        Method method = ExchangeService.class.getMethod(
+        Method method = ExchangeController.class.getMethod(
                 "createExchangeOrder",
                 Long.class,
                 String.class,
-                Long.class,
-                Long.class,
-                Long.class
+                ExchangeOrderCreateReq.class
         );
 
         Idempotent idempotent = method.getAnnotation(Idempotent.class);
 
         assertThat(idempotent).isNotNull();
         assertThat(idempotent.operationType()).isEqualTo(IdempotencyOperationType.EXCHANGE_ORDER);
-        assertThat(idempotent.userId()).isEqualTo("#userId");
-        assertThat(idempotent.key()).isEqualTo("#idempotencyKey");
-        assertThat(idempotent.hashFields()).containsExactly("#exchangeQuoteId", "#krwAccountId", "#fxWalletId");
     }
 
     @Test

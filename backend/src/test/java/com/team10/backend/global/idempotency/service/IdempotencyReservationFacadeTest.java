@@ -26,12 +26,12 @@ class IdempotencyReservationFacadeTest {
     @Test
     @DisplayName("멱등성 UK 충돌이면 기존 레코드를 조회해 상태별 정책으로 처리한다")
     void reserveOrResolveDuplicate_idempotencyUniqueViolation_resolvesExistingRecord() {
-        IdempotencyReservationFacade facade = new IdempotencyReservationFacade(idempotencyService);
+        IdempotencyReservationService facade = new IdempotencyReservationService(idempotencyService);
         DataIntegrityViolationException duplicateKeyException = idempotencyUniqueViolation();
         TopUpRes storedResponse = topUpResponse();
         when(idempotencyService.reserve(1L, IdempotencyOperationType.TOPUP, "deposit-key", "request-hash", TopUpRes.class))
                 .thenThrow(duplicateKeyException)
-                .thenReturn(IdempotencyReserveResult.replay(storedResponse));
+                .thenReturn(IdempotencyReserveResult.replay(storedResponse, 200));
 
         IdempotencyReserveResult<TopUpRes> result = facade.reserveOrResolveDuplicate(
                 1L,
@@ -49,7 +49,7 @@ class IdempotencyReservationFacadeTest {
     @Test
     @DisplayName("멱등성 UK 충돌이 아니면 예외를 그대로 전파한다")
     void reserveOrResolveDuplicate_nonIdempotencyUniqueViolation_rethrows() {
-        IdempotencyReservationFacade facade = new IdempotencyReservationFacade(idempotencyService);
+        IdempotencyReservationService facade = new IdempotencyReservationService(idempotencyService);
         DataIntegrityViolationException exception = new DataIntegrityViolationException("other unique violation");
         when(idempotencyService.reserve(1L, IdempotencyOperationType.TOPUP, "deposit-key", "request-hash", TopUpRes.class))
                 .thenThrow(exception);

@@ -33,7 +33,7 @@ class TransferServiceTest {
         when(transferBusinessService.executeTopUp(1L, 1L, 5_000L, "입금 메모"))
                 .thenReturn(response);
 
-        TopUpRes result = transferService.topUp(1L, "deposit-key", 1L, 5_000L, "입금 메모");
+        TopUpRes result = transferService.topUp(1L, 1L, 5_000L, "입금 메모");
 
         assertSame(response, result);
         verify(transferBusinessService).executeTopUp(1L, 1L, 5_000L, "입금 메모");
@@ -46,7 +46,7 @@ class TransferServiceTest {
         when(transferBusinessService.executeTransfer(1L, 1L, "100200300002", "123456", 50_000L, "점심값"))
                 .thenReturn(response);
 
-        TransferRes result = transferService.transfer(1L, "transfer-key", 1L, "100200300002", "123456", 50_000L, "점심값");
+        TransferRes result = transferService.transfer(1L, 1L, "100200300002", "123456", 50_000L, "점심값");
 
         assertSame(response, result);
         verify(transferBusinessService).executeTransfer(1L, 1L, "100200300002", "123456", 50_000L, "점심값");

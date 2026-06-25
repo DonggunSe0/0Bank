@@ -117,6 +117,62 @@ export interface VerificationResponse {
   verificationId?: string | number
   status: VerificationStatus
   message?: string
+  failureReason?: string
+}
+
+// ──────────────────────────────────────────────
+// User Profile
+// ──────────────────────────────────────────────
+export type AgeGroup = 'TEENS' | 'TWENTIES' | 'THIRTIES' | 'FORTIES' | 'FIFTIES_PLUS'
+
+export type OccupationStatus =
+  | 'EMPLOYED'
+  | 'SELF_EMPLOYED'
+  | 'STUDENT'
+  | 'FREELANCER'
+  | 'UNEMPLOYED'
+  | 'ETC'
+
+export type FinancialInterest =
+  | 'SAVINGS'
+  | 'INVESTMENT'
+  | 'LOAN'
+  | 'INSURANCE'
+  | 'PENSION'
+  | 'FOREIGN_EXCHANGE'
+
+export type Region =
+  | 'SEOUL'
+  | 'BUSAN'
+  | 'DAEGU'
+  | 'INCHEON'
+  | 'GWANGJU'
+  | 'DAEJEON'
+  | 'ULSAN'
+  | 'SEJONG'
+  | 'GYEONGGI'
+  | 'GANGWON'
+  | 'CHUNGBUK'
+  | 'CHUNGNAM'
+  | 'JEONBUK'
+  | 'JEONNAM'
+  | 'GYEONGBUK'
+  | 'GYEONGNAM'
+  | 'JEJU'
+
+export interface UserProfile {
+  userId: number
+  ageGroup: AgeGroup
+  region: Region
+  occupationStatus: OccupationStatus
+  financialInterests: FinancialInterest[]
+}
+
+export interface UserProfileRequest {
+  ageGroup: AgeGroup
+  region: Region
+  occupationStatus: OccupationStatus
+  financialInterests: FinancialInterest[]
 }
 
 // ──────────────────────────────────────────────

@@ -226,14 +226,12 @@ class TransferControllerValidationTest {
     private void verifyTransferServiceNeverCalled() {
         verify(transferService, never()).topUp(
                 anyLong(),
-                anyString(),
                 anyLong(),
                 any(),
                 any()
         );
         verify(transferService, never()).transfer(
                 anyLong(),
-                anyString(),
                 anyLong(),
                 anyString(),
                 anyString(),

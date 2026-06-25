@@ -43,16 +43,16 @@ public class IdempotencyService {
         return idempotencyRepository
                 .findByUser_IdAndIdempotencyKey(userId, idempotencyKey)
                 .map(existing -> resolveExisting(existing, requestHash, operationType, responseType))
-                .orElseGet(() -> createProcessing(userId, operationType, idempotencyKey, requestHash, responseType));
+                .orElseGet(() -> createProcessing(userId, operationType, idempotencyKey, requestHash));
     }
 
     // completeSuccess()는 반드시 비즈니스 처리와 같은 트랜잭션 안에서만 호출돼야 한다.
     @Transactional(propagation = Propagation.MANDATORY) // 이미 트랜잭션이 있으면 참여, 없으면 예외 발생 -> 이 메서드가 혼자 새 트랜잭션을 열어 성공 기록만 따로 저장하지 못하게 방지
-    public void completeSuccess(Long idempotencyId, Object response) {
+    public void completeSuccess(Long idempotencyId, Object response, Integer responseStatusCode) {
         Idempotency idempotency = idempotencyRepository.findById(idempotencyId)
                 .orElseThrow();
 
-        idempotency.complete(serializeResponse(response));
+        idempotency.complete(serializeResponse(response), responseStatusCode);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -77,8 +77,7 @@ public class IdempotencyService {
             Long userId,
             IdempotencyOperationType operationType,
             String idempotencyKey,
-            String requestHash,
-            Class<T> responseType
+            String requestHash
     ) {
         User user = userRepository.getReferenceById(userId);
         Idempotency idempotency = idempotencyRepository.saveAndFlush(
@@ -105,7 +104,8 @@ public class IdempotencyService {
 
         if (idempotency.getStatus() == IdempotencyStatus.SUCCESS) {
             return IdempotencyReserveResult.replay(
-                    deserializeResponse(idempotency.getResponseBody(), responseType)
+                    deserializeResponse(idempotency.getResponseBody(), responseType),
+                    idempotency.getResponseStatusCode()
             );
         }
 

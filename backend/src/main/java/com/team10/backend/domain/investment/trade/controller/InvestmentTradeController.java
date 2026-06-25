@@ -3,6 +3,8 @@ package com.team10.backend.domain.investment.trade.controller;
 import com.team10.backend.domain.investment.trade.dto.req.MarketOrderCreateReq;
 import com.team10.backend.domain.investment.trade.dto.res.InvestmentTradeRes;
 import com.team10.backend.domain.investment.trade.service.InvestmentTradeService;
+import com.team10.backend.global.idempotency.annotation.Idempotent;
+import com.team10.backend.global.idempotency.type.IdempotencyOperationType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +27,7 @@ public class InvestmentTradeController {
 
     private final InvestmentTradeService investmentTradeService;
 
+    @Idempotent(operationType = IdempotencyOperationType.INVESTMENT_MARKET_ORDER)
     @Operation(summary = "주식 시장가 즉시 체결 주문", description = "실시간 호가 스냅샷 기준으로 시장가 주문을 전량 체결합니다.")
     @PostMapping("/market-orders")
     public ResponseEntity<InvestmentTradeRes> createMarketOrder(

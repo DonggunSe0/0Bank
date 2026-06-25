@@ -47,7 +47,7 @@ class OcrPersistenceServiceTest {
         @DisplayName("존재하는 세션 → 해당 엔티티 반환")
         void found_returnsEntity() {
             IdentityVerification verification = newVerification();
-            when(identityVerificationRepository.findById(1L)).thenReturn(Optional.of(verification));
+            when(identityVerificationRepository.findByIdWithUser(1L)).thenReturn(Optional.of(verification));
 
             IdentityVerification result = ocrPersistenceService.loadVerification(1L);
 
@@ -57,7 +57,7 @@ class OcrPersistenceServiceTest {
         @Test
         @DisplayName("존재하지 않는 세션 → null 반환")
         void notFound_returnsNull() {
-            when(identityVerificationRepository.findById(1L)).thenReturn(Optional.empty());
+            when(identityVerificationRepository.findByIdWithUser(1L)).thenReturn(Optional.empty());
 
             IdentityVerification result = ocrPersistenceService.loadVerification(1L);
 

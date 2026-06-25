@@ -7,6 +7,7 @@ import ch.qos.logback.core.read.ListAppender;
 import com.team10.backend.domain.codef.auth.ocr.CodefOcrClient;
 import com.team10.backend.domain.codef.auth.ocr.IdCardOcrResult;
 import com.team10.backend.domain.user.entity.IdentityVerification;
+import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.verification.GovernmentVerifyResult;
 import com.team10.backend.domain.user.verification.GovernmentVerifyTimeoutException;
@@ -26,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,6 +45,19 @@ class OcrServiceTest {
 
     @InjectMocks
     OcrService ocrService;
+
+    /**
+     * OCR 결과("홍길동", "901201-1234567")와 이름·생년월일(1990-12-01)이 일치하는 계정을 가진
+     * verification mock을 만든다. 본인 명의 대조를 통과시켜야 하는 기존 테스트(행안부 단계 검증)에서 쓴다.
+     */
+    private IdentityVerification verificationWithMatchingUser() {
+        IdentityVerification verification = mock(IdentityVerification.class);
+        User user = mock(User.class);
+        when(user.getName()).thenReturn("홍길동");
+        when(user.getBirthDate()).thenReturn(LocalDate.of(1990, 12, 1));
+        when(verification.getUser()).thenReturn(user);
+        return verification;
+    }
 
     @Nested
     @DisplayName("processAsync")
@@ -76,7 +91,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("OCR 성공 + 행안부 인증 성공 → saveGovSuccess 호출")
         void ocrSuccess_govVerified() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithMatchingUser();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
             when(codefOcrClient.extractIdCard(any())).thenReturn(result);
             when(mockGovernmentVerifyService.verify("홍길동", "901201-1234567", "2023-01-15"))
@@ -92,7 +108,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("행안부 발급일자 불일치 → saveFailure(분실·도난 의심)")
         void govIssueDateMismatch_savesFailure() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithMatchingUser();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
             when(codefOcrClient.extractIdCard(any())).thenReturn(result);
             when(mockGovernmentVerifyService.verify(any(), any(), any()))
@@ -107,7 +124,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("행안부 존재하지 않는 명의 → saveFailure(위조 의심)")
         void govIdentityNotFound_savesFailure() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithMatchingUser();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
             when(codefOcrClient.extractIdCard(any())).thenReturn(result);
             when(mockGovernmentVerifyService.verify(any(), any(), any()))
@@ -122,7 +140,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("행안부 타임아웃 → 별도 트랜잭션에 FAILED 기록, saveFailure는 호출되지 않음")
         void govTimeout_recordsInNewTransaction() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithMatchingUser();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
             when(codefOcrClient.extractIdCard(any())).thenReturn(result);
             when(mockGovernmentVerifyService.verify(any(), any(), any()))
@@ -152,7 +171,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("처리 완료 후 임시파일을 삭제한다")
         void deletesTempFileAfterProcessing() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithMatchingUser();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
             when(codefOcrClient.extractIdCard(any())).thenReturn(result);
             when(mockGovernmentVerifyService.verify(any(), any(), any()))
@@ -161,6 +181,45 @@ class OcrServiceTest {
             ocrService.processAsync(imagePath, 10L);
 
             assertThat(Files.exists(imagePath)).isFalse();
+        }
+
+        @Test
+        @DisplayName("OCR 이름이 가입 시 등록한 본인 정보와 다르면 → saveFailure(본인 명의 아님), 행안부 검증은 호출되지 않는다")
+        void ocrNameMismatch_savesFailureWithoutGovCheck() {
+            IdentityVerification verification = mock(IdentityVerification.class);
+            User user = mock(User.class);
+            when(user.getName()).thenReturn("김철수"); // 가입자 본인 이름 — OCR 결과("홍길동")와 다름
+            when(verification.getUser()).thenReturn(user);
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
+
+            IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
+            when(codefOcrClient.extractIdCard(any())).thenReturn(result);
+
+            ocrService.processAsync(imagePath, 10L);
+
+            verify(ocrPersistenceService).saveFailure(eq(10L), contains("본인 명의"));
+            verify(ocrPersistenceService, never()).saveGovSuccess(any());
+            verifyNoInteractions(mockGovernmentVerifyService);
+        }
+
+        @Test
+        @DisplayName("이름은 같지만 생년월일이 다르면 → saveFailure(본인 명의 아님), 행안부 검증은 호출되지 않는다")
+        void ocrBirthDateMismatch_savesFailureWithoutGovCheck() {
+            IdentityVerification verification = mock(IdentityVerification.class);
+            User user = mock(User.class);
+            when(user.getName()).thenReturn("홍길동"); // 이름은 OCR 결과와 동일
+            when(user.getBirthDate()).thenReturn(LocalDate.of(1985, 5, 20)); // 주민번호(901201-...)로 환산한 생년월일과 다름
+            when(verification.getUser()).thenReturn(user);
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
+
+            IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
+            when(codefOcrClient.extractIdCard(any())).thenReturn(result);
+
+            ocrService.processAsync(imagePath, 10L);
+
+            verify(ocrPersistenceService).saveFailure(eq(10L), contains("본인 명의"));
+            verify(ocrPersistenceService, never()).saveGovSuccess(any());
+            verifyNoInteractions(mockGovernmentVerifyService);
         }
     }
 
@@ -198,7 +257,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("OCR 1단계 완료 로그 — 이름(PII)은 로그에 남지 않는다")
         void ocrSuccess_doesNotLogName() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithMatchingUser();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             IdCardOcrResult result = new IdCardOcrResult("홍길동", "901201-1234567", "2023-01-15");
             when(codefOcrClient.extractIdCard(any())).thenReturn(result);
             when(mockGovernmentVerifyService.verify(any(), any(), any()))

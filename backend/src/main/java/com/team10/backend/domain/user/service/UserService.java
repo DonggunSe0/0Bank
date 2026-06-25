@@ -6,6 +6,7 @@ import com.team10.backend.domain.user.dto.req.ChangePasswordReq;
 import com.team10.backend.domain.user.dto.req.LoginReq;
 import com.team10.backend.domain.user.dto.req.TokenRefreshReq;
 import com.team10.backend.domain.user.dto.req.UserCreateReq;
+import com.team10.backend.domain.user.dto.req.UserProfileReq;
 import com.team10.backend.domain.user.dto.res.LoginRes;
 import com.team10.backend.domain.user.dto.res.TokenRefreshRes;
 import com.team10.backend.domain.user.dto.res.UserRes;
@@ -38,6 +39,7 @@ public class UserService {
     private final JwtProvider jwtProvider;
     private final RefreshTokenService refreshTokenService;
     private final UserConsentService userConsentService;
+    private final UserProfileService userProfileService;
     private final LoginAttemptService loginAttemptService;
     private final TokenBlocklistService tokenBlocklistService;
     private final PortOneClient portOneClient;
@@ -74,6 +76,17 @@ public class UserService {
                     request.agreedPersonalInfo(),
                     request.agreedFinancialInfo(),
                     Boolean.TRUE.equals(request.agreedMarketing())
+            );
+            // 가입 2단계(프로필 설정)에서 받은 값을 같은 트랜잭션 안에서 함께 저장 — 계정과 프로필이
+            // 분리되어 한쪽만 생성되는 상태가 생기지 않도록 한다.
+            userProfileService.create(
+                    saved.getId(),
+                    new UserProfileReq(
+                            request.ageGroup(),
+                            request.region(),
+                            request.occupationStatus(),
+                            request.financialInterests()
+                    )
             );
             return toUserRes(saved);
         });

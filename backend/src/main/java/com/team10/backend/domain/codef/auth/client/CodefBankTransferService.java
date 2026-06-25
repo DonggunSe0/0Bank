@@ -51,11 +51,7 @@ public class CodefBankTransferService implements BankTransferService {
                 organization, maskAccountNumber(accountNumber), verificationCode);
     }
 
-    /**
-     * 1원 송금 인증 API 호출 + 응답 디코딩. 실패 시 전부 ONE_WON_TRANSFER_FAILED로 변환한다.
-     * CODEF 응답 바디는 URL-인코딩되어 와서 RestClient의 메시지 컨버터가 바로 JSON으로 풀 수 없으므로,
-     * Exchange는 String을 그대로 받고 여기서 디코딩한 뒤에야 DTO로 역직렬화한다.
-     */
+    /** 1원 송금 API 호출 + 응답 디코딩(URL-인코딩 바디라 String으로 받아 직접 디코딩). 실패 시 ONE_WON_TRANSFER_FAILED. */
     private CodefBankTransferResponse requestTransfer(String organization, String accountNumber, String verificationCode) {
         CodefBankTransferRequest body = new CodefBankTransferRequest(
                 organization, accountNumber, IN_PRINT_TYPE_CUSTOM, verificationCode);

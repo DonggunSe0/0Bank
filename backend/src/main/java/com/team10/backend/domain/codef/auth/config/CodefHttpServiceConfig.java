@@ -21,23 +21,9 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 
 /**
- * CODEF 연동(OAuth 토큰 발급 / OCR / 1원송금) 전용 RestClient + 선언적 HTTP 인터페이스 등록.
- * 공유 베이스 RestClient({@link #codefBaseRestClient()})에서 목적별로 {@code mutate()}해서
- * 분기하는 구조로 통일했다(참고: <a href="https://tychejin.tistory.com/463">Spring Boot RestClient/HttpInterface</a>).
- *
- * <p>공유하는 것: connect timeout, JDK {@code HttpClient} 기반 요청 팩토리.</p>
- * <p>분기하는 것:</p>
- * <ul>
- *   <li>baseUrl — OAuth는 {@link CodefOAuthExchange#issueToken}의 {@code @PostExchange}가
- *       절대 URL(oauth.codef.io)을 직접 지정하므로 설정하지 않는다.</li>
- *   <li>Bearer 토큰 인터셉터 — OCR/1원송금에만 붙인다. OAuth는 토큰을 "발급받는" 호출 자체이므로
- *       절대 붙이지 않는다(붙이면 토큰 발급이 토큰 발급을 호출하는 순환 구조가 된다).</li>
- *   <li>read timeout — 1원송금은 은행 동기 응답 대기로 30초, 나머지는 5초.</li>
- *   <li>{@code defaultStatusHandler}의 에러코드 — 4xx/5xx를 각각 다른 {@link BusinessException}으로 변환한다.</li>
- * </ul>
- *
- * <p>OCR과 1원송금은 둘 다 {@code oneWonTransfer} 자격증명({@link CodefAuthClientConfig} 참고)으로
- * 발급된 토큰을 사용한다. CODEF DEMO 환경에서 자격증명 재사용이 거부되지 않음을 확인했다.</p>
+ * CODEF 연동(OAuth/OCR/1원송금) 전용 RestClient + 선언적 HTTP 인터페이스 등록.
+ * 공유 베이스({@link #codefBaseRestClient()})를 용도별로 mutate해서 baseUrl·Bearer 인터셉터(OAuth는 순환 방지로 제외)·
+ * 타임아웃·에러 매핑만 분기한다. OCR/1원송금은 oneWonTransfer 자격증명을 공유(DEMO 재사용 거부 안 됨 확인).
  */
 @Configuration(proxyBeanMethods = false)
 public class CodefHttpServiceConfig {

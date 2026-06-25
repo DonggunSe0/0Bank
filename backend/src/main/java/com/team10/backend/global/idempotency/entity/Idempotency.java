@@ -47,6 +47,9 @@ public class Idempotency extends BaseEntity {
     @Column(name = "response_body", columnDefinition = "TEXT")
     private String responseBody;
 
+    @Column(name = "response_status_code")
+    private Integer responseStatusCode;
+
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
@@ -72,8 +75,9 @@ public class Idempotency extends BaseEntity {
         return new Idempotency(user, operationType, idempotencyKey, requestHash);
     }
 
-    public void complete(String responseBody) {
+    public void complete(String responseBody, Integer responseStatusCode) {
         this.responseBody = responseBody;
+        this.responseStatusCode = responseStatusCode;
         this.status = IdempotencyStatus.SUCCESS;
         this.completedAt = LocalDateTime.now();
     }

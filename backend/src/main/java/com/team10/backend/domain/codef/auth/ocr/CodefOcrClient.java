@@ -55,8 +55,17 @@ public class CodefOcrClient {
         String rawDate     = data.resIssueDate();
 
         if (isBlank(name) || isBlank(rawIdentity) || isBlank(rawDate)
-                || rawIdentity.length() < 13 || rawDate.length() < 8) {
+                || rawIdentity.length() != 13 || rawDate.length() < 8) {
             log.warn("[CODEF OCR] 필수 필드 누락 — name={}, identity={}, date={}", name, maskIdentity(rawIdentity), rawDate);
+            throw new BusinessException(UserErrorCode.OCR_FAILED);
+        }
+
+        // CODEF의 등록증 OCR은 문서 종류를 검증하지 않고 영역 내 텍스트를 그대로 추출하므로,
+        // 운전면허증 등 다른 카드를 올려도 이름/13자리 숫자열/8자리 날짜가 형식만 맞으면 통과해버린다.
+        // 주민등록번호는 마지막 자리가 앞 12자리로 계산되는 체크섬이므로, 이를 검증해 "주민등록증이 아닌데
+        // 우연히 숫자 형식만 맞는" 케이스를 걸러낸다.
+        if (!hasValidResidentNumberChecksum(rawIdentity)) {
+            log.warn("[CODEF OCR] 주민등록번호 체크섬 불일치(주민등록증 아닐 가능성) — identity={}", maskIdentity(rawIdentity));
             throw new BusinessException(UserErrorCode.OCR_FAILED);
         }
 
@@ -67,11 +76,7 @@ public class CodefOcrClient {
         return new IdCardOcrResult(name, residentNumber, issueDate);
     }
 
-    /**
-     * OCR API 호출 + 응답 디코딩. 실패 시 전부 OCR_FAILED로 변환한다.
-     * CODEF 응답 바디는 URL-인코딩되어 와서 RestClient의 메시지 컨버터가 바로 JSON으로 풀 수 없으므로,
-     * Exchange는 String을 그대로 받고 여기서 디코딩한 뒤에야 DTO로 역직렬화한다.
-     */
+    /** OCR API 호출 + 응답 디코딩(URL-인코딩 바디라 String으로 받아 직접 디코딩). 실패 시 OCR_FAILED. */
     private CodefOcrResponse requestOcr(byte[] imageBytes) {
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
         CodefOcrRequest body = new CodefOcrRequest("0", "0", base64Image, "0", "0");
@@ -89,6 +94,22 @@ public class CodefOcrClient {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    // 주민등록번호 체크섬 가중치 — 앞 12자리에 곱한 값의 합을 11로 나눈 나머지로 13번째(검증) 자리를 계산한다.
+    private static final int[] RESIDENT_NUMBER_CHECKSUM_WEIGHTS = {2, 3, 4, 5, 6, 7, 8, 9, 2, 3, 4, 5};
+
+    /** rawIdentity(13자리 숫자열)가 실제 주민등록번호 체크섬 규칙을 만족하는지 검증한다. */
+    private boolean hasValidResidentNumberChecksum(String rawIdentity) {
+        if (rawIdentity.length() != 13 || !rawIdentity.chars().allMatch(Character::isDigit)) {
+            return false;
+        }
+        int sum = 0;
+        for (int i = 0; i < RESIDENT_NUMBER_CHECKSUM_WEIGHTS.length; i++) {
+            sum += (rawIdentity.charAt(i) - '0') * RESIDENT_NUMBER_CHECKSUM_WEIGHTS[i];
+        }
+        int checkDigit = (11 - (sum % 11)) % 10;
+        return checkDigit == (rawIdentity.charAt(12) - '0');
     }
 
     /** 주민등록번호 등 식별 정보를 로그용으로 마스킹한다 (앞 6자리만 노출). */

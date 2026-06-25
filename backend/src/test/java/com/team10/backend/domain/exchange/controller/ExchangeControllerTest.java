@@ -155,7 +155,6 @@ class ExchangeControllerTest {
 
         when(exchangeService.createExchangeOrder(
                 eq(1L),
-                eq("exchange-order-key"),
                 eq(1L),
                 eq(10L),
                 eq(20L)
@@ -177,7 +176,6 @@ class ExchangeControllerTest {
 
         verify(exchangeService).createExchangeOrder(
                 eq(1L),
-                eq("exchange-order-key"),
                 eq(1L),
                 eq(10L),
                 eq(20L)

@@ -18,9 +18,10 @@ public class OcrPersistenceService {
     private final IdentityVerificationRepository identityVerificationRepository;
     private final HmacHasher hmacHasher;
 
+    /** user를 fetch join으로 함께 로딩한다 — 트랜잭션이 끝난 뒤에도 verification.getUser()를 안전하게 쓸 수 있게 한다. */
     @Transactional(readOnly = true)
     public IdentityVerification loadVerification(Long verificationId) {
-        return identityVerificationRepository.findById(verificationId)
+        return identityVerificationRepository.findByIdWithUser(verificationId)
                 .orElseGet(() -> {
                     log.error("[OCR] 인증 세션을 찾을 수 없음 — verificationId={}", verificationId);
                     return null;

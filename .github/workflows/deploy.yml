@@ -101,80 +101,8 @@ jobs:
           instance-ids: ${{ env.INSTANCE_ID }}
 
           command: |
-            set -e
+            export GHCR_USERNAME="${{ secrets.GHCR_USERNAME }}"
+            export GHCR_TOKEN="${{ secrets.GHCR_TOKEN }}"
 
-            IMAGE="ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}"
-
-            wait_for_health() {
-              name="$1"
-
-              for attempt in $(seq 1 30); do
-                if sudo docker run --rm \
-                  --network app-data_default \
-                  curlimages/curl:8.11.1 \
-                  -fsS "http://${name}:8080/actuator/health/readiness" >/dev/null; then
-                  echo "${name} is healthy"
-                  return 0
-                fi
-
-                echo "Waiting for ${name} readiness... (${attempt}/30)"
-                sleep 2
-              done
-
-              echo "${name} failed readiness check"
-              sudo docker logs "$name" || true
-              sudo docker rm -f "$name" || true
-              return 1
-            }
-
-            deploy_backend() {
-              name="$1"
-              new_name="${name}-new"
-
-              sudo docker rm -f "$new_name" || true
-
-              sudo docker run -d \
-                --name "$new_name" \
-                --restart unless-stopped \
-                --network app-data_default \
-                --env-file /dockerProjects/app-data/.env \
-                "$IMAGE"
-            
-              sudo docker inspect "$new_name" \
-               --format='Container Image={{.Image}}'
-
-              wait_for_health "$new_name"
-
-              sudo docker rm -f "$name" || true
-              sudo docker rename "$new_name" "$name"
-            
-              if sudo docker ps --format '{{.Names}}' | grep -q '^nginx-lb$'; then
-                sudo docker exec nginx-lb nginx -s reload
-              fi
-            }
-
-            sudo docker login ghcr.io \
-              -u ${{ secrets.GHCR_USERNAME }} \
-              -p ${{ secrets.GHCR_TOKEN }}
-
-            sudo docker pull "$IMAGE"
-            
-            echo "=== IMAGE INFO ==="
-            
-            sudo docker images | grep team10-backend
-            
-            sudo docker inspect "$IMAGE" \
-            --format='Image={{.Id}}
-            RepoDigests={{json .RepoDigests}}'
-            
-            echo "=================="
-
-            deploy_backend backend-1
-            deploy_backend backend-2
-            
-            sudo docker compose \
-              --env-file /dockerProjects/app-data/.env \
-              -f /dockerProjects/app-data/docker-compose.yml \
-              up -d nginx-lb
-
-            sudo docker image prune -f
+            bash /dockerProjects/app-data/deploy.sh \
+              ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}

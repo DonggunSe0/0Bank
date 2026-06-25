@@ -123,6 +123,7 @@ class IdempotencyServiceTest {
         assertTrue(result.replay());
         assertNull(result.idempotency());
         assertEquals(storedResponse, result.storedResponse());
+        assertEquals(201, result.responseStatusCode());
     }
 
     @Test
@@ -232,7 +233,7 @@ class IdempotencyServiceTest {
             TransferRes response
     ) throws Exception {
         Idempotency idempotency = Idempotency.processing(user, operationType, idempotencyKey, requestHash);
-        idempotency.complete(objectMapper.writeValueAsString(response));
+        idempotency.complete(objectMapper.writeValueAsString(response), 201);
         ReflectionTestUtils.setField(idempotency, "id", 1L);
         return idempotency;
     }

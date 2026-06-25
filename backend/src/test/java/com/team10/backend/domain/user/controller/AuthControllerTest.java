@@ -10,6 +10,10 @@ import com.team10.backend.domain.user.dto.res.LoginRes;
 import com.team10.backend.domain.user.dto.res.TokenRefreshRes;
 import com.team10.backend.domain.user.dto.res.UserRes;
 import com.team10.backend.domain.user.service.UserService;
+import com.team10.backend.domain.user.type.AgeGroup;
+import com.team10.backend.domain.user.type.FinancialInterest;
+import com.team10.backend.domain.user.type.OccupationStatus;
+import com.team10.backend.domain.user.type.Region;
 import com.team10.backend.global.jwt.JwtProvider;
 import com.team10.backend.global.jwt.TokenBlocklistService;
 import com.team10.backend.global.security.JwtAccessDeniedHandler;
@@ -32,6 +36,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Set;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
@@ -96,7 +101,8 @@ class AuthControllerTest {
         private UserCreateReq validReq() {
             return new UserCreateReq(
                     "portone-id", "test@test.com", "Password1!", "홍길동", "01012345678",
-                    LocalDate.of(1990, 1, 1), true, true, true, false);
+                    LocalDate.of(1990, 1, 1), AgeGroup.TWENTIES, Region.SEOUL, OccupationStatus.EMPLOYED,
+                    Set.of(FinancialInterest.SAVINGS), true, true, true, false);
         }
 
         @Test
@@ -117,7 +123,8 @@ class AuthControllerTest {
         void invalidEmail() throws Exception {
             UserCreateReq req = new UserCreateReq(
                     "portone-id", "not-an-email", "Password1!", "홍길동", "01012345678",
-                    LocalDate.of(1990, 1, 1), true, true, true, false);
+                    LocalDate.of(1990, 1, 1), AgeGroup.TWENTIES, Region.SEOUL, OccupationStatus.EMPLOYED,
+                    Set.of(FinancialInterest.SAVINGS), true, true, true, false);
 
             mockMvc.perform(post("/api/v1/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -130,7 +137,8 @@ class AuthControllerTest {
         void invalidPassword() throws Exception {
             UserCreateReq req = new UserCreateReq(
                     "portone-id", "test@test.com", "short", "홍길동", "01012345678",
-                    LocalDate.of(1990, 1, 1), true, true, true, false);
+                    LocalDate.of(1990, 1, 1), AgeGroup.TWENTIES, Region.SEOUL, OccupationStatus.EMPLOYED,
+                    Set.of(FinancialInterest.SAVINGS), true, true, true, false);
 
             mockMvc.perform(post("/api/v1/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)

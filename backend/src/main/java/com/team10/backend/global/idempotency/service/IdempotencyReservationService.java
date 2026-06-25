@@ -6,10 +6,11 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
-// UK 충돌 시 reserve 재조회 흐름을 감싸는 퍼사드, self-invocation 트랜잭션 문제 해결 목적
+// 동시 요청으로 멱등성 키 unique constraint 충돌이 발생한 경우,
+// 기존 멱등성 레코드를 다시 조회해 SUCCESS/PROCESSING/CONFLICT 정책으로 해석한다.
 @Service
 @RequiredArgsConstructor
-public class IdempotencyReservationFacade {
+public class IdempotencyReservationService {
 
     private static final String IDEMPOTENCY_UNIQUE_CONSTRAINT = "uk_user_idempotency_key";
 

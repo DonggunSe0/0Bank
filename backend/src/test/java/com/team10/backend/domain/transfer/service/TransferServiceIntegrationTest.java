@@ -12,10 +12,6 @@ import com.team10.backend.domain.transfer.exception.TransferErrorCode;
 import com.team10.backend.domain.transfer.repository.TransferRepository;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.exception.BusinessException;
-import com.team10.backend.global.exception.GlobalErrorCode;
-import com.team10.backend.global.idempotency.entity.Idempotency;
-import com.team10.backend.global.idempotency.repository.IdempotencyRepository;
-import com.team10.backend.global.idempotency.type.IdempotencyStatus;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,9 +50,6 @@ class TransferServiceIntegrationTest {
     private TransferRepository transferRepository;
 
     @Autowired
-    private IdempotencyRepository idempotencyRepository;
-
-    @Autowired
     private EntityManager entityManager;
 
     @Autowired
@@ -81,7 +74,7 @@ class TransferServiceIntegrationTest {
         User user = saveUser("sender@example.com", "홍길동");
         Account account = saveAccount(user, "100200300001", 10_000L);
 
-        TopUpRes response = transferService.topUp(user.getId(), "deposit-success-key", account.getId(), 5_000L, "입금 메모");
+        TopUpRes response = transferService.topUp(user.getId(), account.getId(), 5_000L, "입금 메모");
         flushAndClear();
 
         Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
@@ -103,74 +96,6 @@ class TransferServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("같은 멱등성 키와 같은 요청으로 입금을 재시도하면 중복 입금하지 않고 최초 응답을 반환한다")
-    void deposit_sameIdempotencyKeyAndSameRequest_returnsStoredResponseWithoutDuplicateDeposit() {
-        User user = saveUser("sender@example.com", "홍길동");
-        Account account = saveAccount(user, "100200300001", 10_000L);
-
-        TopUpRes firstResponse = transferService.topUp(
-                user.getId(),
-                "same-deposit-key",
-                account.getId(),
-                5_000L,
-                "입금 메모"
-        );
-        TopUpRes retryResponse = transferService.topUp(
-                user.getId(),
-                "same-deposit-key",
-                account.getId(),
-                5_000L,
-                "입금 메모"
-        );
-        flushAndClear();
-
-        Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
-        Idempotency idempotency = idempotencyRepository
-                .findByUser_IdAndIdempotencyKey(user.getId(), "same-deposit-key")
-                .orElseThrow();
-
-        assertEquals(firstResponse, retryResponse);
-        assertEquals(15_000L, savedAccount.getBalance());
-        assertEquals(1, transactionHistoryRepository.count());
-        assertEquals(IdempotencyStatus.SUCCESS, idempotency.getStatus());
-        assertNotNull(idempotency.getResponseBody());
-        assertNotNull(idempotency.getCompletedAt());
-    }
-
-    @Test
-    @DisplayName("같은 멱등성 키로 다른 입금 요청이 들어오면 입금을 처리하지 않고 충돌 예외를 발생시킨다")
-    void deposit_sameIdempotencyKeyAndDifferentRequest_throwsConflict() {
-        User user = saveUser("sender@example.com", "홍길동");
-        Account account = saveAccount(user, "100200300001", 10_000L);
-
-        transferService.topUp(
-                user.getId(),
-                "deposit-conflict-key",
-                account.getId(),
-                5_000L,
-                "입금 메모"
-        );
-
-        BusinessException exception = assertThrows(
-                BusinessException.class,
-                () -> transferService.topUp(
-                        user.getId(),
-                        "deposit-conflict-key",
-                        account.getId(),
-                        6_000L,
-                        "입금 메모"
-                )
-        );
-        flushAndClear();
-
-        Account savedAccount = accountRepository.findById(account.getId()).orElseThrow();
-
-        assertEquals(GlobalErrorCode.IDEMPOTENCY_REQUEST_CONFLICT, exception.getErrorCode());
-        assertEquals(15_000L, savedAccount.getBalance());
-        assertEquals(1, transactionHistoryRepository.count());
-    }
-
-    @Test
     @DisplayName("송금 금액이 유효하지 않으면 DB 변경 없이 INVALID_INPUT_VALUE 예외를 발생시킨다")
     void transfer_invalidAmount_doesNotPersistAnything() {
         User user = saveUser("sender@example.com", "홍길동");
@@ -178,7 +103,7 @@ class TransferServiceIntegrationTest {
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> transferService.transfer(user.getId(), "invalid-amount-key", account.getId(), "100200300002", "123456", 0L, "잘못된 송금")
+                () -> transferService.transfer(user.getId(), account.getId(), "100200300002", "123456", 0L, "잘못된 송금")
         );
         flushAndClear();
 
@@ -201,7 +126,6 @@ class TransferServiceIntegrationTest {
                 threadCount,
                 () -> transferService.topUp(
                         user.getId(),
-                        "concurrent-deposit-" + Thread.currentThread().threadId(),
                         account.getId(),
                         amount,
                         "동시 입금"
@@ -234,11 +158,10 @@ class TransferServiceIntegrationTest {
                 threadCount,
                 () -> {
                     int currentSequence = sequence.getAndIncrement();
-                    String idempotencyKey = "opposite-direction-" + currentSequence;
                     if (currentSequence % 2 == 0) {
-                        transferService.transfer(owner.getId(), idempotencyKey, firstAccount.getId(), secondAccount.getAccountNumber(), "123456", amount, "교차 송금");
+                        transferService.transfer(owner.getId(), firstAccount.getId(), secondAccount.getAccountNumber(), "123456", amount, "교차 송금");
                     } else {
-                        transferService.transfer(owner.getId(), idempotencyKey, secondAccount.getId(), firstAccount.getAccountNumber(), "123456", amount, "교차 송금");
+                        transferService.transfer(owner.getId(), secondAccount.getId(), firstAccount.getAccountNumber(), "123456", amount, "교차 송금");
                     }
                 }
         );

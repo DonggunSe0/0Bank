@@ -3,6 +3,7 @@ package com.team10.backend.domain.user.ocr;
 import com.team10.backend.domain.codef.auth.ocr.CodefOcrClient;
 import com.team10.backend.domain.codef.auth.ocr.IdCardOcrResult;
 import com.team10.backend.domain.user.entity.IdentityVerification;
+import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.verification.GovernmentVerifyResult;
 import com.team10.backend.domain.user.verification.GovernmentVerifyTimeoutException;
 import com.team10.backend.domain.user.verification.MockGovernmentVerifyService;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DateTimeException;
+import java.time.LocalDate;
 
 /**
  * 신분증 OCR 비동기 처리 서비스 (1단계 → 2단계 즉시 체이닝).
@@ -43,6 +46,14 @@ public class OcrService {
                 IdCardOcrResult result = codefOcrClient.extractIdCard(imageBytes);
                 ocrPersistenceService.saveOcrSuccess(verificationId, result);
                 log.info("[OCR] 1단계 완료 — verificationId={}", verificationId); // 이름(PII)은 로그에 남기지 않음
+
+                if (!matchesAccountHolder(verification.getUser(), result)) {
+                    ocrPersistenceService.saveFailure(verificationId,
+                            "본인 명의의 신분증이 아닙니다. 가입 시 등록한 정보와 일치하는 신분증으로 다시 시도해주세요.");
+                    log.warn("[OCR] 본인 명의 불일치 — verificationId={}", verificationId); // 이름(PII)은 로그에 남기지 않음
+                    return;
+                }
+
                 chainGovernmentVerification(verificationId, result);
 
             } catch (Exception e) {
@@ -90,6 +101,45 @@ public class OcrService {
                     verificationId,
                     "행안부 연동 타임아웃: 잠시 후 다시 시도해주세요."
             );
+        }
+    }
+
+    /**
+     * OCR로 읽은 이름·생년월일이 인증을 요청한 계정 본인 정보와 일치하는지 확인한다.
+     * 행안부 진위 확인({@link MockGovernmentVerifyService})은 "신분증 자체가 진짜인지"만 보고
+     * "그 신분증이 이 계정의 주인 것인지"는 보지 않으므로, 타인(실재하는 진짜 신분증) 명의 도용을
+     * 막으려면 이 비교가 별도로 필요하다.
+     */
+    private boolean matchesAccountHolder(User user, IdCardOcrResult result) {
+        if (!user.getName().trim().equals(result.name().trim())) {
+            return false;
+        }
+        LocalDate ocrBirthDate = parseBirthDate(result.residentNumber());
+        return ocrBirthDate != null && ocrBirthDate.equals(user.getBirthDate());
+    }
+
+    /**
+     * 주민등록번호 "YYMMDD-S......" 형식에서 생년월일을 복원한다.
+     * 7번째 자리(성별/세기 구분 숫자) 기준: 1·2(1900년대), 3·4(2000년대), 5·6(1900년대 외국인),
+     * 7·8(2000년대 외국인). 형식이 예상과 다르면 null을 반환해 이름만으로 판단하지 않고 불일치로 처리한다.
+     */
+    private LocalDate parseBirthDate(String residentNumber) {
+        if (residentNumber == null || residentNumber.length() < 8 || residentNumber.charAt(6) != '-') {
+            return null;
+        }
+        try {
+            int yy = Integer.parseInt(residentNumber.substring(0, 2));
+            int mm = Integer.parseInt(residentNumber.substring(2, 4));
+            int dd = Integer.parseInt(residentNumber.substring(4, 6));
+            int century = switch (residentNumber.charAt(7)) {
+                case '1', '2', '5', '6' -> 1900;
+                case '3', '4', '7', '8' -> 2000;
+                default -> -1;
+            };
+            if (century == -1) return null;
+            return LocalDate.of(century + yy, mm, dd);
+        } catch (NumberFormatException | DateTimeException e) {
+            return null;
         }
     }
 }

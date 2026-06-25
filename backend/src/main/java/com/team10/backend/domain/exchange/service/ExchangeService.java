@@ -18,8 +18,6 @@ import com.team10.backend.domain.exchange.type.CurrencyStatus;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
-import com.team10.backend.global.idempotency.annotation.Idempotent;
-import com.team10.backend.global.idempotency.type.IdempotencyOperationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -93,15 +91,8 @@ public class ExchangeService {
         return ExchangeQuoteRes.from(exchangeQuoteRepository.save(quote));
     }
 
-    @Idempotent(
-            operationType = IdempotencyOperationType.EXCHANGE_ORDER,
-            userId = "#userId",
-            key = "#idempotencyKey",
-            hashFields = {"#exchangeQuoteId", "#krwAccountId", "#fxWalletId"}
-    )
     public ExchangeOrderRes createExchangeOrder(
             Long userId,
-            String idempotencyKey,
             Long exchangeQuoteId,
             Long krwAccountId,
             Long fxWalletId
