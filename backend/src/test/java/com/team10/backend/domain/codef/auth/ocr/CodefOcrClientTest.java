@@ -39,13 +39,13 @@ class CodefOcrClientTest {
         void success() {
             when(codefOcrExchange.requestOcr(any())).thenReturn("""
                     {"result":{"code":"CF-00000","message":"SUCCESS"},
-                     "data":{"resUserName":"홍길동","resUserIdentity":"9012011234567","resIssueDate":"20230115"}}
+                     "data":{"resUserName":"홍길동","resUserIdentity":"9012011234560","resIssueDate":"20230115"}}
                     """);
 
             IdCardOcrResult result = codefOcrClient.extractIdCard(new byte[]{1, 2, 3});
 
             assertThat(result.name()).isEqualTo("홍길동");
-            assertThat(result.residentNumber()).isEqualTo("901201-1234567");
+            assertThat(result.residentNumber()).isEqualTo("901201-1234560");
             assertThat(result.issueDate()).isEqualTo("2023-01-15");
         }
 
@@ -115,6 +115,20 @@ class CodefOcrClientTest {
             when(codefOcrExchange.requestOcr(any())).thenReturn("""
                     {"result":{"code":"CF-00000"},
                      "data":{"resUserName":"홍길동","resUserIdentity":"123","resIssueDate":"20230115"}}
+                    """);
+
+            assertThatThrownBy(() -> codefOcrClient.extractIdCard(new byte[]{1}))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(UserErrorCode.OCR_FAILED);
+        }
+
+        @Test
+        @DisplayName("주민번호 자리수는 맞지만 체크섬이 틀림(운전면허증 등 다른 카드의 숫자열) → OCR_FAILED")
+        void identityChecksumInvalid() {
+            // 운전면허증의 면허번호 영역이 13자리 숫자+하이픈 형태라 형식 검증만으로는 걸러지지 않는 케이스.
+            when(codefOcrExchange.requestOcr(any())).thenReturn("""
+                    {"result":{"code":"CF-00000"},
+                     "data":{"resUserName":"홍길순","resUserIdentity":"9508292134567","resIssueDate":"20230115"}}
                     """);
 
             assertThatThrownBy(() -> codefOcrClient.extractIdCard(new byte[]{1}))
