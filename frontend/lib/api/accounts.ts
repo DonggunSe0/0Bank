@@ -68,6 +68,21 @@ export interface ExternalCandidate {
   linked: boolean
 }
 
+export interface ExternalAccount {
+  id: number
+  organization: string
+  accountNoMasked: string
+  accountName: string
+  accountAlias?: string
+  assetType: string
+  balance: number
+  withdrawableAmount?: number
+  openedAt?: string
+  maturityAt?: string
+  lastTransactionAt?: string
+  status: string
+}
+
 export interface ExternalCandidateListResponse {
   candidateToken: string
   expiresInSeconds: number
@@ -103,12 +118,19 @@ export async function getExternalCandidates(
 }
 
 /**
+ * 연동 완료된 외부 계좌 목록 조회
+ */
+export async function getExternalAccounts(): Promise<ExternalAccount[]> {
+  return apiFetch<ExternalAccount[]>('/api/v1/external-accounts/accounts')
+}
+
+/**
  * 3단계: 일회용 토큰과 인덱스를 전송하여 실제 계좌 영속화 연동
  */
 export async function linkExternalAccounts(
   data: ExternalLinkRequest,
-): Promise<Account[]> {
-  return apiFetch<Account[]>('/api/v1/external-accounts/link', {
+): Promise<ExternalAccount[]> {
+  return apiFetch<ExternalAccount[]>('/api/v1/external-accounts/link', {
     method: 'POST',
     body: JSON.stringify(data),
   })

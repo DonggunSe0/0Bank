@@ -25,6 +25,15 @@ class CodefExAccountConnectionCreateReqTest {
     }
 
     @Test
+    void acceptsBanksOfferedByImportAccountPage() {
+        assertThat(validator.validate(requestWith("0004", "BK", "P", "1", "990101"))).isEmpty();
+        assertThat(validator.validate(requestWith("0088", "BK", "P", "1", "990101"))).isEmpty();
+        assertThat(validator.validate(requestWith("0011", "BK", "P", "1", "990101"))).isEmpty();
+        assertThat(validator.validate(requestWith("0020", "BK", "P", "1", "990101"))).isEmpty();
+        assertThat(validator.validate(requestWith("0081", "BK", "P", "1", "990101"))).isEmpty();
+    }
+
+    @Test
     void rejectsUnsupportedOrganization() {
         CodefExAccountConnectionCreateReq request = requestWith("9999", "BK", "P", "1", "990101");
 

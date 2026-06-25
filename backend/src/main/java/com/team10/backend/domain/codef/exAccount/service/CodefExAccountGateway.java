@@ -49,13 +49,14 @@ public class CodefExAccountGateway {
      */
     public List<CodefExAccountSnapshot> getAccountSnapshots(
             String organization,
-            EncryptedConnectedId encryptedConnectedId
+            EncryptedConnectedId encryptedConnectedId,
+            String birthDate
     ) {
         String connectedId = connectedIdEncryptor.decrypt(encryptedConnectedId);
         CodefExAccountListRequest request = CodefExAccountListRequest.of(
                 organization,
                 connectedId,
-                ""
+                birthDate
         );
         JsonNode data = codefExAccountClient.getAccountList(request);
         return snapshotMapper.toSnapshots(organization, data);
