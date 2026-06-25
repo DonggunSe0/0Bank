@@ -1,0 +1,58 @@
+server:
+  port: 8080
+
+spring:
+  config:
+    import: optional:application-secret.yml # application-secret import
+  application:
+    name: backend
+  profiles:
+    default: dev # 기본 프로파일 dev로 설정 -> 운영 환경에서는 prod로 변경 [ dockerfile ]
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # dev, prod환경 validate 설정
+
+  # 로그 향상
+  output:
+    ansi:
+      enabled: always
+
+  main:
+    banner-mode: console
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# Swagger default MediaType 지정
+springdoc:
+  default-produces-media-type: application/json;charset=UTF-8
+
+app:
+  scheduling:
+    pool-size: 6
+    await-termination-seconds: 10
+
+upbit:
+  base-url: https://crix-api-cdn.upbit.com
+exchange-rate:
+  sync:
+    enabled: true
+    fixed-delay-ms: 60000 # 동기화 시간 1분
+
+kis:
+  websocket-max-subscriptions: 41

@@ -1,0 +1,58 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always # 컨테이너 종료 시 자동 재시작
+
+    ports:
+      - "13306:3306" # 호스트포트:컨테이너포트 (localhost:13306 으로 접속)
+
+    # MySQL 서버 기본 설정
+    command:
+      - --character-set-server=utf8mb4 # 한글 및 이모지 저장 지원
+      - --collation-server=utf8mb4_unicode_ci # 문자열 정렬/비교 규칙
+
+    # 컨테이너 환경 변수
+    environment:
+      TZ: Asia/Seoul # 컨테이너 타임존 설정
+
+      MYSQL_ROOT_PASSWORD: 1234 # root 계정 비밀번호
+      MYSQL_DATABASE: my_project_db # 컨테이너 최초 실행 시 생성할 DB
+
+      MYSQL_USER: app # 애플리케이션 전용 계정
+      MYSQL_PASSWORD: app1234 # 애플리케이션 계정 비밀번호
+
+    volumes:
+      # MySQL 데이터 영속화 (컨테이너 삭제 후에도 데이터 유지)
+      - ./db/mysql/data:/var/lib/mysql
+
+      # 초기 SQL 스크립트 실행 경로
+      # *.sql, *.sh 파일이 최초 컨테이너 생성 시 자동 실행됨
+      - ./db/mysql/init:/docker-entrypoint-initdb.d
+
+    # MySQL 정상 기동 여부 확인
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s # 10초마다 체크
+      timeout: 5s # 5초 내 응답 없으면 실패
+      retries: 5 # 5회 연속 실패 시 unhealthy 처리
+
+  redis:
+    image: redis:7.2-alpine # CI(ci.yml)와 동일 버전
+    container_name: redis
+    restart: always # 컨테이너 종료 시 자동 재시작
+
+    environment:
+      TZ: Asia/Seoul
+
+    ports:
+      - "127.0.0.1:6379:6379" # 로컬 개발용 Redis. 외부 인터페이스에는 노출하지 않음
+
+    # 로그인 실패 횟수, 1원송금 시도 제한, RT/분산락 등 모두 TTL 기반 임시 데이터라 영속화 볼륨은 두지 않음
+
+    # Redis 정상 기동 여부 확인
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

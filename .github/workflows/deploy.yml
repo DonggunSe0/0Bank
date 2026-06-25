@@ -1,0 +1,180 @@
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "backend/**"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-image-and-push:
+    runs-on: ubuntu-latest
+
+    outputs:
+      image: ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: application-secret.yml 생성
+        run: |
+          mkdir -p backend/src/main/resources
+          echo "${{ secrets.APPLICATION_SECRET }}" \
+          > backend/src/main/resources/application-secret.yml
+
+      - name: Verify secret file
+        run: |
+          ls -al backend/src/main/resources
+          head -5 backend/src/main/resources/application-secret.yml
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build JAR
+        run: |
+          cd backend
+          ./gradlew bootJar --no-daemon
+
+      - name: Verify built JAR
+        run: |
+          unzip -l backend/build/libs/*.jar | grep application
+          unzip -l backend/build/libs/*.jar | grep application-secret
+
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/team10-backend:latest
+
+      - name: Verify app.jar in image
+        run: |
+          docker create --name temp ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}
+          docker cp temp:/app/app.jar .
+          unzip -l app.jar | grep application
+          unzip -l app.jar | grep application-secret
+          docker rm temp
+  
+
+  deploy:
+    needs: build-image-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: APP-DATA 인스턴스 조회
+        id: instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters \
+          "Name=tag:Name,Values=team10-app-data-ec2" \
+          "Name=instance-state-name,Values=running" \
+          --query "Reservations[*].Instances[*].InstanceId" \
+          --output text)
+
+          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
+
+      - name: Deploy
+        uses: peterkimzz/aws-ssm-send-command@v1
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+          instance-ids: ${{ env.INSTANCE_ID }}
+
+          command: |
+            set -e
+
+            IMAGE="ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}"
+
+            wait_for_health() {
+              name="$1"
+
+              for attempt in $(seq 1 30); do
+                if sudo docker run --rm \
+                  --network app-data_default \
+                  curlimages/curl:8.11.1 \
+                  -fsS "http://${name}:8080/actuator/health/readiness" >/dev/null; then
+                  echo "${name} is healthy"
+                  return 0
+                fi
+
+                echo "Waiting for ${name} readiness... (${attempt}/30)"
+                sleep 2
+              done
+
+              echo "${name} failed readiness check"
+              sudo docker logs "$name" || true
+              sudo docker rm -f "$name" || true
+              return 1
+            }
+
+            deploy_backend() {
+              name="$1"
+              new_name="${name}-new"
+
+              sudo docker rm -f "$new_name" || true
+
+              sudo docker run -d \
+                --name "$new_name" \
+                --restart unless-stopped \
+                --network app-data_default \
+                --env-file /dockerProjects/app-data/.env \
+                "$IMAGE"
+            
+              sudo docker inspect "$new_name" \
+               --format='Container Image={{.Image}}'
+
+              wait_for_health "$new_name"
+
+              sudo docker rm -f "$name" || true
+              sudo docker rename "$new_name" "$name"
+            
+              if sudo docker ps --format '{{.Names}}' | grep -q '^nginx-lb$'; then
+                sudo docker exec nginx-lb nginx -s reload
+              fi
+            }
+
+            sudo docker login ghcr.io \
+              -u ${{ secrets.GHCR_USERNAME }} \
+              -p ${{ secrets.GHCR_TOKEN }}
+
+            sudo docker pull "$IMAGE"
+            
+            echo "=== IMAGE INFO ==="
+            
+            sudo docker images | grep team10-backend
+            
+            sudo docker inspect "$IMAGE" \
+            --format='Image={{.Id}}
+            RepoDigests={{json .RepoDigests}}'
+            
+            echo "=================="
+
+            deploy_backend backend-1
+            deploy_backend backend-2
+            
+            sudo docker compose \
+              --env-file /dockerProjects/app-data/.env \
+              -f /dockerProjects/app-data/docker-compose.yml \
+              up -d nginx-lb
+
+            sudo docker image prune -f

@@ -1,0 +1,59 @@
+#!/bin/bash
+set -e
+
+dnf update -y
+dnf install -y docker
+
+systemctl enable docker
+systemctl start docker
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=4096
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+fi
+
+mkdir -p /dockerProjects/app-data
+mkdir -p /dockerProjects/mysql/data
+mkdir -p /dockerProjects/redis/data
+mkdir -p /dockerProjects/nginx-lb
+
+cat > /dockerProjects/app-data/docker-compose.yml <<'COMPOSE'
+${compose_yml}
+COMPOSE
+
+cat > /dockerProjects/app-data/.env <<'ENV'
+MYSQL_ROOT_PASSWORD=${mysql_root_password}
+REDIS_PASSWORD=${redis_password}
+ENV
+
+cat > /dockerProjects/nginx-lb/default.conf <<'NGINX'
+upstream spring_backend {
+    server backend-1:8080 max_fails=1 fail_timeout=5s;
+    server backend-2:8080 max_fails=1 fail_timeout=5s;
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://spring_backend;
+
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
+
+docker compose --env-file /dockerProjects/app-data/.env -f /dockerProjects/app-data/docker-compose.yml up -d

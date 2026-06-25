@@ -1,0 +1,26 @@
+{
+  "name": "nbe9-11-4-team10",
+  "version": "1.0.0",
+  "description": "- `main`: 배포 브랜치 - `develop`: 개발 통합 브랜치",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prgrms-be-devcourse/NBE9-11-4-Team10.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/prgrms-be-devcourse/NBE9-11-4-Team10/issues"
+  },
+  "homepage": "https://github.com/prgrms-be-devcourse/NBE9-11-4-Team10#readme",
+  "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "husky": "^9.1.7"
+  }
+}
