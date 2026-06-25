@@ -139,6 +139,9 @@ jobs:
                 --network app-data_default \
                 --env-file /dockerProjects/app-data/.env \
                 "$IMAGE"
+            
+              sudo docker inspect "$new_name" \
+               --format='Container Image={{.Image}}'
 
               wait_for_health "$new_name"
 
@@ -155,6 +158,16 @@ jobs:
               -p ${{ secrets.GHCR_TOKEN }}
 
             sudo docker pull "$IMAGE"
+            
+            echo "=== IMAGE INFO ==="
+            
+            sudo docker images | grep team10-backend
+            
+            sudo docker inspect "$IMAGE" \
+            --format='Image={{.Id}}
+            RepoDigests={{json .RepoDigests}}'
+            
+            echo "=================="
 
             deploy_backend backend-1
             deploy_backend backend-2
