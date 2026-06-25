@@ -11,8 +11,3 @@ out
 .DS_Store
 
 *.log
-
-.env
-.env.*
-
-**/application-secret.yml
