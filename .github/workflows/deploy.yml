@@ -92,17 +92,13 @@ jobs:
           echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
 
       - name: Deploy
-        uses: peterkimzz/aws-ssm-send-command@v1
-        with:
-          aws-region: ${{ secrets.AWS_REGION }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-          instance-ids: ${{ env.INSTANCE_ID }}
-
-          command: |
-            export GHCR_USERNAME="${{ secrets.GHCR_USERNAME }}"
-            export GHCR_TOKEN="${{ secrets.GHCR_TOKEN }}"
-
-            bash /dockerProjects/app-data/deploy.sh \
-              ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ env.INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy backend" \
+            --parameters 'commands=[
+              "export GHCR_USERNAME=\"${{ secrets.GHCR_USERNAME }}\"",
+              "export GHCR_TOKEN=\"${{ secrets.GHCR_TOKEN }}\"",
+              "bash /dockerProjects/app-data/deploy.sh ghcr.io/${{ github.repository_owner }}/team10-backend:${{ github.sha }}"
+            ]'
