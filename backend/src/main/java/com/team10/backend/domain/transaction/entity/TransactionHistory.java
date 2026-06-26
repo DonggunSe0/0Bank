@@ -27,7 +27,7 @@ public class TransactionHistory extends BaseEntity {
     private Transfer transfer;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private TransactionType type; // 거래 원인 [ MVP 상에서는 계좌 이체 & 입금 ]
 
     @Enumerated(EnumType.STRING)
@@ -153,8 +153,52 @@ public class TransactionHistory extends BaseEntity {
         history.transactedAt = transactedAt;
         return history;
     }
+
+    public static TransactionHistory createSavingDepositSignup(
+            Account account,
+            TransactionDirection direction,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        return createSavingHistory(
+                account,
+                TransactionType.SAVING_DEPOSIT_SIGNUP,
+                direction,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+    }
+
+    public static TransactionHistory createSavingInstallmentSignup(
+            Account account,
+            TransactionDirection direction,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        return createSavingHistory(
+                account,
+                TransactionType.SAVING_INSTALLMENT_SIGNUP,
+                direction,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+    }
+
     public static TransactionHistory createSavingCancelRefund(
             Account account,
+            TransactionDirection direction,
             Long amount,
             Long balanceBefore,
             Long balanceAfter,
@@ -165,7 +209,7 @@ public class TransactionHistory extends BaseEntity {
         history.account = account;
         history.transfer = null;
         history.type = TransactionType.SAVING_CANCEL_REFUND;
-        history.direction = TransactionDirection.IN;
+        history.direction = direction;
         history.amount = amount;
         history.balanceBefore = balanceBefore;
         history.balanceAfter = balanceAfter;
@@ -178,6 +222,7 @@ public class TransactionHistory extends BaseEntity {
 
     public static TransactionHistory createSavingMaturityPayout(
             Account account,
+            TransactionDirection direction,
             Long amount,
             Long balanceBefore,
             Long balanceAfter,
@@ -188,7 +233,7 @@ public class TransactionHistory extends BaseEntity {
         history.account = account;
         history.transfer = null;
         history.type = TransactionType.SAVING_MATURITY;
-        history.direction = TransactionDirection.IN;
+        history.direction = direction;
         history.amount = amount;
         history.balanceBefore = balanceBefore;
         history.balanceAfter = balanceAfter;
@@ -201,6 +246,7 @@ public class TransactionHistory extends BaseEntity {
 
     public static TransactionHistory createInstallmentPayment(
             Account account,
+            TransactionDirection direction,
             Long amount,
             Long balanceBefore,
             Long balanceAfter,
@@ -211,7 +257,32 @@ public class TransactionHistory extends BaseEntity {
         history.account = account;
         history.transfer = null;
         history.type = TransactionType.INSTALLMENT_PAYMENT;
-        history.direction = TransactionDirection.OUT;
+        history.direction = direction;
+        history.amount = amount;
+        history.balanceBefore = balanceBefore;
+        history.balanceAfter = balanceAfter;
+        history.counterpartyAccountNumber = null;
+        history.counterpartyName = null;
+        history.memo = memo;
+        history.transactedAt = transactedAt;
+        return history;
+    }
+
+    private static TransactionHistory createSavingHistory(
+            Account account,
+            TransactionType type,
+            TransactionDirection direction,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory history = new TransactionHistory();
+        history.account = account;
+        history.transfer = null;
+        history.type = type;
+        history.direction = direction;
         history.amount = amount;
         history.balanceBefore = balanceBefore;
         history.balanceAfter = balanceAfter;

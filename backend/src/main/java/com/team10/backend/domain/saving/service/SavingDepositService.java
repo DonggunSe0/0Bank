@@ -3,6 +3,8 @@ package com.team10.backend.domain.saving.service;
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
+import com.team10.backend.domain.account.type.AccountType;
+import com.team10.backend.domain.account.util.AccountNumberGenerator;
 import com.team10.backend.domain.saving.dto.req.*;
 import com.team10.backend.domain.saving.dto.res.*;
 import com.team10.backend.domain.saving.entity.Deposit;
@@ -17,6 +19,7 @@ import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.domain.saving.type.SavingProductType;
 import com.team10.backend.domain.transaction.entity.TransactionHistory;
 import com.team10.backend.domain.transaction.repository.TransactionHistoryRepository;
+import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
@@ -40,8 +43,17 @@ public class SavingDepositService {
     private static final int MONTHS_IN_YEAR = 12;
     private static final int PERCENT_DIVISOR = 100;
     private static final int EARLY_CANCEL_INTEREST_RATE_DIVISOR = 2;
+    private static final int MAX_ACCOUNT_NUMBER_GENERATION_RETRY = 10;
+    private static final String DEPOSIT_ACCOUNT_NICKNAME = "예금 계좌";
+    private static final String INSTALLMENT_ACCOUNT_NICKNAME = "적금 계좌";
+    private static final String DEPOSIT_SIGNUP_WITHDRAW_MEMO = "예금 가입 출금";
+    private static final String DEPOSIT_SIGNUP_DEPOSIT_MEMO = "예금 계좌 입금";
+    private static final String INSTALLMENT_SIGNUP_WITHDRAW_MEMO = "적금 가입 1회차 출금";
+    private static final String INSTALLMENT_SIGNUP_DEPOSIT_MEMO = "적금 계좌 1회차 입금";
     private static final String DEPOSIT_CANCEL_REFUND_MEMO = "예금 중도 해지 반환";
     private static final String INSTALLMENT_CANCEL_REFUND_MEMO = "적금 중도 해지 반환";
+    private static final String DEPOSIT_CANCEL_WITHDRAW_MEMO = "예금 중도 해지 출금";
+    private static final String INSTALLMENT_CANCEL_WITHDRAW_MEMO = "적금 중도 해지 출금";
 
     private final TransactionHistoryRepository transactionHistoryRepository;
     private final DepositRepository depositRepository;
@@ -54,35 +66,32 @@ public class SavingDepositService {
 
     @Transactional
     public DepositCreateRes createDeposit(Long userId, DepositCreateReq request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(AccountErrorCode.USER_NOT_FOUND));
+        User user = findUser(userId);
+        SavingProduct savingProduct = findActiveSavingProduct(request.productId(), SavingProductType.DEPOSIT);
+        Account withdrawAccount = findActiveWithdrawAccountForUpdate(request.withdrawAccountId(), userId);
 
-        SavingProduct savingProduct = savingProductRepository
-                .findByIdAndTypeAndActiveTrue(request.productId(),
-                        SavingProductType.DEPOSIT)
-                .orElseThrow(() -> new BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
-
-        Account withdrawAccount = accountRepository
-                .findByIdAndUserId(request.withdrawAccountId(), userId)
-                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
-
-        if (!withdrawAccount.isActive()) {
-            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
-        }
-
-        if (request.amount() < savingProduct.getMinAmount()) {
-            throw new BusinessException(SavingErrorCode.INVALID_DEPOSIT_AMOUNT);
-        }
-
-        if (savingProduct.getMaxAmount() != null
-                && request.amount() > savingProduct.getMaxAmount()) {
-            throw new BusinessException(SavingErrorCode.INVALID_DEPOSIT_AMOUNT);
-        }
+        validateDepositAmount(request.amount(), savingProduct);
 
         LocalDate maturityDate = LocalDate.now(clock)
                 .plusMonths(savingProduct.getPeriodMonth());
 
+        Long withdrawBalanceBefore = withdrawAccount.getBalance();
         withdrawAccount.withdraw(request.amount());
+        Long withdrawBalanceAfter = withdrawAccount.getBalance();
+
+        Account savingAccount = createSavingAccount(
+                user,
+                DEPOSIT_ACCOUNT_NICKNAME,
+                AccountType.SAVING_DEPOSIT,
+                request.amount()
+        );
+        saveDepositSignupHistories(
+                withdrawAccount,
+                savingAccount,
+                request.amount(),
+                withdrawBalanceBefore,
+                withdrawBalanceAfter
+        );
 
         // 원금 × 연이율 × 가입개월수 ÷ 1년 개월수 ÷ 퍼센트 변환값
         Long expectedInterest = (long) (
@@ -97,6 +106,7 @@ public class SavingDepositService {
                 user,
                 savingProduct,
                 withdrawAccount,
+                savingAccount,
                 request.amount(),
                 savingProduct.getInterestRate(),
                 maturityDate,
@@ -110,48 +120,39 @@ public class SavingDepositService {
 
     @Transactional
     public InstallmentCreateRes createInstallment(Long userId, InstallmentCreateReq request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(AccountErrorCode.USER_NOT_FOUND));
+        User user = findUser(userId);
+        SavingProduct savingProduct = findActiveSavingProduct(request.productId(), SavingProductType.INSTALLMENT);
+        Account withdrawAccount = findActiveWithdrawAccountForUpdate(request.withdrawAccountId(), userId);
 
-        SavingProduct savingProduct = savingProductRepository
-                .findByIdAndTypeAndActiveTrue(request.productId(),
-                        SavingProductType.INSTALLMENT)
-                .orElseThrow(() -> new BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
-
-        Account withdrawAccount = accountRepository
-                .findByIdAndUserId(request.withdrawAccountId(), userId)
-                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
-
-        if (!withdrawAccount.isActive()) {
-            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
-        }
-
-        if (request.monthlyAmount() < savingProduct.getMinAmount()) {
-            throw new BusinessException(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
-        }
-
-        if (savingProduct.getMonthlyLimit() != null
-                && request.monthlyAmount() > savingProduct.getMonthlyLimit()) {
-            throw new BusinessException(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
-        }
-
-        Long expectedTargetAmount =
-                request.monthlyAmount() * savingProduct.getPeriodMonth();
-
-        if (!request.targetAmount().equals(expectedTargetAmount)) {
-            throw new BusinessException(SavingErrorCode.INVALID_TARGET_AMOUNT);
-        }
+        validateInstallmentAmount(request.monthlyAmount(), request.targetAmount(), savingProduct);
 
         LocalDate maturityDate = LocalDate.now(clock)
                 .plusMonths(savingProduct.getPeriodMonth());
 
         // 적금 가입할 때 출금 계좌에서 1회차 월 납입액을 빼는 코드
+        Long withdrawBalanceBefore = withdrawAccount.getBalance();
         withdrawAccount.withdraw(request.monthlyAmount());
+        Long withdrawBalanceAfter = withdrawAccount.getBalance();
+
+        Account savingAccount = createSavingAccount(
+                user,
+                INSTALLMENT_ACCOUNT_NICKNAME,
+                AccountType.SAVING_INSTALLMENT,
+                request.monthlyAmount()
+        );
+        saveInstallmentSignupHistories(
+                withdrawAccount,
+                savingAccount,
+                request.monthlyAmount(),
+                withdrawBalanceBefore,
+                withdrawBalanceAfter
+        );
 
         Installment installment = Installment.create(
                 user,
                 savingProduct,
                 withdrawAccount,
+                savingAccount,
                 request.monthlyAmount(),
                 request.targetAmount(),
                 savingProduct.getInterestRate(),
@@ -162,6 +163,64 @@ public class SavingDepositService {
         Installment savedInstallment = installmentRepository.save(installment);
 
         return InstallmentCreateRes.from(savedInstallment);
+    }
+
+
+    private User findUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.USER_NOT_FOUND));
+    }
+
+    private SavingProduct findActiveSavingProduct(Long productId, SavingProductType type) {
+        return savingProductRepository.findByIdAndTypeAndActiveTrue(productId, type)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
+    }
+
+    private Account findActiveWithdrawAccountForUpdate(Long accountId, Long userId) {
+        Account withdrawAccount = accountRepository.findByIdAndUserIdForUpdate(accountId, userId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (!withdrawAccount.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        if (!withdrawAccount.getAccountType().canTransferOut()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
+        }
+
+        return withdrawAccount;
+    }
+
+    private void validateDepositAmount(Long amount, SavingProduct savingProduct) {
+        if (amount < savingProduct.getMinAmount()) {
+            throw new BusinessException(SavingErrorCode.INVALID_DEPOSIT_AMOUNT);
+        }
+
+        if (savingProduct.getMaxAmount() != null
+                && amount > savingProduct.getMaxAmount()) {
+            throw new BusinessException(SavingErrorCode.INVALID_DEPOSIT_AMOUNT);
+        }
+    }
+
+    private void validateInstallmentAmount(
+            Long monthlyAmount,
+            Long targetAmount,
+            SavingProduct savingProduct
+    ) {
+        if (monthlyAmount < savingProduct.getMinAmount()) {
+            throw new BusinessException(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
+        }
+
+        if (savingProduct.getMonthlyLimit() != null
+                && monthlyAmount > savingProduct.getMonthlyLimit()) {
+            throw new BusinessException(SavingErrorCode.INVALID_INSTALLMENT_AMOUNT);
+        }
+
+        Long expectedTargetAmount = monthlyAmount * savingProduct.getPeriodMonth();
+
+        if (!targetAmount.equals(expectedTargetAmount)) {
+            throw new BusinessException(SavingErrorCode.INVALID_TARGET_AMOUNT);
+        }
     }
 
     public List<DepositSummaryRes> getDeposits(Long userId, DepositStatus status) {
@@ -218,73 +277,15 @@ public class SavingDepositService {
             SavingProductType savingType
     ) {
         if (savingType == SavingProductType.DEPOSIT) {
-            // 예금 조회
-            Deposit deposit = depositRepository.findByIdAndUserIdWithProduct(savingId, userId)
-                    .orElseThrow(() -> new
-                            BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
-            // 총 수령액 계산
-            Long expectedTotalAmount = deposit.getPrincipal() + deposit.getExpectedInterest();
-
-            return InterestPreviewRes.fromDeposit(deposit, expectedTotalAmount);
+            return getDepositInterestPreview(userId, savingId);
         }
 
         if (savingType == SavingProductType.INSTALLMENT) {
-            // 적금 조회
-            Installment installment = installmentRepository.findByIdAndUserIdWithProduct(savingId, userId)
-                    .orElseThrow(() -> new
-                            BusinessException(SavingErrorCode.INSTALLMENT_NOT_FOUND));
-
-            Long expectedInterest = calculateInstallmentExpectedInterest(installment);
-
-            Long expectedTotalAmount =
-                    installment.getTargetAmount() + expectedInterest; // 만기 예상 수령액 = 목표 금액 + 예상 이자
-
-
-            return InterestPreviewRes.fromInstallment(installment, expectedInterest, expectedTotalAmount);
-        }
-
-        // 이상한 타입이면 예외
-        throw new BusinessException(SavingErrorCode.INVALID_SAVING_TYPE);
-    }
-
-    @Transactional
-    public WithdrawalLockRes updateWithdrawalLock(
-            Long userId,
-            Long savingId,
-            WithdrawalLockReq request
-    ) {
-        if (Boolean.FALSE.equals(request.lockYn()) && (request.reason() == null ||
-                request.reason().isBlank())) {
-
-            throw new
-                    BusinessException(SavingErrorCode.WITHDRAWAL_UNLOCK_REASON_REQUIRED);
-        }
-
-        if (request.savingType() == SavingProductType.DEPOSIT) {
-            Deposit deposit = depositRepository.findByIdAndUserIdWithProduct(savingId,
-                            userId)
-                    .orElseThrow(() -> new
-                            BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
-
-            deposit.updateWithdrawalLock(request.lockYn(), request.reason());
-
-            return WithdrawalLockRes.fromDeposit(deposit);
-        }
-
-        if (request.savingType() == SavingProductType.INSTALLMENT) {
-            Installment installment =
-                    installmentRepository.findByIdAndUserIdWithProduct(savingId, userId)
-                            .orElseThrow(() -> new
-                                    BusinessException(SavingErrorCode.INSTALLMENT_NOT_FOUND));
-
-            installment.updateWithdrawalLock(request.lockYn(), request.reason());
-
-            return WithdrawalLockRes.fromInstallment(installment);
+            return getInstallmentInterestPreview(userId, savingId);
         }
 
         throw new BusinessException(SavingErrorCode.INVALID_SAVING_TYPE);
     }
-
 
     @Transactional
     public EarlyCancelRes cancelSaving(
@@ -293,97 +294,258 @@ public class SavingDepositService {
             EarlyCancelReq request
     ) {
         if (request.savingType() == SavingProductType.DEPOSIT) {
-            Deposit deposit =
-                    depositRepository.findByIdAndUserIdWithAccountForUpdate(savingId, userId)
-                            .orElseThrow(() -> new
-                                    BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
-
-            if (deposit.getStatus() != DepositStatus.ACTIVE) {
-                throw new
-                        BusinessException(SavingErrorCode.SAVING_CANCEL_NOT_ALLOWED);
-            }
-
-            if (deposit.isWithdrawalLocked()) {
-                throw new BusinessException(SavingErrorCode.SAVING_WITHDRAWAL_LOCKED);
-            }
-
-            Long interestAmount =
-                    calculateDepositEarlyCancelInterest(deposit);
-
-            Long refundAmount =
-                    deposit.getPrincipal() + interestAmount;
-
-            Account withdrawAccount = deposit.getWithdrawAccount(); // 반환금을 받을 연결 계좌
-            Long balanceBefore = withdrawAccount.getBalance(); // 입금 전 계좌 잔액
-
-            withdrawAccount.deposit(refundAmount); // 중도 해지 반환금 입금
-
-            Long balanceAfter = withdrawAccount.getBalance(); // 입금 후 계좌 잔액
-
-            TransactionHistory transactionHistory =
-                    TransactionHistory.createSavingCancelRefund(
-                            withdrawAccount,
-                            refundAmount,
-                            balanceBefore,
-                            balanceAfter,
-                            DEPOSIT_CANCEL_REFUND_MEMO,
-                            LocalDateTime.now(clock)
-                    );
-
-            transactionHistoryRepository.save(transactionHistory);
-
-            deposit.cancel();
-
-            return EarlyCancelRes.fromDeposit(deposit, interestAmount, refundAmount);
+            return cancelDeposit(userId, savingId);
         }
 
         if (request.savingType() == SavingProductType.INSTALLMENT) {
-            Installment installment =
-                    installmentRepository.findByIdAndUserIdWithAccountForUpdate(savingId,
-                                    userId)
-                            .orElseThrow(() -> new
-                                    BusinessException(SavingErrorCode.INSTALLMENT_NOT_FOUND)
-                            );
-
-            if (installment.getStatus() != InstallmentStatus.ACTIVE) {
-                throw new
-                        BusinessException(SavingErrorCode.SAVING_CANCEL_NOT_ALLOWED);
-            }
-
-            if (installment.isWithdrawalLocked()) {
-                throw new BusinessException(SavingErrorCode.SAVING_WITHDRAWAL_LOCKED);
-            }
-
-            Long interestAmount = calculateInstallmentEarlyCancelInterest(installment);
-
-            Long refundAmount =
-                    installment.getPaidAmount() + interestAmount;
-
-            Account withdrawAccount = installment.getWithdrawAccount(); // 반환금을 받을 연결 계좌
-            Long balanceBefore = withdrawAccount.getBalance(); // 입금 전 계좌 잔액
-
-            withdrawAccount.deposit(refundAmount); // 중도 해지 반환금 입금
-
-            Long balanceAfter = withdrawAccount.getBalance(); // 입금 후 계좌 잔액
-
-            TransactionHistory transactionHistory =
-                    TransactionHistory.createSavingCancelRefund(
-                            withdrawAccount,
-                            refundAmount,
-                            balanceBefore,
-                            balanceAfter,
-                            INSTALLMENT_CANCEL_REFUND_MEMO,
-                            LocalDateTime.now(clock)
-                    );
-
-            transactionHistoryRepository.save(transactionHistory);
-
-            installment.cancel();
-
-            return EarlyCancelRes.fromInstallment(installment, interestAmount, refundAmount);
+            return cancelInstallment(userId, savingId);
         }
 
         throw new BusinessException(SavingErrorCode.INVALID_SAVING_TYPE);
+    }
+
+    private InterestPreviewRes getDepositInterestPreview(Long userId, Long savingId) {
+        Deposit deposit = findDepositWithProduct(userId, savingId);
+        Long expectedTotalAmount = deposit.getPrincipal() + deposit.getExpectedInterest();
+
+        return InterestPreviewRes.fromDeposit(deposit, expectedTotalAmount);
+    }
+
+    private InterestPreviewRes getInstallmentInterestPreview(Long userId, Long savingId) {
+        Installment installment = findInstallmentWithProduct(userId, savingId);
+        Long expectedInterest = calculateInstallmentExpectedInterest(installment);
+        Long expectedTotalAmount = installment.getTargetAmount() + expectedInterest;
+
+        return InterestPreviewRes.fromInstallment(installment, expectedInterest, expectedTotalAmount);
+    }
+
+
+    private EarlyCancelRes cancelDeposit(Long userId, Long savingId) {
+        Deposit deposit = depositRepository.findByIdAndUserIdWithAccountForUpdate(savingId, userId)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
+
+        validateDepositCancelable(deposit);
+
+        Long interestAmount = calculateDepositEarlyCancelInterest(deposit);
+        Long refundAmount = deposit.getPrincipal() + interestAmount;
+
+        Account savingAccount = deposit.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, deposit.getPrincipal());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveCancelWithdrawHistory(
+                savingAccount,
+                deposit.getPrincipal(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                DEPOSIT_CANCEL_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveCancelRefundHistory(deposit.getWithdrawAccount(), refundAmount, DEPOSIT_CANCEL_REFUND_MEMO, transactedAt);
+        deposit.cancel();
+
+        return EarlyCancelRes.fromDeposit(deposit, interestAmount, refundAmount);
+    }
+
+    private EarlyCancelRes cancelInstallment(Long userId, Long savingId) {
+        Installment installment = installmentRepository.findByIdAndUserIdWithAccountForUpdate(savingId, userId)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.INSTALLMENT_NOT_FOUND));
+
+        validateInstallmentCancelable(installment);
+
+        Long interestAmount = calculateInstallmentEarlyCancelInterest(installment);
+        Long refundAmount = installment.getPaidAmount() + interestAmount;
+
+        Account savingAccount = installment.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, installment.getPaidAmount());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveCancelWithdrawHistory(
+                savingAccount,
+                installment.getPaidAmount(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                INSTALLMENT_CANCEL_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveCancelRefundHistory(
+                installment.getWithdrawAccount(),
+                refundAmount,
+                INSTALLMENT_CANCEL_REFUND_MEMO,
+                transactedAt
+        );
+        installment.cancel();
+
+        return EarlyCancelRes.fromInstallment(installment, interestAmount, refundAmount);
+    }
+
+    private Deposit findDepositWithProduct(Long userId, Long depositId) {
+        return depositRepository.findByIdAndUserIdWithProduct(depositId, userId)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.DEPOSIT_NOT_FOUND));
+    }
+
+    private Installment findInstallmentWithProduct(Long userId, Long installmentId) {
+        return installmentRepository.findByIdAndUserIdWithProduct(installmentId, userId)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.INSTALLMENT_NOT_FOUND));
+    }
+
+    private void validateDepositCancelable(Deposit deposit) {
+        if (deposit.getStatus() != DepositStatus.ACTIVE) {
+            throw new BusinessException(SavingErrorCode.SAVING_CANCEL_NOT_ALLOWED);
+        }
+    }
+
+    private void validateInstallmentCancelable(Installment installment) {
+        if (installment.getStatus() != InstallmentStatus.ACTIVE) {
+            throw new BusinessException(SavingErrorCode.SAVING_CANCEL_NOT_ALLOWED);
+        }
+    }
+
+    private void closeSavingAccount(Account savingAccount, Long amount) {
+        savingAccount.withdraw(amount);
+        if (!savingAccount.getBalance().equals(0L)) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_BALANCE_NOT_ZERO);
+        }
+        savingAccount.close();
+    }
+
+    private void saveDepositSignupHistories(
+            Account withdrawAccount,
+            Account savingAccount,
+            Long amount,
+            Long withdrawBalanceBefore,
+            Long withdrawBalanceAfter
+    ) {
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        transactionHistoryRepository.save(TransactionHistory.createSavingDepositSignup(
+                withdrawAccount,
+                TransactionDirection.OUT,
+                amount,
+                withdrawBalanceBefore,
+                withdrawBalanceAfter,
+                DEPOSIT_SIGNUP_WITHDRAW_MEMO,
+                transactedAt
+        ));
+        transactionHistoryRepository.save(TransactionHistory.createSavingDepositSignup(
+                savingAccount,
+                TransactionDirection.IN,
+                amount,
+                0L,
+                savingAccount.getBalance(),
+                DEPOSIT_SIGNUP_DEPOSIT_MEMO,
+                transactedAt
+        ));
+    }
+
+    private void saveInstallmentSignupHistories(
+            Account withdrawAccount,
+            Account savingAccount,
+            Long amount,
+            Long withdrawBalanceBefore,
+            Long withdrawBalanceAfter
+    ) {
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        transactionHistoryRepository.save(TransactionHistory.createSavingInstallmentSignup(
+                withdrawAccount,
+                TransactionDirection.OUT,
+                amount,
+                withdrawBalanceBefore,
+                withdrawBalanceAfter,
+                INSTALLMENT_SIGNUP_WITHDRAW_MEMO,
+                transactedAt
+        ));
+        transactionHistoryRepository.save(TransactionHistory.createSavingInstallmentSignup(
+                savingAccount,
+                TransactionDirection.IN,
+                amount,
+                0L,
+                savingAccount.getBalance(),
+                INSTALLMENT_SIGNUP_DEPOSIT_MEMO,
+                transactedAt
+        ));
+    }
+
+    private void saveCancelWithdrawHistory(
+            Account savingAccount,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory transactionHistory = TransactionHistory.createSavingCancelRefund(
+                savingAccount,
+                TransactionDirection.OUT,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+
+        transactionHistoryRepository.save(transactionHistory);
+    }
+
+    private void saveCancelRefundHistory(
+            Account withdrawAccount,
+            Long refundAmount,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        if (!withdrawAccount.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        Long balanceBefore = withdrawAccount.getBalance();
+        withdrawAccount.deposit(refundAmount);
+        Long balanceAfter = withdrawAccount.getBalance();
+
+        TransactionHistory transactionHistory = TransactionHistory.createSavingCancelRefund(
+                withdrawAccount,
+                TransactionDirection.IN,
+                refundAmount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+
+        transactionHistoryRepository.save(transactionHistory);
+    }
+
+    private Account createSavingAccount(
+            User user,
+            String nickname,
+            AccountType accountType,
+            Long initialBalance
+    ) {
+        Account savingAccount = Account.create(
+                user,
+                generateUniqueAccountNumber(),
+                nickname,
+                accountType
+        );
+        savingAccount.deposit(initialBalance);
+
+        return accountRepository.save(savingAccount);
+    }
+
+    private String generateUniqueAccountNumber() {
+        for (int i = 0; i < MAX_ACCOUNT_NUMBER_GENERATION_RETRY; i++) {
+            String accountNumber = AccountNumberGenerator.generate();
+
+            if (!accountRepository.existsByAccountNumber(accountNumber)) {
+                return accountNumber;
+            }
+        }
+
+        throw new BusinessException(AccountErrorCode.ACCOUNT_NUMBER_GENERATION_FAILED);
     }
 
     private Long calculateDepositEarlyCancelInterest(Deposit deposit) {

@@ -87,6 +87,34 @@ class AccountServiceTest {
     }
 
     @Test
+    @DisplayName("일반 계좌 개설 API에서는 예금 계좌 타입을 생성할 수 없다")
+    void createAccountWithSavingDepositType() {
+        AccountCreateReq request = createAccountCreateReq("예금 계좌", AccountType.SAVING_DEPOSIT);
+
+        assertThatThrownBy(() -> accountService.createAccount(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_TYPE);
+
+        verify(userRepository, never()).findById(any(Long.class));
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    @DisplayName("일반 계좌 개설 API에서는 적금 계좌 타입을 생성할 수 없다")
+    void createAccountWithSavingInstallmentType() {
+        AccountCreateReq request = createAccountCreateReq("적금 계좌", AccountType.SAVING_INSTALLMENT);
+
+        assertThatThrownBy(() -> accountService.createAccount(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_TYPE);
+
+        verify(userRepository, never()).findById(any(Long.class));
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 사용자는 계좌를 개설할 수 없다")
     void createAccountWithNotFoundUser() {
         AccountCreateReq request = createAccountCreateReq("생활비 계좌", AccountType.DEPOSIT);

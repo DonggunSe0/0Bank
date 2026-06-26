@@ -55,6 +55,7 @@ public interface InstallmentRepository extends JpaRepository<Installment, Long> 
           select i
           from Installment i
           join fetch i.withdrawAccount
+          join fetch i.savingAccount
           where i.status = :status
           and i.maturityDate <= :today
           """)
@@ -104,6 +105,7 @@ public interface InstallmentRepository extends JpaRepository<Installment, Long> 
         select i
         from Installment i
         join fetch i.withdrawAccount
+        join fetch i.savingAccount
         where i.id = :installmentId
         """)
     Optional<Installment> findByIdWithAccountForUpdate(
@@ -115,6 +117,7 @@ public interface InstallmentRepository extends JpaRepository<Installment, Long> 
           select i
           from Installment i
           join fetch i.withdrawAccount
+          join fetch i.savingAccount
           where i.status = :status
           and i.nextPaymentRetryDate <= :today
           """)
@@ -128,6 +131,7 @@ public interface InstallmentRepository extends JpaRepository<Installment, Long> 
           select i
           from Installment i
           join fetch i.withdrawAccount
+          join fetch i.savingAccount
           where i.status = :status
           and i.autoTransferYn = true
           and i.nextPaymentDate <= :today
@@ -144,6 +148,7 @@ public interface InstallmentRepository extends JpaRepository<Installment, Long> 
           select i
           from Installment i
           join fetch i.withdrawAccount
+          join fetch i.savingAccount
           where i.id = :installmentId
           and i.user.id = :userId
           """)

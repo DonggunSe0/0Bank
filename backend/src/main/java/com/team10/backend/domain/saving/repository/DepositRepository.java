@@ -55,6 +55,7 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
       select d
       from Deposit d
       join fetch d.withdrawAccount
+      join fetch d.savingAccount
       where d.status = :status
       and d.maturityDate <= :today
       """)
@@ -79,6 +80,7 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
         select d
         from Deposit d
         join fetch d.withdrawAccount
+        join fetch d.savingAccount
         where d.id = :depositId
         """)
     Optional<Deposit> findByIdWithAccountForUpdate(
@@ -90,6 +92,7 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
       select d
       from Deposit d
       join fetch d.withdrawAccount
+      join fetch d.savingAccount
       where d.id = :depositId
       and d.user.id = :userId
       """)

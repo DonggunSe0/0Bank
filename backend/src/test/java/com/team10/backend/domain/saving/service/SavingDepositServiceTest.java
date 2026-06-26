@@ -106,7 +106,12 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
                 .thenReturn(Optional.of(depositProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> {
+            Account account = invocation.getArgument(0);
+            ReflectionTestUtils.setField(account, "id", 10L);
+            return account;
+        });
         when(depositRepository.save(any(Deposit.class))).thenAnswer(invocation -> {
             Deposit deposit = invocation.getArgument(0);
             ReflectionTestUtils.setField(deposit, "id", 1L);
@@ -121,6 +126,27 @@ class SavingDepositServiceTest {
         assertThat(response.maturityDate()).isEqualTo(TODAY.plusMonths(12));
         assertThat(response.expectedInterest()).isEqualTo(35000L);
         assertThat(activeAccount.getBalance()).isEqualTo(1000000L);
+
+        ArgumentCaptor<Account> accountCaptor = forClass(Account.class);
+        verify(accountRepository).save(accountCaptor.capture());
+        Account savingAccount = accountCaptor.getValue();
+        assertThat(savingAccount.getAccountType()).isEqualTo(AccountType.SAVING_DEPOSIT);
+        assertThat(savingAccount.getBalance()).isEqualTo(1000000L);
+
+        ArgumentCaptor<TransactionHistory> historyCaptor = forClass(TransactionHistory.class);
+        verify(transactionHistoryRepository, times(2)).save(historyCaptor.capture());
+        List<TransactionHistory> histories = historyCaptor.getAllValues();
+        assertThat(histories.get(0).getType()).isEqualTo(TransactionType.SAVING_DEPOSIT_SIGNUP);
+        assertThat(histories.get(0).getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(histories.get(0).getAmount()).isEqualTo(1000000L);
+        assertThat(histories.get(0).getBalanceBefore()).isEqualTo(2000000L);
+        assertThat(histories.get(0).getBalanceAfter()).isEqualTo(1000000L);
+        assertThat(histories.get(1).getType()).isEqualTo(TransactionType.SAVING_DEPOSIT_SIGNUP);
+        assertThat(histories.get(1).getDirection()).isEqualTo(TransactionDirection.IN);
+        assertThat(histories.get(1).getAmount()).isEqualTo(1000000L);
+        assertThat(histories.get(1).getBalanceBefore()).isZero();
+        assertThat(histories.get(1).getBalanceAfter()).isEqualTo(1000000L);
+
         verify(depositRepository).save(any(Deposit.class));
     }
 
@@ -160,7 +186,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
                 .thenReturn(Optional.of(depositProduct));
-        when(accountRepository.findByIdAndUserId(999L, 1L)).thenReturn(Optional.empty());
+        when(accountRepository.findByIdAndUserIdForUpdate(999L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -177,12 +203,29 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
                 .thenReturn(Optional.of(depositProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(closedAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(closedAccount));
 
         assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+    @Test
+    @DisplayName("입출금계좌가 아닌 계좌로는 예금에 가입할 수 없다")
+    void createDepositWithSavingWithdrawAccount() {
+        DepositCreateReq request = new DepositCreateReq(1L, 1L, 1000000L);
+        Account savingAccount = createSavingAccount(1L, AccountType.SAVING_DEPOSIT, 2000000L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
+                .thenReturn(Optional.of(depositProduct));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(savingAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
     }
 
     @Test
@@ -193,7 +236,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
                 .thenReturn(Optional.of(depositProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -209,7 +252,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
                 .thenReturn(Optional.of(depositProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -226,7 +269,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(1L, SavingProductType.DEPOSIT))
                 .thenReturn(Optional.of(depositProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(insufficientAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(insufficientAccount));
 
         assertThatThrownBy(() -> savingDepositService.createDeposit(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -414,70 +457,8 @@ class SavingDepositServiceTest {
         verify(installmentRepository).findByIdAndUserIdWithProduct(1L, 1L);
     }
 
-    @Test
-    @DisplayName("예금 출금 제한을 설정한다")
-    void updateDepositWithdrawalLock() {
-        Deposit deposit = createDeposit(1L, DepositStatus.ACTIVE);
-        WithdrawalLockReq request = new WithdrawalLockReq(
-                SavingProductType.DEPOSIT,
-                true,
-                "목표 저축을 위해 제한"
-        );
 
-        when(depositRepository.findByIdAndUserIdWithProduct(1L, 1L))
-                .thenReturn(Optional.of(deposit));
 
-        WithdrawalLockRes response =
-                savingDepositService.updateWithdrawalLock(1L, 1L, request);
-
-        assertThat(response.savingId()).isEqualTo(1L);
-        assertThat(response.savingType()).isEqualTo(SavingProductType.DEPOSIT);
-        assertThat(response.lockYn()).isTrue();
-        assertThat(response.reason()).isEqualTo("목표 저축을 위해 제한");
-        assertThat(deposit.isWithdrawalLocked()).isTrue();
-        assertThat(deposit.getWithdrawalLockReason()).isEqualTo("목표 저축을 위해 제한");
-        verify(depositRepository).findByIdAndUserIdWithProduct(1L, 1L);
-    }
-
-    @Test
-    @DisplayName("적금 출금 제한을 설정한다")
-    void updateInstallmentWithdrawalLock() {
-        Installment installment = createInstallment(1L, InstallmentStatus.ACTIVE);
-        WithdrawalLockReq request = new WithdrawalLockReq(
-                SavingProductType.INSTALLMENT,
-                true,
-                "목표 저축을 위해 제한"
-        );
-
-        when(installmentRepository.findByIdAndUserIdWithProduct(1L, 1L))
-                .thenReturn(Optional.of(installment));
-
-        WithdrawalLockRes response =
-                savingDepositService.updateWithdrawalLock(1L, 1L, request);
-
-        assertThat(response.savingId()).isEqualTo(1L);
-        assertThat(response.savingType()).isEqualTo(SavingProductType.INSTALLMENT);
-        assertThat(response.lockYn()).isTrue();
-        assertThat(response.reason()).isEqualTo("목표 저축을 위해 제한");
-        assertThat(installment.isWithdrawalLocked()).isTrue();
-        assertThat(installment.getWithdrawalLockReason()).isEqualTo("목표 저축을 위해 제한");
-        verify(installmentRepository).findByIdAndUserIdWithProduct(1L, 1L);
-    }
-
-    @Test
-    @DisplayName("출금 제한 해제 사유가 없으면 실패한다")
-    void updateWithdrawalLockWithoutUnlockReason() {
-        WithdrawalLockReq request = new WithdrawalLockReq(
-                SavingProductType.DEPOSIT,
-                false,
-                " "
-        );
-
-        assertThatThrownBy(() -> savingDepositService.updateWithdrawalLock(1L, 1L, request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(SavingErrorCode.WITHDRAWAL_UNLOCK_REASON_REQUIRED);
-    }
 
     @Test
     @DisplayName("가입중 예금을 중도 해지한다")
@@ -498,11 +479,22 @@ class SavingDepositServiceTest {
         assertThat(response.refundAmount()).isEqualTo(1008750L);
         assertThat(response.status()).isEqualTo("CANCELLED");
         assertThat(activeAccount.getBalance()).isEqualTo(3008750L);
+        assertThat(deposit.getSavingAccount().getBalance()).isZero();
+        assertThat(deposit.getSavingAccount().getStatus()).isEqualTo(AccountStatus.CLOSED);
         assertThat(deposit.getStatus()).isEqualTo(DepositStatus.CANCELLED);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory savingHistory = histories.get(0);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(savingHistory.getAmount()).isEqualTo(1000000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(1000000L);
+        assertThat(savingHistory.getBalanceAfter()).isZero();
+        assertThat(savingHistory.getMemo()).isEqualTo("예금 중도 해지 출금");
+
+        TransactionHistory history = histories.get(1);
         assertThat(history.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
         assertThat(history.getDirection()).isEqualTo(TransactionDirection.IN);
         assertThat(history.getAmount()).isEqualTo(1008750L);
@@ -531,11 +523,22 @@ class SavingDepositServiceTest {
         assertThat(response.refundAmount()).isEqualTo(100750L);
         assertThat(response.status()).isEqualTo("CANCELLED");
         assertThat(activeAccount.getBalance()).isEqualTo(2100750L);
+        assertThat(installment.getSavingAccount().getBalance()).isZero();
+        assertThat(installment.getSavingAccount().getStatus()).isEqualTo(AccountStatus.CLOSED);
         assertThat(installment.getStatus()).isEqualTo(InstallmentStatus.CANCELLED);
 
         ArgumentCaptor<TransactionHistory> captor = forClass(TransactionHistory.class);
-        verify(transactionHistoryRepository).save(captor.capture());
-        TransactionHistory history = captor.getValue();
+        verify(transactionHistoryRepository, times(2)).save(captor.capture());
+        List<TransactionHistory> histories = captor.getAllValues();
+        TransactionHistory savingHistory = histories.get(0);
+        assertThat(savingHistory.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
+        assertThat(savingHistory.getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(savingHistory.getAmount()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceBefore()).isEqualTo(100000L);
+        assertThat(savingHistory.getBalanceAfter()).isZero();
+        assertThat(savingHistory.getMemo()).isEqualTo("적금 중도 해지 출금");
+
+        TransactionHistory history = histories.get(1);
         assertThat(history.getType()).isEqualTo(TransactionType.SAVING_CANCEL_REFUND);
         assertThat(history.getDirection()).isEqualTo(TransactionDirection.IN);
         assertThat(history.getAmount()).isEqualTo(100750L);
@@ -560,45 +563,7 @@ class SavingDepositServiceTest {
                 .isEqualTo(SavingErrorCode.SAVING_CANCEL_NOT_ALLOWED);
     }
 
-    @Test
-    @DisplayName("출금 제한된 예금은 중도 해지에 실패한다")
-    void cancelDepositWithWithdrawalLock() {
-        Deposit deposit = createDeposit(1L, DepositStatus.ACTIVE);
-        deposit.updateWithdrawalLock(true, "목표 저축을 위해 제한");
-        EarlyCancelReq request = new EarlyCancelReq(SavingProductType.DEPOSIT);
 
-        when(depositRepository.findByIdAndUserIdWithAccountForUpdate(1L, 1L))
-                .thenReturn(Optional.of(deposit));
-
-        assertThatThrownBy(() -> savingDepositService.cancelSaving(1L, 1L, request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(SavingErrorCode.SAVING_WITHDRAWAL_LOCKED);
-
-        assertThat(deposit.getStatus()).isEqualTo(DepositStatus.ACTIVE);
-        assertThat(activeAccount.getBalance()).isEqualTo(2000000L);
-        verify(transactionHistoryRepository, never()).save(any(TransactionHistory.class));
-    }
-
-    @Test
-    @DisplayName("출금 제한된 적금은 중도 해지에 실패한다")
-    void cancelInstallmentWithWithdrawalLock() {
-        Installment installment = createInstallment(1L, InstallmentStatus.ACTIVE);
-        installment.updateWithdrawalLock(true, "목표 저축을 위해 제한");
-        EarlyCancelReq request = new EarlyCancelReq(SavingProductType.INSTALLMENT);
-
-        when(installmentRepository.findByIdAndUserIdWithAccountForUpdate(1L, 1L))
-                .thenReturn(Optional.of(installment));
-
-        assertThatThrownBy(() -> savingDepositService.cancelSaving(1L, 1L, request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(SavingErrorCode.SAVING_WITHDRAWAL_LOCKED);
-
-        assertThat(installment.getStatus()).isEqualTo(InstallmentStatus.ACTIVE);
-        assertThat(activeAccount.getBalance()).isEqualTo(2000000L);
-        verify(transactionHistoryRepository, never()).save(any(TransactionHistory.class));
-    }
 
     @Test
     @DisplayName("만기일이 지난 가입중 예금을 만기 처리한다")
@@ -803,7 +768,12 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> {
+            Account account = invocation.getArgument(0);
+            ReflectionTestUtils.setField(account, "id", 20L);
+            return account;
+        });
         when(installmentRepository.save(any(Installment.class))).thenAnswer(invocation -> {
             Installment installment = invocation.getArgument(0);
             ReflectionTestUtils.setField(installment, "id", 1L);
@@ -817,6 +787,27 @@ class SavingDepositServiceTest {
         assertThat(response.maturityDate()).isEqualTo(TODAY.plusMonths(12));
         assertThat(response.progressRate()).isEqualTo(8L);
         assertThat(activeAccount.getBalance()).isEqualTo(1900000L);
+
+        ArgumentCaptor<Account> accountCaptor = forClass(Account.class);
+        verify(accountRepository).save(accountCaptor.capture());
+        Account savingAccount = accountCaptor.getValue();
+        assertThat(savingAccount.getAccountType()).isEqualTo(AccountType.SAVING_INSTALLMENT);
+        assertThat(savingAccount.getBalance()).isEqualTo(100000L);
+
+        ArgumentCaptor<TransactionHistory> historyCaptor = forClass(TransactionHistory.class);
+        verify(transactionHistoryRepository, times(2)).save(historyCaptor.capture());
+        List<TransactionHistory> histories = historyCaptor.getAllValues();
+        assertThat(histories.get(0).getType()).isEqualTo(TransactionType.SAVING_INSTALLMENT_SIGNUP);
+        assertThat(histories.get(0).getDirection()).isEqualTo(TransactionDirection.OUT);
+        assertThat(histories.get(0).getAmount()).isEqualTo(100000L);
+        assertThat(histories.get(0).getBalanceBefore()).isEqualTo(2000000L);
+        assertThat(histories.get(0).getBalanceAfter()).isEqualTo(1900000L);
+        assertThat(histories.get(1).getType()).isEqualTo(TransactionType.SAVING_INSTALLMENT_SIGNUP);
+        assertThat(histories.get(1).getDirection()).isEqualTo(TransactionDirection.IN);
+        assertThat(histories.get(1).getAmount()).isEqualTo(100000L);
+        assertThat(histories.get(1).getBalanceBefore()).isZero();
+        assertThat(histories.get(1).getBalanceAfter()).isEqualTo(100000L);
+
         verify(installmentRepository).save(any(Installment.class));
     }
 
@@ -856,7 +847,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(999L, 1L)).thenReturn(Optional.empty());
+        when(accountRepository.findByIdAndUserIdForUpdate(999L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -873,12 +864,29 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(closedAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(closedAccount));
 
         assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
+    @Test
+    @DisplayName("입출금계좌가 아닌 계좌로는 적금에 가입할 수 없다")
+    void createInstallmentWithSavingWithdrawAccount() {
+        InstallmentCreateReq request = new InstallmentCreateReq(2L, 1L, 100000L, 1200000L, true);
+        Account savingAccount = createSavingAccount(1L, AccountType.SAVING_INSTALLMENT, 2000000L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
+                .thenReturn(Optional.of(installmentProduct));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(savingAccount));
+
+        assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_TRANSFER_OUT_NOT_ALLOWED);
     }
 
     @Test
@@ -889,7 +897,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -905,7 +913,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -921,7 +929,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(activeAccount));
 
         assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -938,7 +946,7 @@ class SavingDepositServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(savingProductRepository.findByIdAndTypeAndActiveTrue(2L, SavingProductType.INSTALLMENT))
                 .thenReturn(Optional.of(installmentProduct));
-        when(accountRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(insufficientAccount));
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(insufficientAccount));
 
         assertThatThrownBy(() -> savingDepositService.createInstallment(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -971,11 +979,19 @@ class SavingDepositServiceTest {
         return account;
     }
 
+    private Account createSavingAccount(Long id, AccountType accountType, Long balance) {
+        Account account = Account.create(user, "09141234567" + id, "예적금 계좌", accountType);
+        ReflectionTestUtils.setField(account, "id", id);
+        ReflectionTestUtils.setField(account, "balance", balance);
+        return account;
+    }
+
     private Deposit createDeposit(Long id, DepositStatus status) {
         Deposit deposit = Deposit.create(
                 user,
                 depositProduct,
                 activeAccount,
+                createSavingAccount(100L + id, AccountType.SAVING_DEPOSIT, 1000000L),
                 1000000L,
                 3.5,
                 TODAY.plusMonths(12),
@@ -991,6 +1007,7 @@ class SavingDepositServiceTest {
                 user,
                 installmentProduct,
                 activeAccount,
+                createSavingAccount(200L + id, AccountType.SAVING_INSTALLMENT, 100000L),
                 100000L,
                 1200000L,
                 3.0,

@@ -13,6 +13,8 @@ public enum AccountErrorCode implements ErrorCode {
     ACCOUNT_NOT_ACTIVE(HttpStatus.CONFLICT, "활성 계좌가 아닙니다."),
     ACCOUNT_BALANCE_NOT_ZERO(HttpStatus.CONFLICT, "잔액이 0원인 계좌만 해지할 수 있습니다."),
     ACCOUNT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "계좌 접근 권한이 없습니다."),
+    INVALID_ACCOUNT_TYPE(HttpStatus.BAD_REQUEST, "일반 계좌 개설에서는 입출금계좌만 생성할 수 있습니다."),
+    ACCOUNT_TRANSFER_OUT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "입출금계좌만 출금 계좌로 사용할 수 있습니다."),
     IDENTITY_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "본인인증이 필요합니다."),
     ACCOUNT_NUMBER_GENERATION_FAILED(HttpStatus.CONFLICT, "계좌번호 생성에 실패했습니다."),
     ACCOUNT_PASSWORD_NOT_SET(HttpStatus.CONFLICT, "계좌 비밀번호가 설정되지 않았습니다."),

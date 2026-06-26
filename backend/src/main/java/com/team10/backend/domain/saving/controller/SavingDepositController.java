@@ -104,18 +104,6 @@ public class SavingDepositController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "출금 제한 설정", description = "예금 또는 적금의 출금 제한여부와 사유를 설정합니다.")
-    @PostMapping("/{savingId}/withdrawal-lock")
-    public ResponseEntity<WithdrawalLockRes> updateWithdrawalLock(
-            @AuthenticationPrincipal Long userId,
-            @PathVariable Long savingId,
-            @Valid @RequestBody WithdrawalLockReq request
-    ) {
-        WithdrawalLockRes response =
-                savingDepositService.updateWithdrawalLock(userId, savingId, request);
-
-        return ResponseEntity.ok(response);
-    }
 
     @Operation(summary = "중도 해지", description = "가입중 상태의 예금 또는 적금을 중도 해지합니다.")
     @PostMapping("/{savingId}/cancel")

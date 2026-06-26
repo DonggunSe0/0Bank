@@ -11,10 +11,20 @@ public record TransactionHistoryDetailRes(
         @Schema(description = "거래내역 ID")
         Long transactionHistoryId,
 
-        @Schema(
-                description = "거래 유형",
-                allowableValues = {"DEPOSIT", "TRANSFER", "PAYMENT"}
-        )
+	        @Schema(
+	                description = "거래 유형",
+	                allowableValues = {
+	                        "DEPOSIT",
+	                        "TRANSFER",
+	                        "PAYMENT",
+	                        "EXCHANGE",
+	                        "SAVING_DEPOSIT_SIGNUP",
+	                        "SAVING_INSTALLMENT_SIGNUP",
+	                        "SAVING_CANCEL_REFUND",
+	                        "SAVING_MATURITY",
+	                        "INSTALLMENT_PAYMENT"
+	                }
+	        )
         TransactionType type,
 
         @Schema(description = "입출금 방향", allowableValues = {"IN", "OUT"})

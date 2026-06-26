@@ -31,6 +31,10 @@ public class Installment extends BaseEntity {
     @JoinColumn(name = "withdraw_account_id", nullable = false)
     private Account withdrawAccount; // 출금 계좌
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "saving_account_id", nullable = false)
+    private Account savingAccount; // 적금 전용 계좌
+
     @Column(nullable = false)
     private Long monthlyAmount; // 매달 납입할 금액
 
@@ -57,12 +61,6 @@ public class Installment extends BaseEntity {
     private InstallmentStatus status; // 적금 상태
 
     @Column(nullable = false)
-    private boolean withdrawalLocked; // 출금 제한 여부
-
-    @Column(length = 255)
-    private String withdrawalLockReason; // 출금 제한 사유
-
-    @Column(nullable = false)
     private int paymentRetryCount; // 자동이체 실패/재시도 횟수
 
     @Column
@@ -78,6 +76,7 @@ public class Installment extends BaseEntity {
             User user,
             SavingProduct savingProduct,
             Account withdrawAccount,
+            Account savingAccount,
             Long monthlyAmount,
             Long targetAmount,
             Double interestRate,
@@ -88,6 +87,7 @@ public class Installment extends BaseEntity {
         installment.user = user;
         installment.savingProduct = savingProduct;
         installment.withdrawAccount = withdrawAccount;
+        installment.savingAccount = savingAccount;
         installment.monthlyAmount = monthlyAmount;
         installment.targetAmount = targetAmount;
         installment.paidAmount = monthlyAmount; // 가입 시 1회차 납입금
@@ -96,8 +96,6 @@ public class Installment extends BaseEntity {
         installment.maturityDate = maturityDate;
         installment.autoTransferYn = autoTransferYn;
         installment.status = InstallmentStatus.ACTIVE;
-        installment.withdrawalLocked = false;
-        installment.withdrawalLockReason = null;
         installment.paymentRetryCount = 0;
         installment.nextPaymentRetryDate = null;
         installment.lastPaymentFailedDate = null;
@@ -109,10 +107,6 @@ public class Installment extends BaseEntity {
         return paidAmount * 100 / targetAmount;
     }
 
-    public void updateWithdrawalLock(boolean lockYn, String reason) {
-        this.withdrawalLocked = lockYn;
-        this.withdrawalLockReason = reason;
-    }
 
     public void payMonthlyAmount() {
         this.paidAmount += this.monthlyAmount;

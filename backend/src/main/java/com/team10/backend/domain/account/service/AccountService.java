@@ -12,6 +12,7 @@ import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.account.type.AccountStatus;
+import com.team10.backend.domain.account.type.AccountType;
 import com.team10.backend.domain.account.util.AccountNumberGenerator;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
@@ -35,6 +36,8 @@ public class AccountService {
 
     @Transactional
     public AccountCreateRes createAccount(Long userId, AccountCreateReq request) {
+        validateGeneralAccountType(request.accountType());
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(AccountErrorCode.USER_NOT_FOUND));
 
@@ -153,6 +156,12 @@ public class AccountService {
                 .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
 
         return AccountDetailRes.from(account);
+    }
+
+    private void validateGeneralAccountType(AccountType accountType) {
+        if (accountType != AccountType.DEPOSIT) {
+            throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_TYPE);
+        }
     }
 
     private String generateUniqueAccountNumber() {

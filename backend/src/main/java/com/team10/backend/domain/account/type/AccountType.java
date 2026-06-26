@@ -1,5 +1,11 @@
 package com.team10.backend.domain.account.type;
 
 public enum AccountType {
-    DEPOSIT
+    DEPOSIT,
+    SAVING_DEPOSIT,
+    SAVING_INSTALLMENT;
+
+    public boolean canTransferOut() {
+        return this == DEPOSIT;
+    }
 }

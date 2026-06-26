@@ -29,6 +29,10 @@ public class Deposit extends BaseEntity {
     @JoinColumn(name = "withdraw_account_id", nullable = false)
     private Account withdrawAccount; // 출금 계좌
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "saving_account_id", nullable = false)
+    private Account savingAccount; // 예금 전용 계좌
+
     @Column(nullable = false)
     private Long principal; // 예치 원금
 
@@ -45,16 +49,11 @@ public class Deposit extends BaseEntity {
     @Column(nullable = false, length = 20)
     private DepositStatus status; // 예금 상태
 
-    @Column(nullable = false)
-    private boolean withdrawalLocked; // 출금 제한 여부
-
-    @Column(length = 255)
-    private String withdrawalLockReason; // 출금 제한 사유
-
     public static Deposit create(
             User user,
             SavingProduct savingProduct,
             Account withdrawAccount,
+            Account savingAccount,
             Long principal,
             Double interestRate,
             LocalDate maturityDate,
@@ -64,20 +63,15 @@ public class Deposit extends BaseEntity {
         deposit.user = user;
         deposit.savingProduct = savingProduct;
         deposit.withdrawAccount = withdrawAccount;
+        deposit.savingAccount = savingAccount;
         deposit.principal = principal;
         deposit.interestRate = interestRate;
         deposit.maturityDate = maturityDate;
         deposit.expectedInterest = expectedInterest;
         deposit.status = DepositStatus.ACTIVE;
-        deposit.withdrawalLocked = false;
-        deposit.withdrawalLockReason = null;
         return deposit;
     }
 
-    public void updateWithdrawalLock(boolean lockYn, String reason) {
-        this.withdrawalLocked = lockYn;
-        this.withdrawalLockReason = reason;
-    }
 
     public void cancel() {
         this.status = DepositStatus.CANCELLED;

@@ -1,6 +1,7 @@
 package com.team10.backend.domain.saving.service;
 
 import com.team10.backend.domain.account.entity.Account;
+import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.saving.dto.res.MaturityRes;
 import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.entity.Installment;
@@ -11,6 +12,7 @@ import com.team10.backend.domain.saving.type.DepositStatus;
 import com.team10.backend.domain.saving.type.InstallmentStatus;
 import com.team10.backend.domain.transaction.entity.TransactionHistory;
 import com.team10.backend.domain.transaction.repository.TransactionHistoryRepository;
+import com.team10.backend.domain.transaction.type.TransactionDirection;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -28,7 +30,10 @@ public class SavingBatchProcessor {
     private static final int PERCENT_DIVISOR = 100;
     private static final String DEPOSIT_MATURITY_PAYOUT_MEMO = "예금 만기 지급";
     private static final String INSTALLMENT_MATURITY_PAYOUT_MEMO = "적금 만기 지급";
+    private static final String DEPOSIT_MATURITY_WITHDRAW_MEMO = "예금 만기 출금";
+    private static final String INSTALLMENT_MATURITY_WITHDRAW_MEMO = "적금 만기 출금";
     private static final String INSTALLMENT_PAYMENT_MEMO = "적금 월 납입 자동이체";
+    private static final String INSTALLMENT_PAYMENT_DEPOSIT_MEMO = "적금 계좌 월 납입 입금";
 
     private final TransactionHistoryRepository transactionHistoryRepository;
     private final DepositRepository depositRepository;
@@ -48,62 +53,23 @@ public class SavingBatchProcessor {
     private void processInstallmentPayment(Installment installment) {
         LocalDate today = LocalDate.now(clock);
 
-        if (installment.getStatus() != InstallmentStatus.ACTIVE
-                && installment.getStatus() != InstallmentStatus.PAYMENT_FAILED) {
-            return;
-        }
-
-        if (installment.getStatus() == InstallmentStatus.ACTIVE
-                && installment.getNextPaymentDate().isAfter(today)) {
-            return;
-        }
-
-        if (installment.getStatus() == InstallmentStatus.PAYMENT_FAILED
-                && (installment.getNextPaymentRetryDate() == null
-                || installment.getNextPaymentRetryDate().isAfter(today))) {
+        if (!isInstallmentPaymentDue(installment, today)) {
             return;
         }
 
         Account withdrawAccount = installment.getWithdrawAccount();
 
-        if (installment.getPaidAmount() >= installment.getTargetAmount()
-                || !
-                installment.getNextPaymentDate().isBefore(installment.getMaturityDate())) {
-            return;
-        }
-
-
         if (!withdrawAccount.isActive()) {
-            installment.failPayment("출금 계좌 비활성", LocalDate.now(clock));
+            failInstallmentPayment(installment, "출금 계좌 비활성", today);
             return;
         }
 
         if (withdrawAccount.getBalance() < installment.getMonthlyAmount()) {
-            installment.failPayment("잔액 부족", LocalDate.now(clock));
+            failInstallmentPayment(installment, "잔액 부족", today);
             return;
         }
 
-        Long paymentAmount = installment.getMonthlyAmount();
-        Long balanceBefore = withdrawAccount.getBalance();
-
-        withdrawAccount.withdraw(paymentAmount);
-
-        Long balanceAfter = withdrawAccount.getBalance();
-
-        TransactionHistory transactionHistory =
-                TransactionHistory.createInstallmentPayment(
-                        withdrawAccount,
-                        paymentAmount,
-                        balanceBefore,
-                        balanceAfter,
-                        INSTALLMENT_PAYMENT_MEMO,
-                        LocalDateTime.now(clock)
-                );
-
-        transactionHistoryRepository.save(transactionHistory);
-
-        installment.payMonthlyAmount();
-
+        payInstallment(installment, withdrawAccount);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -126,40 +92,26 @@ public class SavingBatchProcessor {
     }
 
     private MaturityRes matureDeposit(Deposit deposit) {
-        // 기존 matureSaving 안에 있던 예금 만기 처리 코드
-
-        if (deposit.getStatus() != DepositStatus.ACTIVE) {
-            throw new BusinessException(SavingErrorCode.SAVING_MATURITY_NOT_ALLOWED);
-        }
-
-        if (deposit.getMaturityDate().isAfter(LocalDate.now(clock))) {
-            throw new BusinessException(SavingErrorCode.SAVING_NOT_MATURED_YET);
-        }
+        validateDepositMaturityAllowed(deposit);
 
         Long interestAmount = deposit.getExpectedInterest();
+        Long payoutAmount = deposit.getPrincipal() + interestAmount;
 
-        Long payoutAmount =
-                deposit.getPrincipal() + interestAmount;
+        Account savingAccount = deposit.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, deposit.getPrincipal());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
 
-        Account withdrawAccount = deposit.getWithdrawAccount();
-        Long balanceBefore = withdrawAccount.getBalance();
-
-        withdrawAccount.deposit(payoutAmount);
-
-        Long balanceAfter = withdrawAccount.getBalance();
-
-        TransactionHistory transactionHistory =
-                TransactionHistory.createSavingMaturityPayout(
-                        withdrawAccount,
-                        payoutAmount,
-                        balanceBefore,
-                        balanceAfter,
-                        DEPOSIT_MATURITY_PAYOUT_MEMO,
-                        LocalDateTime.now(clock)
-                );
-
-        transactionHistoryRepository.save(transactionHistory);
-
+        saveMaturityWithdrawHistory(
+                savingAccount,
+                deposit.getPrincipal(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                DEPOSIT_MATURITY_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveMaturityPayoutHistory(deposit.getWithdrawAccount(), payoutAmount, DEPOSIT_MATURITY_PAYOUT_MEMO, transactedAt);
         deposit.mature();
 
         return MaturityRes.fromDeposit(deposit, interestAmount, payoutAmount);
@@ -187,7 +139,109 @@ public class SavingBatchProcessor {
     }
 
     private MaturityRes matureInstallment(Installment installment) {
-        // 기존 적금 만기 처리 코드
+        validateInstallmentMaturityAllowed(installment);
+
+        Long interestAmount = calculateInstallmentExpectedInterest(installment);
+        Long payoutAmount = installment.getPaidAmount() + interestAmount;
+
+        Account savingAccount = installment.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+        closeSavingAccount(savingAccount, installment.getPaidAmount());
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        saveMaturityWithdrawHistory(
+                savingAccount,
+                installment.getPaidAmount(),
+                savingBalanceBefore,
+                savingBalanceAfter,
+                INSTALLMENT_MATURITY_WITHDRAW_MEMO,
+                transactedAt
+        );
+        saveMaturityPayoutHistory(
+                installment.getWithdrawAccount(),
+                payoutAmount,
+                INSTALLMENT_MATURITY_PAYOUT_MEMO,
+                transactedAt
+        );
+        installment.mature();
+
+        return MaturityRes.fromInstallment(installment, interestAmount, payoutAmount);
+    }
+
+    private boolean isInstallmentPaymentDue(Installment installment, LocalDate today) {
+        if (installment.getStatus() != InstallmentStatus.ACTIVE
+                && installment.getStatus() != InstallmentStatus.PAYMENT_FAILED) {
+            return false;
+        }
+
+        if (installment.getStatus() == InstallmentStatus.ACTIVE
+                && installment.getNextPaymentDate().isAfter(today)) {
+            return false;
+        }
+
+        if (installment.getStatus() == InstallmentStatus.PAYMENT_FAILED
+                && (installment.getNextPaymentRetryDate() == null
+                || installment.getNextPaymentRetryDate().isAfter(today))) {
+            return false;
+        }
+
+        return installment.getPaidAmount() < installment.getTargetAmount()
+                && installment.getNextPaymentDate().isBefore(installment.getMaturityDate());
+    }
+
+    private void failInstallmentPayment(Installment installment, String reason, LocalDate failedDate) {
+        installment.failPayment(reason, failedDate);
+    }
+
+    private void payInstallment(Installment installment, Account withdrawAccount) {
+        Long paymentAmount = installment.getMonthlyAmount();
+        Long balanceBefore = withdrawAccount.getBalance();
+        Account savingAccount = installment.getSavingAccount();
+        Long savingBalanceBefore = savingAccount.getBalance();
+
+        withdrawAccount.withdraw(paymentAmount);
+        savingAccount.deposit(paymentAmount);
+
+        Long balanceAfter = withdrawAccount.getBalance();
+        Long savingBalanceAfter = savingAccount.getBalance();
+        LocalDateTime transactedAt = LocalDateTime.now(clock);
+
+        TransactionHistory transactionHistory = TransactionHistory.createInstallmentPayment(
+                withdrawAccount,
+                TransactionDirection.OUT,
+                paymentAmount,
+                balanceBefore,
+                balanceAfter,
+                INSTALLMENT_PAYMENT_MEMO,
+                transactedAt
+        );
+        TransactionHistory savingAccountHistory = TransactionHistory.createInstallmentPayment(
+                savingAccount,
+                TransactionDirection.IN,
+                paymentAmount,
+                savingBalanceBefore,
+                savingBalanceAfter,
+                INSTALLMENT_PAYMENT_DEPOSIT_MEMO,
+                transactedAt
+        );
+
+        transactionHistoryRepository.save(transactionHistory);
+        transactionHistoryRepository.save(savingAccountHistory);
+        installment.payMonthlyAmount();
+    }
+
+    private void validateDepositMaturityAllowed(Deposit deposit) {
+        if (deposit.getStatus() != DepositStatus.ACTIVE) {
+            throw new BusinessException(SavingErrorCode.SAVING_MATURITY_NOT_ALLOWED);
+        }
+
+        if (deposit.getMaturityDate().isAfter(LocalDate.now(clock))) {
+            throw new BusinessException(SavingErrorCode.SAVING_NOT_MATURED_YET);
+        }
+    }
+
+    private void validateInstallmentMaturityAllowed(Installment installment) {
         if (installment.getStatus() != InstallmentStatus.ACTIVE) {
             throw new BusinessException(SavingErrorCode.SAVING_MATURITY_NOT_ALLOWED);
         }
@@ -195,36 +249,62 @@ public class SavingBatchProcessor {
         if (installment.getMaturityDate().isAfter(LocalDate.now(clock))) {
             throw new BusinessException(SavingErrorCode.SAVING_NOT_MATURED_YET);
         }
+    }
 
-        Long interestAmount =
-                calculateInstallmentExpectedInterest(installment);
+    private void closeSavingAccount(Account savingAccount, Long amount) {
+        savingAccount.withdraw(amount);
+        if (!savingAccount.getBalance().equals(0L)) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_BALANCE_NOT_ZERO);
+        }
+        savingAccount.close();
+    }
 
-        Long payoutAmount =
-                installment.getPaidAmount() + interestAmount;
-
-        Account withdrawAccount = installment.getWithdrawAccount();
-        Long balanceBefore = withdrawAccount.getBalance();
-
-        withdrawAccount.deposit(payoutAmount);
-
-        Long balanceAfter = withdrawAccount.getBalance();
-
-        TransactionHistory transactionHistory =
-                TransactionHistory.createSavingMaturityPayout(
-                        withdrawAccount,
-                        payoutAmount,
-                        balanceBefore,
-                        balanceAfter,
-                        INSTALLMENT_MATURITY_PAYOUT_MEMO,
-                        LocalDateTime.now(clock)
-                );
+    private void saveMaturityWithdrawHistory(
+            Account savingAccount,
+            Long amount,
+            Long balanceBefore,
+            Long balanceAfter,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        TransactionHistory transactionHistory = TransactionHistory.createSavingMaturityPayout(
+                savingAccount,
+                TransactionDirection.OUT,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
 
         transactionHistoryRepository.save(transactionHistory);
+    }
 
-        installment.mature();
+    private void saveMaturityPayoutHistory(
+            Account withdrawAccount,
+            Long payoutAmount,
+            String memo,
+            LocalDateTime transactedAt
+    ) {
+        if (!withdrawAccount.isActive()) {
+            throw new BusinessException(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
 
-        return MaturityRes.fromInstallment(installment, interestAmount,
-                payoutAmount);
+        Long balanceBefore = withdrawAccount.getBalance();
+        withdrawAccount.deposit(payoutAmount);
+        Long balanceAfter = withdrawAccount.getBalance();
+
+        TransactionHistory transactionHistory = TransactionHistory.createSavingMaturityPayout(
+                withdrawAccount,
+                TransactionDirection.IN,
+                payoutAmount,
+                balanceBefore,
+                balanceAfter,
+                memo,
+                transactedAt
+        );
+
+        transactionHistoryRepository.save(transactionHistory);
     }
 
     private Long calculateInstallmentExpectedInterest(Installment installment) {
