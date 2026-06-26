@@ -19,12 +19,13 @@ import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -154,11 +155,9 @@ public class ExchangeService {
 
     // 환전 주문 전체 조회
     @Transactional(readOnly = true)
-    public List<ExchangeOrderRes> getExchangeOrders(Long userId) {
-        return exchangeOrderRepository.findAllByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(ExchangeOrderRes::from)
-                .toList();
+    public Page<ExchangeOrderRes> getExchangeOrders(Long userId, Pageable pageable) {
+        return exchangeOrderRepository.findAllByUserId(userId, pageable)
+                .map(ExchangeOrderRes::from);
     }
 
     // 환전 주문 상세 조회

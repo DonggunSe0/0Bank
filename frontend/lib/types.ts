@@ -72,12 +72,6 @@ export interface TransactionFilter {
 // ──────────────────────────────────────────────
 // Transfer
 // ──────────────────────────────────────────────
-export interface DepositRequest {
-  accountId: number | string
-  amount: number
-  memo?: string
-}
-
 export interface TransferRequest {
   senderAccountId: number | string
   receiverAccountNumber: string

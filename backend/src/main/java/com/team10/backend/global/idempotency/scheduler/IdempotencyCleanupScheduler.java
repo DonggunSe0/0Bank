@@ -16,5 +16,6 @@ public class IdempotencyCleanupScheduler {
     @Scheduled(fixedDelayString = "${idempotency.cleanup-fixed-delay-ms:60000}")
     public void expireStaleProcessing() {
         idempotencyService.expireStaleProcessing(Duration.ofMinutes(10));
+        idempotencyService.deleteRecordsOlderThan(Duration.ofDays(15));
     }
 }

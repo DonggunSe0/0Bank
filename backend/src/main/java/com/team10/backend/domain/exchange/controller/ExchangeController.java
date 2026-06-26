@@ -15,6 +15,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -85,10 +89,11 @@ public class ExchangeController {
 
     @GetMapping("/currencies/orders")
     @Operation(description = "내 환전 주문 목록 조회")
-    public ResponseEntity<List<ExchangeOrderRes>> getExchangeOrders(
-            @AuthenticationPrincipal Long userId
+    public ResponseEntity<Page<ExchangeOrderRes>> getExchangeOrders(
+            @AuthenticationPrincipal Long userId,
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        List<ExchangeOrderRes> response = exchangeService.getExchangeOrders(userId);
+        Page<ExchangeOrderRes> response = exchangeService.getExchangeOrders(userId, pageable);
         return ResponseEntity.ok(response);
     }
 

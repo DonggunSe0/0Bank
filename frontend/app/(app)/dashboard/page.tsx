@@ -88,7 +88,6 @@ export default function DashboardPage() {
   const quickActions = [
     { href: '/accounts/new', label: '계좌 만들기', icon: Plus },
     { href: '/transfer', label: '송금', icon: Send },
-    { href: '/transfer?mode=deposit', label: '입금', icon: ArrowDownLeft },
     { href: '/transactions', label: '거래내역', icon: CreditCard },
     { href: '/savings', label: '예적금', icon: PiggyBank },
     { href: '/investment-accounts', label: '투자계좌', icon: BarChart3 },

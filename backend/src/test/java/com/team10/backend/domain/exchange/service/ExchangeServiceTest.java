@@ -30,6 +30,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Method;
@@ -257,19 +261,20 @@ class ExchangeServiceTest {
                 LocalDateTime.of(2026, 6, 21, 10, 0, 1) // firstOrder보다 더 이전에 주문
         );
 
-        when(exchangeOrderRepository.findAllByUserIdOrderByCreatedAtDesc(1L))
-                .thenReturn(List.of(firstOrder, secondOrder));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(exchangeOrderRepository.findAllByUserId(1L, pageable))
+                .thenReturn(new PageImpl<>(List.of(firstOrder, secondOrder), pageable, 2));
 
-        List<ExchangeOrderRes> response = exchangeService.getExchangeOrders(1L);
+        Page<ExchangeOrderRes> response = exchangeService.getExchangeOrders(1L, pageable);
 
-        assertThat(response).hasSize(2);
-        assertThat(response.get(0).exchangeOrderId()).isEqualTo(41L);
-        assertThat(response.get(0).exchangeQuoteId()).isEqualTo(11L);
-        assertThat(response.get(0).direction()).isEqualTo(ExchangeDirection.FOREIGN_TO_KRW);
-        assertThat(response.get(1).exchangeOrderId()).isEqualTo(40L);
-        assertThat(response.get(1).exchangeQuoteId()).isEqualTo(10L);
-        assertThat(response.get(1).direction()).isEqualTo(ExchangeDirection.KRW_TO_FOREIGN);
-        verify(exchangeOrderRepository).findAllByUserIdOrderByCreatedAtDesc(1L);
+        assertThat(response.getContent()).hasSize(2);
+        assertThat(response.getContent().get(0).exchangeOrderId()).isEqualTo(41L);
+        assertThat(response.getContent().get(0).exchangeQuoteId()).isEqualTo(11L);
+        assertThat(response.getContent().get(0).direction()).isEqualTo(ExchangeDirection.FOREIGN_TO_KRW);
+        assertThat(response.getContent().get(1).exchangeOrderId()).isEqualTo(40L);
+        assertThat(response.getContent().get(1).exchangeQuoteId()).isEqualTo(10L);
+        assertThat(response.getContent().get(1).direction()).isEqualTo(ExchangeDirection.KRW_TO_FOREIGN);
+        verify(exchangeOrderRepository).findAllByUserId(1L, pageable);
     }
 
     private User createUser(Long id) {

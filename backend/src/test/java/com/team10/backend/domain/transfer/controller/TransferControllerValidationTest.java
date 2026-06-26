@@ -6,6 +6,7 @@ import com.team10.backend.domain.transfer.dto.req.TransferReq;
 import com.team10.backend.domain.transfer.service.TransferService;
 import com.team10.backend.support.security.AuthenticationPrincipalTestConfig;
 import com.team10.backend.support.security.WithMockLongUser;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,6 +137,7 @@ class TransferControllerValidationTest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 요청 검증 - 금액이 null이면 400을 반환하고 서비스를 호출하지 않는다")
     void topUp_amountNull_returnsBadRequest() throws Exception {
         DepositReq request = new DepositReq(1L, null, "금액 없음");
@@ -148,6 +150,7 @@ class TransferControllerValidationTest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 요청 검증 - 금액이 0이면 400을 반환하고 서비스를 호출하지 않는다")
     void topUp_amountZero_returnsBadRequest() throws Exception {
         DepositReq request = new DepositReq(1L, 0L, "0원 입금");
@@ -160,6 +163,7 @@ class TransferControllerValidationTest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 요청 검증 - 금액이 음수이면 400을 반환하고 서비스를 호출하지 않는다")
     void topUp_amountNegative_returnsBadRequest() throws Exception {
         DepositReq request = new DepositReq(1L, -1L, "음수 입금");
@@ -172,6 +176,7 @@ class TransferControllerValidationTest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 요청 검증 - accountId가 null이면 400을 반환하고 서비스를 호출하지 않는다")
     void topUp_accountIdNull_returnsBadRequest() throws Exception {
         DepositReq request = new DepositReq(null, 50_000L, "계좌 없음");
@@ -184,6 +189,7 @@ class TransferControllerValidationTest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 요청 검증 - Idempotency-Key 헤더가 없으면 400을 반환하고 서비스를 호출하지 않는다")
     void topUp_missingIdempotencyKeyHeader_returnsBadRequest() throws Exception {
         DepositReq request = new DepositReq(1L, 50_000L, "키 누락");
@@ -198,6 +204,7 @@ class TransferControllerValidationTest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 요청 검증 - memo가 100자를 초과하면 400을 반환하고 서비스를 호출하지 않는다")
     void topUp_memoTooLong_returnsBadRequest() throws Exception {
         DepositReq request = new DepositReq(1L, 50_000L, "a".repeat(101));

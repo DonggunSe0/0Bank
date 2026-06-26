@@ -23,8 +23,9 @@ public class TransferController {
 
     private final TransferService transferService;
 
+    // ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API는 비활성화
+    // @PostMapping("/topUp")
     @Idempotent(operationType = IdempotencyOperationType.TOPUP)
-    @PostMapping("/topUp")
     @Operation(summary = "입금")
     public ResponseEntity<TopUpRes> topUp(
             @AuthenticationPrincipal Long userId,

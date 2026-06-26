@@ -16,6 +16,7 @@ import com.team10.backend.global.idempotency.type.IdempotencyStatus;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -334,6 +335,7 @@ class TransferIdempotencyE2ETest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 멱등성 재시도 E2E - 같은 키와 같은 요청은 최초 응답을 재사용하고 중복 입금하지 않는다")
     void topUp_sameIdempotencyKeyAndSameRequest_replaysFirstResponseWithoutDuplicateDeposit() throws Exception {
         // given. 실제 사용자와 입금 대상 계좌를 DB에 준비한다.
@@ -420,6 +422,7 @@ class TransferIdempotencyE2ETest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("입금 멱등성 충돌 E2E - 같은 키와 다른 요청은 409를 반환하고 추가 입금하지 않는다")
     void topUp_sameIdempotencyKeyAndDifferentRequest_returnsConflictWithoutAdditionalDeposit() throws Exception {
         // given. 실제 사용자와 입금 대상 계좌를 DB에 준비한다.
