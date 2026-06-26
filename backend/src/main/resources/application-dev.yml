@@ -24,11 +24,11 @@ spring:
       port: 6379
       # password는 application-secret.yml(gitignore)에서 주입 — 하드코딩된 기본값을 두지 않음
 
-cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
-
 logging:
   level:
     org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.jdbc.extract: TRACE
     com.team10.backend.domain.user.ocr: DEBUG
+
+cors:
+  allowed-origins: http://localhost:3000

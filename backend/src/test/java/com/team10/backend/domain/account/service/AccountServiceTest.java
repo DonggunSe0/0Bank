@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -68,6 +69,7 @@ class AccountServiceTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(verifiedUser));
         when(accountRepository.existsByAccountNumber(any(String.class))).thenReturn(false);
+        when(passwordEncoder.encode("123456")).thenReturn("encoded-password");
         when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> {
             Account account = invocation.getArgument(0);
             ReflectionTestUtils.setField(account, "id", 1L);
@@ -83,7 +85,38 @@ class AccountServiceTest {
         assertThat(response.status()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(response.accountNumber()).hasSize(12);
 
-        verify(accountRepository).save(any(Account.class));
+        ArgumentCaptor<Account> accountCaptor = ArgumentCaptor.forClass(Account.class);
+        verify(accountRepository).save(accountCaptor.capture());
+        assertThat(accountCaptor.getValue().getAccountPasswordHash()).isEqualTo("encoded-password");
+        verify(passwordEncoder).encode("123456");
+    }
+
+    @Test
+    @DisplayName("일반 계좌 개설 API에서는 예금 계좌 타입을 생성할 수 없다")
+    void createAccountWithSavingDepositType() {
+        AccountCreateReq request = createAccountCreateReq("예금 계좌", AccountType.SAVING_DEPOSIT);
+
+        assertThatThrownBy(() -> accountService.createAccount(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_TYPE);
+
+        verify(userRepository, never()).findById(any(Long.class));
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    @DisplayName("일반 계좌 개설 API에서는 적금 계좌 타입을 생성할 수 없다")
+    void createAccountWithSavingInstallmentType() {
+        AccountCreateReq request = createAccountCreateReq("적금 계좌", AccountType.SAVING_INSTALLMENT);
+
+        assertThatThrownBy(() -> accountService.createAccount(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_TYPE);
+
+        verify(userRepository, never()).findById(any(Long.class));
+        verify(accountRepository, never()).save(any(Account.class));
     }
 
     @Test
@@ -433,7 +466,7 @@ class AccountServiceTest {
     }
 
     private AccountCreateReq createAccountCreateReq(String nickname, AccountType accountType) {
-        return new AccountCreateReq(nickname, accountType);
+        return new AccountCreateReq(nickname, accountType, "123456");
     }
 
     private User createUser(Long id, Boolean identityVerified) {

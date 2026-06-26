@@ -32,7 +32,7 @@ class SavingProductControllerTest {
     @Test
     @DisplayName("예금 상품 목록 조회 API는 예금 상품 목록을 반환한다")
     void getDepositProducts() throws Exception {
-        SavingProductSummaryRes response = createSavingProductSummaryRes(1L, "정기예금");
+        SavingProductSummaryRes response = createSavingProductSummaryRes(1L, SavingProductType.DEPOSIT, "정기예금");
 
         when(savingProductService.getDepositProducts()).thenReturn(List.of(response));
 
@@ -41,8 +41,14 @@ class SavingProductControllerTest {
                 .andExpect(jsonPath("$[0].id").value(1L))
                 .andExpect(jsonPath("$[0].name").value("정기예금"))
                 .andExpect(jsonPath("$[0].bankName").value("국민은행"))
+                .andExpect(jsonPath("$[0].bankCode").value("KB"))
+                .andExpect(jsonPath("$[0].type").value("DEPOSIT"))
                 .andExpect(jsonPath("$[0].interestRate").value(3.5))
-                .andExpect(jsonPath("$[0].periodMonth").value(12));
+                .andExpect(jsonPath("$[0].periodMonth").value(12))
+                .andExpect(jsonPath("$[0].minAmount").value(100000L))
+                .andExpect(jsonPath("$[0].maxAmount").value(10000000L))
+                .andExpect(jsonPath("$[0].monthlyLimit").value(500000L))
+                .andExpect(jsonPath("$[0].terms").value("가입 조건"));
 
         verify(savingProductService).getDepositProducts();
     }
@@ -50,14 +56,15 @@ class SavingProductControllerTest {
     @Test
     @DisplayName("적금 상품 목록 조회 API는 적금 상품 목록을 반환한다")
     void getInstallmentProducts() throws Exception {
-        SavingProductSummaryRes response = createSavingProductSummaryRes(2L, "청년 적금");
+        SavingProductSummaryRes response = createSavingProductSummaryRes(2L, SavingProductType.INSTALLMENT, "청년 적금");
 
         when(savingProductService.getInstallmentProducts()).thenReturn(List.of(response));
 
         mockMvc.perform(get("/api/v1/savings/installment-products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(2L))
-                .andExpect(jsonPath("$[0].name").value("청년 적금"));
+                .andExpect(jsonPath("$[0].name").value("청년 적금"))
+                .andExpect(jsonPath("$[0].type").value("INSTALLMENT"));
 
         verify(savingProductService).getInstallmentProducts();
     }
@@ -96,13 +103,23 @@ class SavingProductControllerTest {
         verify(savingProductService).getInstallmentProduct(2L);
     }
 
-    private SavingProductSummaryRes createSavingProductSummaryRes(Long id, String name) {
+    private SavingProductSummaryRes createSavingProductSummaryRes(
+            Long id,
+            SavingProductType type,
+            String name
+    ) {
         return new SavingProductSummaryRes(
                 id,
                 name,
                 "국민은행",
+                "KB",
+                type,
                 3.5,
-                12
+                12,
+                100000L,
+                10000000L,
+                500000L,
+                "가입 조건"
         );
     }
 

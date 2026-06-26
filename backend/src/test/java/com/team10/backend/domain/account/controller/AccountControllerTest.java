@@ -90,6 +90,28 @@ class AccountControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @DisplayName("계좌 개설 API는 계좌 비밀번호가 없으면 400을 반환한다")
+    void createAccountWithoutAccountPassword() throws Exception {
+        AccountCreateReq request = new AccountCreateReq("생활비 계좌", AccountType.DEPOSIT, null);
+
+        mockMvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("계좌 개설 API는 계좌 비밀번호가 숫자 6자리가 아니면 400을 반환한다")
+    void createAccountWithInvalidAccountPassword() throws Exception {
+        AccountCreateReq request = new AccountCreateReq("생활비 계좌", AccountType.DEPOSIT, "12ab56");
+
+        mockMvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
 
 
     @Test
@@ -279,6 +301,6 @@ class AccountControllerTest {
     }
 
     private AccountCreateReq createAccountCreateReq(String nickname, AccountType accountType) {
-        return new AccountCreateReq(nickname, accountType);
+        return new AccountCreateReq(nickname, accountType, "123456");
     }
 }

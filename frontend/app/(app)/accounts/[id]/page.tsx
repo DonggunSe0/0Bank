@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Edit2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit2, KeyRound, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,7 +30,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
-import { closeAccount, getAccount, updateAccountNickname } from '@/lib/api/accounts'
+import {
+  changeAccountPassword,
+  closeAccount,
+  getAccount,
+  updateAccountNickname,
+} from '@/lib/api/accounts'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { Account } from '@/lib/types'
 import { ApiRequestError } from '@/lib/api'
@@ -51,6 +56,11 @@ export default function AccountDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
   const [closeLoading, setCloseLoading] = useState(false)
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -87,6 +97,36 @@ export default function AccountDetailPage() {
     }
   }
 
+
+  async function handlePasswordChange() {
+    if (!user || !account) return
+    if (
+      !/^\d{6}$/.test(currentPassword)
+      || !/^\d{6}$/.test(newPassword)
+      || !/^\d{6}$/.test(newPasswordConfirm)
+    ) {
+      toast.error('계좌 비밀번호는 숫자 6자리여야 합니다.')
+      return
+    }
+    if (newPassword !== newPasswordConfirm) {
+      toast.error('새 비밀번호가 일치하지 않습니다.')
+      return
+    }
+    setPasswordLoading(true)
+    try {
+      await changeAccountPassword(account.id, currentPassword, newPassword)
+      setPasswordOpen(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setNewPasswordConfirm('')
+      toast.success('계좌 비밀번호가 변경되었습니다.')
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : '오류가 발생했습니다.')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   async function handleClose() {
     if (!user || !account) return
     setCloseLoading(true)
@@ -99,6 +139,13 @@ export default function AccountDetailPage() {
     } finally {
       setCloseLoading(false)
     }
+  }
+
+  function closePasswordDialog() {
+    setPasswordOpen(false)
+    setCurrentPassword('')
+    setNewPassword('')
+    setNewPasswordConfirm('')
   }
 
   return (
@@ -169,11 +216,9 @@ export default function AccountDetailPage() {
           <div className="flex flex-col gap-2">
             {/* Edit nickname */}
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
-              <DialogTrigger>
-                <Button variant="outline" className="w-full justify-start">
-                  <Edit2 data-icon="inline-start" />
-                  별칭 수정
-                </Button>
+              <DialogTrigger render={<Button variant="outline" className="w-full justify-start" />}>
+                <Edit2 data-icon="inline-start" />
+                별칭 수정
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -199,6 +244,66 @@ export default function AccountDetailPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+
+            {/* Account password */}
+            {account.status === 'ACTIVE' && (
+              <Dialog open={passwordOpen} onOpenChange={(open) => (open ? setPasswordOpen(true) : closePasswordDialog())}>
+                <DialogTrigger render={<Button variant="outline" className="w-full justify-start" />}>
+                  <KeyRound data-icon="inline-start" />
+                  계좌 비밀번호 변경
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>계좌 비밀번호 변경</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-3 py-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="currentPassword">현재 비밀번호</Label>
+                      <Input
+                        id="currentPassword"
+                        type="password"
+                        inputMode="numeric"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        placeholder="현재 비밀번호 입력"
+                        maxLength={6}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="newPassword">새 비밀번호</Label>
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        inputMode="numeric"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        placeholder="숫자 6자리"
+                        maxLength={6}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="newPasswordConfirm">새 비밀번호 확인</Label>
+                      <Input
+                        id="newPasswordConfirm"
+                        type="password"
+                        inputMode="numeric"
+                        value={newPasswordConfirm}
+                        onChange={(e) => setNewPasswordConfirm(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        placeholder="새 비밀번호 한 번 더 입력"
+                        maxLength={6}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={closePasswordDialog}>취소</Button>
+                    <Button onClick={handlePasswordChange} disabled={passwordLoading}>
+                      변경
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
 
             {/* Close account */}
             {account.status === 'ACTIVE' && (

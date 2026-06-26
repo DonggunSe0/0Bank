@@ -17,6 +17,8 @@ export default function NewAccountPage() {
   const router = useRouter()
   const { user } = useAuth()
   const [nickname, setNickname] = useState('')
+  const [accountPassword, setAccountPassword] = useState('')
+  const [accountPasswordConfirm, setAccountPasswordConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -27,6 +29,18 @@ export default function NewAccountPage() {
       setError('계좌 별칭을 입력해 주세요.')
       return
     }
+    if (!/^\d{6}$/.test(accountPassword)) {
+      setError('계좌 비밀번호는 숫자 6자리여야 합니다.')
+      return
+    }
+    if (!/^\d{6}$/.test(accountPasswordConfirm)) {
+      setError('계좌 비밀번호 확인도 숫자 6자리여야 합니다.')
+      return
+    }
+    if (accountPassword !== accountPasswordConfirm) {
+      setError('계좌 비밀번호가 일치하지 않습니다.')
+      return
+    }
     if (!user) return
 
     setLoading(true)
@@ -34,6 +48,7 @@ export default function NewAccountPage() {
       const acc = await createAccount({
         nickname: nickname.trim(),
         accountType: 'DEPOSIT',
+        accountPassword,
       })
       toast.success('계좌가 개설되었습니다.')
       router.push(`/accounts/${acc.id}`)
@@ -94,6 +109,36 @@ export default function NewAccountPage() {
                 aria-invalid={!!error}
               />
               <p className="text-xs text-muted-foreground">계좌를 구분하기 위한 이름입니다.</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="accountPassword">계좌 비밀번호</Label>
+              <Input
+                id="accountPassword"
+                type="password"
+                inputMode="numeric"
+                placeholder="숫자 6자리"
+                value={accountPassword}
+                onChange={(e) => setAccountPassword(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                maxLength={6}
+                aria-invalid={!!error}
+              />
+              <p className="text-xs text-muted-foreground">송금과 출금성 거래에 사용할 숫자 6자리 비밀번호입니다.</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="accountPasswordConfirm">계좌 비밀번호 확인</Label>
+              <Input
+                id="accountPasswordConfirm"
+                type="password"
+                inputMode="numeric"
+                placeholder="비밀번호 재입력"
+                value={accountPasswordConfirm}
+                onChange={(e) => setAccountPasswordConfirm(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                maxLength={6}
+                aria-invalid={!!error}
+              />
+              <p className="text-xs text-muted-foreground">오입력을 막기 위해 한 번 더 입력해 주세요.</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>

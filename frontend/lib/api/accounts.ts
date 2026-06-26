@@ -5,12 +5,16 @@ export async function getAccounts(): Promise<Account[]> {
   return apiFetch<Account[]>('/api/v1/accounts')
 }
 
+export async function getClosedAccounts(): Promise<Account[]> {
+  return apiFetch<Account[]>('/api/v1/accounts/closed')
+}
+
 export async function getAccount(accountId: string | number): Promise<Account> {
   return apiFetch<Account>(`/api/v1/accounts/${accountId}`)
 }
 
 export async function createAccount(
-  data: { nickname: string; accountType: string },
+  data: { nickname: string; accountType: string; accountPassword: string },
 ): Promise<Account> {
   return apiFetch<Account>('/api/v1/accounts', {
     method: 'POST',
@@ -31,6 +35,27 @@ export async function updateAccountNickname(
 export async function closeAccount(accountId: string | number): Promise<Account> {
   return apiFetch<Account>(`/api/v1/accounts/${accountId}/close`, {
     method: 'POST',
+  })
+}
+
+export async function setAccountPassword(
+  accountId: string | number,
+  accountPassword: string,
+): Promise<{ accountId: number; passwordSet: boolean }> {
+  return apiFetch<{ accountId: number; passwordSet: boolean }>(`/api/v1/accounts/${accountId}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ accountPassword }),
+  })
+}
+
+export async function changeAccountPassword(
+  accountId: string | number,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ accountId: number; passwordSet: boolean }> {
+  return apiFetch<{ accountId: number; passwordSet: boolean }>(`/api/v1/accounts/${accountId}/password`, {
+    method: 'PATCH',
+    body: JSON.stringify({ currentPassword, newPassword }),
   })
 }
 

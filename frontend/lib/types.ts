@@ -82,6 +82,7 @@ export interface TransferRequest {
   senderAccountId: number | string
   receiverAccountNumber: string
   amount: number
+  accountPassword: string
   memo?: string
 }
 
@@ -179,6 +180,57 @@ export interface UserProfileRequest {
 // Savings Products
 // ──────────────────────────────────────────────
 export type SavingsType = 'DEPOSIT' | 'INSTALLMENT'
+
+
+export type SavingStatus = 'ACTIVE' | 'MATURED' | 'CANCELLED' | 'PAYMENT_FAILED'
+
+export interface DepositSummary {
+  depositId: number
+  productName: string
+  bankName: string
+  principal: number
+  status: SavingStatus
+}
+
+export interface DepositDetail extends DepositSummary {
+  interestRate: number
+  expectedInterest: number
+  maturityDate: string
+}
+
+export interface InstallmentSummary {
+  installmentId: number
+  productName: string
+  bankName: string
+  paidAmount: number
+  progressRate: number
+  status: SavingStatus
+}
+
+export interface InstallmentDetail extends InstallmentSummary {
+  monthlyAmount: number
+  targetAmount: number
+  maturityDate: string
+}
+
+export interface InterestPreview {
+  savingId: number
+  savingType: SavingsType
+  principal: number
+  interestRate: number
+  expectedInterest: number
+  expectedTotalAmount: number
+}
+
+export interface SavingOperationResult {
+  savingId: number
+  savingType: SavingsType
+  principalAmount: number
+  interestAmount: number
+  refundAmount?: number
+  payoutAmount?: number
+  status: string
+}
 
 export interface SavingsProduct {
   id: number

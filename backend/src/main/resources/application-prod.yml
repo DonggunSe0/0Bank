@@ -37,4 +37,5 @@ logging:
     org.hibernate.orm.jdbc.extract: INFO
     org.springframework.transaction.interceptor: INFO
 
-
+cors:
+  allowed-origins: https://0bank.shop , https://www.0bank.shop

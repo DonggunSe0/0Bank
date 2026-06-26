@@ -5,7 +5,6 @@ import com.team10.backend.domain.saving.dto.req.DepositCreateReq;
 import com.team10.backend.domain.saving.dto.req.EarlyCancelReq;
 import com.team10.backend.domain.saving.dto.req.InstallmentCreateReq;
 import com.team10.backend.domain.saving.dto.req.MaturityReq;
-import com.team10.backend.domain.saving.dto.req.WithdrawalLockReq;
 import com.team10.backend.domain.saving.dto.res.*;
 import com.team10.backend.domain.saving.service.SavingDepositService;
 import com.team10.backend.domain.saving.type.DepositStatus;
@@ -51,7 +50,7 @@ class SavingDepositControllerTest {
     @Test
     @DisplayName("예금 가입 API는 인증 사용자와 요청 본문을 받아 201을 반환한다")
     void createDeposit() throws Exception {
-        DepositCreateReq request = new DepositCreateReq(1L, 1L, 1000000L);
+        DepositCreateReq request = new DepositCreateReq(1L, 1L, 1000000L, "123456");
         DepositCreateRes response = new DepositCreateRes(
                 1L,
                 DepositStatus.ACTIVE,
@@ -134,7 +133,7 @@ class SavingDepositControllerTest {
     @Test
     @DisplayName("예금 가입 API는 필수값이 없으면 400을 반환한다")
     void createDepositWithoutRequiredValue() throws Exception {
-        DepositCreateReq request = new DepositCreateReq(null, 1L, 1000000L);
+        DepositCreateReq request = new DepositCreateReq(null, 1L, 1000000L, "123456");
 
         mockMvc.perform(post("/api/v1/savings/deposits")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -150,7 +149,8 @@ class SavingDepositControllerTest {
                 1L,
                 100000L,
                 1200000L,
-                true
+                true,
+                "123456"
         );
         InstallmentCreateRes response = new InstallmentCreateRes(
                 1L,
@@ -261,49 +261,7 @@ class SavingDepositControllerTest {
                 .getInterestPreview(1L, 1L, SavingProductType.INSTALLMENT);
     }
 
-    @Test
-    @DisplayName("출금 제한 설정 API는 인증 사용자의 출금 제한 상태를 변경한다")
-    void updateWithdrawalLock() throws Exception {
-        WithdrawalLockReq request = new WithdrawalLockReq(
-                SavingProductType.INSTALLMENT,
-                true,
-                "목표 저축을 위해 제한"
-        );
-        WithdrawalLockRes response = new WithdrawalLockRes(
-                1L,
-                SavingProductType.INSTALLMENT,
-                true,
-                "목표 저축을 위해 제한",
-                LocalDateTime.of(2026, 6, 19, 10, 30)
-        );
 
-        when(savingDepositService.updateWithdrawalLock(eq(1L), eq(1L), any(WithdrawalLockReq.class)))
-                .thenReturn(response);
-
-        mockMvc.perform(post("/api/v1/savings/{savingId}/withdrawal-lock", 1L)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.savingId").value(1L))
-                .andExpect(jsonPath("$.savingType").value("INSTALLMENT"))
-                .andExpect(jsonPath("$.lockYn").value(true))
-                .andExpect(jsonPath("$.reason").value("목표 저축을 위해 제한"))
-                .andExpect(jsonPath("$.updatedAt").value("2026-06-19T10:30:00"));
-
-        verify(savingDepositService)
-                .updateWithdrawalLock(eq(1L), eq(1L), any(WithdrawalLockReq.class));
-    }
-
-    @Test
-    @DisplayName("출금 제한 설정 API는 필수값이 없으면 400을 반환한다")
-    void updateWithdrawalLockWithoutRequiredValue() throws Exception {
-        WithdrawalLockReq request = new WithdrawalLockReq(null, true, "목표 저축");
-
-        mockMvc.perform(post("/api/v1/savings/{savingId}/withdrawal-lock", 1L)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
-    }
 
     @Test
     @DisplayName("중도 해지 API는 인증 사용자의 예금 또는 적금을 해지한다")
@@ -397,7 +355,8 @@ class SavingDepositControllerTest {
                 1L,
                 100000L,
                 1200000L,
-                true
+                true,
+                "123456"
         );
 
         mockMvc.perform(post("/api/v1/savings/installments")

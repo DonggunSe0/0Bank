@@ -84,6 +84,7 @@ function TransferForm({
   const [receiverAccountNumber, setReceiverAccountNumber] = useState('')
   const [amount, setAmount] = useState('')
   const [memo, setMemo] = useState('')
+  const [accountPassword, setAccountPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [serverError, setServerError] = useState('')
@@ -99,6 +100,9 @@ function TransferForm({
     const amt = Number(amount)
     if (!amount) e.amount = '금액을 입력해 주세요.'
     else if (isNaN(amt) || amt <= 0) e.amount = '올바른 금액을 입력해 주세요.'
+    if (!/^\d{6}$/.test(accountPassword)) {
+      e.accountPassword = '계좌 비밀번호 숫자 6자리를 입력해 주세요.'
+    }
     return e
   }
 
@@ -115,6 +119,7 @@ function TransferForm({
         senderAccountId,
         receiverAccountNumber,
         amount: Number(amount),
+        accountPassword,
         memo: memo || undefined,
       })
       onSuccess({
@@ -200,6 +205,23 @@ function TransferForm({
               <p className="text-xs text-muted-foreground">{formatCurrency(Number(amount))}</p>
             )}
             {errors.amount && <p className="text-xs text-destructive">{errors.amount}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="accountPassword">계좌 비밀번호</Label>
+            <Input
+              id="accountPassword"
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="숫자 6자리"
+              value={accountPassword}
+              onChange={(e) => setAccountPassword(e.target.value.replace(/\D/g, ''))}
+              aria-invalid={!!errors.accountPassword}
+            />
+            {errors.accountPassword && (
+              <p className="text-xs text-destructive">{errors.accountPassword}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

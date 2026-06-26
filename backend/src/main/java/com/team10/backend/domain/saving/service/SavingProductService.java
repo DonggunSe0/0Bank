@@ -20,34 +20,30 @@ public class SavingProductService {
     private final SavingProductRepository savingProductRepository;
 
     public List<SavingProductSummaryRes> getDepositProducts() {
-        return
-                savingProductRepository.findAllByTypeAndActiveTrue(SavingProductType.DEPOSIT).stream()
-                        .map(SavingProductSummaryRes::from)
-                        .toList();
+        return getProductSummaries(SavingProductType.DEPOSIT);
     }
 
     public List<SavingProductSummaryRes> getInstallmentProducts() {
-        return
-                savingProductRepository.findAllByTypeAndActiveTrue(SavingProductType.INSTALLMENT).stream()
-                        .map(SavingProductSummaryRes::from)
-                        .toList();
+        return getProductSummaries(SavingProductType.INSTALLMENT);
     }
 
     public SavingProductRes getDepositProduct(Long productId) {
-        return
-                savingProductRepository.findByIdAndTypeAndActiveTrue(productId,
-                                SavingProductType.DEPOSIT)
-                        .map(SavingProductRes::from)
-                        .orElseThrow(() -> new
-                                BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
+        return getProduct(productId, SavingProductType.DEPOSIT);
     }
 
     public SavingProductRes getInstallmentProduct(Long productId) {
-        return
-                savingProductRepository.findByIdAndTypeAndActiveTrue(productId,
-                                SavingProductType.INSTALLMENT)
-                        .map(SavingProductRes::from)
-                        .orElseThrow(() -> new
-                                BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
+        return getProduct(productId, SavingProductType.INSTALLMENT);
+    }
+
+    private List<SavingProductSummaryRes> getProductSummaries(SavingProductType type) {
+        return savingProductRepository.findAllByTypeAndActiveTrue(type).stream()
+                .map(SavingProductSummaryRes::from)
+                .toList();
+    }
+
+    private SavingProductRes getProduct(Long productId, SavingProductType type) {
+        return savingProductRepository.findByIdAndTypeAndActiveTrue(productId, type)
+                .map(SavingProductRes::from)
+                .orElseThrow(() -> new BusinessException(SavingErrorCode.SAVING_PRODUCT_NOT_FOUND));
     }
 }
