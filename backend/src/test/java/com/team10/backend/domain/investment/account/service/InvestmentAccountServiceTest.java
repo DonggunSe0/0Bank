@@ -42,6 +42,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class InvestmentAccountServiceTest {
 
+    private static final Long INITIAL_CASH_BALANCE = 5_000_000L;
+
     @Mock
     private InvestmentAccountRepository investmentAccountRepository;
 
@@ -80,7 +82,7 @@ class InvestmentAccountServiceTest {
         assertThat(responses.get(0).id()).isEqualTo(1L);
         assertThat(responses.get(0).accountNumber()).isEqualTo("1234567890-12");
         assertThat(responses.get(0).nickname()).isEqualTo("모의투자 계좌");
-        assertThat(responses.get(0).cashBalance()).isZero();
+        assertThat(responses.get(0).cashBalance()).isEqualTo(INITIAL_CASH_BALANCE);
         assertThat(responses.get(0).currencyCode()).isEqualTo(CurrencyCode.KRW);
         assertThat(responses.get(0).status()).isEqualTo(InvestmentAccountStatus.ACTIVE);
     }
@@ -98,7 +100,7 @@ class InvestmentAccountServiceTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.accountNumber()).isEqualTo("1234567890-12");
         assertThat(response.nickname()).isEqualTo("모의투자 계좌");
-        assertThat(response.cashBalance()).isZero();
+        assertThat(response.cashBalance()).isEqualTo(INITIAL_CASH_BALANCE);
         assertThat(response.currencyCode()).isEqualTo(CurrencyCode.KRW);
         assertThat(response.status()).isEqualTo(InvestmentAccountStatus.ACTIVE);
     }
@@ -135,7 +137,7 @@ class InvestmentAccountServiceTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.accountNumber()).matches("\\d{10}-\\d{2}");
         assertThat(response.nickname()).isEqualTo("모의투자 계좌");
-        assertThat(response.cashBalance()).isZero();
+        assertThat(response.cashBalance()).isEqualTo(INITIAL_CASH_BALANCE);
         assertThat(response.currencyCode()).isEqualTo(CurrencyCode.KRW);
         assertThat(response.status()).isEqualTo(InvestmentAccountStatus.ACTIVE);
 
@@ -319,6 +321,7 @@ class InvestmentAccountServiceTest {
     void closeAccount() {
         InvestmentAccount account = createInvestmentAccount(1L, verifiedUser, "모의투자 계좌");
         InvestmentAccountCloseReq request = new InvestmentAccountCloseReq("123456");
+        ReflectionTestUtils.setField(account, "cashBalance", 0L);
 
         when(investmentAccountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("123456", "encoded-password")).thenReturn(true);
@@ -352,7 +355,6 @@ class InvestmentAccountServiceTest {
     @DisplayName("예수금이 남아 있으면 투자 계좌를 해지할 수 없다")
     void closeAccountWithCashBalance() {
         InvestmentAccount account = createInvestmentAccount(1L, verifiedUser, "모의투자 계좌");
-        ReflectionTestUtils.setField(account, "cashBalance", 1000L);
         InvestmentAccountCloseReq request = new InvestmentAccountCloseReq("123456");
 
         when(investmentAccountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
@@ -372,6 +374,7 @@ class InvestmentAccountServiceTest {
     void closeAccountWithHolding() {
         InvestmentAccount account = createInvestmentAccount(1L, verifiedUser, "모의투자 계좌");
         InvestmentAccountCloseReq request = new InvestmentAccountCloseReq("123456");
+        ReflectionTestUtils.setField(account, "cashBalance", 0L);
 
         when(investmentAccountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("123456", "encoded-password")).thenReturn(true);
@@ -421,10 +424,10 @@ class InvestmentAccountServiceTest {
                 "1234567890-12",
                 nickname,
                 "encoded-password",
+                INITIAL_CASH_BALANCE,
                 CurrencyCode.KRW
         );
         ReflectionTestUtils.setField(account, "id", id);
         return account;
     }
-
 }

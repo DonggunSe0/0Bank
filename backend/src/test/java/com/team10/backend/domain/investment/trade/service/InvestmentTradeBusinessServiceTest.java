@@ -50,6 +50,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class InvestmentTradeBusinessServiceTest {
 
+    private static final Long INITIAL_CASH_BALANCE = 5_000_000L;
+
     @Mock
     private InvestmentAccountRepository investmentAccountRepository;
 
@@ -87,9 +89,9 @@ class InvestmentTradeBusinessServiceTest {
                 LocalDate.of(1995, 1, 1));
         ReflectionTestUtils.setField(user, "id", 1L);
 
-        account = InvestmentAccount.create(user, "1234567890-12", "투자 계좌", "encoded-password", CurrencyCode.KRW);
+        account = InvestmentAccount.create(user, "1234567890-12", "투자 계좌", "encoded-password", INITIAL_CASH_BALANCE,
+                CurrencyCode.KRW);
         ReflectionTestUtils.setField(account, "id", 10L);
-        account.depositCash(1_000_000L);
 
         stock = Stock.create(
                 "005930",
@@ -125,7 +127,7 @@ class InvestmentTradeBusinessServiceTest {
         assertThat(response.tradeType()).isEqualTo(InvestmentTradeType.BUY);
         assertThat(response.executionPrice()).isEqualTo(70_000L);
         assertThat(response.totalAmount()).isEqualTo(140_000L);
-        assertThat(account.getCashBalance()).isEqualTo(860_000L);
+        assertThat(account.getCashBalance()).isEqualTo(4_860_000L);
 
         ArgumentCaptor<InvestmentHolding> holdingCaptor = ArgumentCaptor.forClass(InvestmentHolding.class);
         verify(investmentHoldingRepository).save(holdingCaptor.capture());
@@ -149,7 +151,7 @@ class InvestmentTradeBusinessServiceTest {
 
         assertThat(response.tradeType()).isEqualTo(InvestmentTradeType.SELL);
         assertThat(response.executionPrice()).isEqualTo(70_000L);
-        assertThat(account.getCashBalance()).isEqualTo(1_140_000L);
+        assertThat(account.getCashBalance()).isEqualTo(5_140_000L);
         assertThat(holding.getQuantity()).isEqualTo(3L);
         verify(investmentHoldingRepository, never()).delete(holding);
     }

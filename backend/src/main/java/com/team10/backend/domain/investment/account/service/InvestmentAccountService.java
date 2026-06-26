@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class InvestmentAccountService {
 
     private static final int MAX_ACCOUNT_NUMBER_GENERATION_RETRY = 10;
+    private static final Long INITIAL_CASH_BALANCE = 5_000_000L;
 
     private final InvestmentAccountRepository investmentAccountRepository;
     private final UserRepository userRepository;
@@ -60,6 +61,7 @@ public class InvestmentAccountService {
                 accountNumber,
                 request.nickname(),
                 passwordEncoder.encode(request.accountPassword()),
+                INITIAL_CASH_BALANCE,
                 request.currencyCode()
         );
 
