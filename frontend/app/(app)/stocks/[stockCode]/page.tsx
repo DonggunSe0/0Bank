@@ -25,7 +25,7 @@ import { createMarketOrder } from '@/lib/api/trades'
 import { ApiRequestError } from '@/lib/api'
 import { createIdempotencyKey } from '@/lib/idempotency'
 import { useOrderbookStream } from '@/lib/hooks/useOrderbookStream'
-import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
+import { formatCurrency, formatDate, formatNumber, maskAccountNumber } from '@/lib/format'
 import type { InvestmentAccount, InvestmentTradeResult, StockDetail } from '@/lib/types'
 
 export default function StockDetailPage() {
@@ -211,6 +211,10 @@ function OrderbookPanel({
   )
 }
 
+function getInvestmentAccountLabel(account: InvestmentAccount) {
+  return `${account.nickname || '투자 계좌'} · ${maskAccountNumber(account.accountNumber)}`
+}
+
 function TradePanel({
   stock,
   streamId,
@@ -360,15 +364,23 @@ function TradePanel({
                 value={accountId}
                 onValueChange={(value) => value && setAccountId(value)}
               >
-                <SelectTrigger id="accountId">
-                  <SelectValue placeholder="계좌 선택" />
+                <SelectTrigger id="accountId" className="w-full">
+                  <SelectValue placeholder="계좌 선택">
+                    {(value: string | null) => {
+                      const selectedAccount = accounts.find((account) => String(account.id) === value)
+                      return selectedAccount ? getInvestmentAccountLabel(selectedAccount) : '계좌 선택'
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={String(account.id)}>
-                      {account.nickname || '투자 계좌'} · {formatCurrency(account.cashBalance)}
-                    </SelectItem>
-                  ))}
+                  {accounts.map((account) => {
+                    const label = getInvestmentAccountLabel(account)
+                    return (
+                      <SelectItem key={account.id} value={String(account.id)} label={label}>
+                        {label} · {formatCurrency(account.cashBalance)}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
