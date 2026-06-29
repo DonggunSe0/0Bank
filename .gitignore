@@ -24,7 +24,7 @@ logs/
 ############################
 # Environment / Secrets
 ############################
-.env
+perf/k6/.env.local
 .env.*
 *.env
 !.env.example
@@ -106,3 +106,7 @@ node_modules/
 
 # QueryDSL generated sources
 backend/src/main/generated/
+
+# Prometheus 실행 결과물
+perf/prometheus/data/
+perf/k6/.env.local

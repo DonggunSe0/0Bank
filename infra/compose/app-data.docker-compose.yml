@@ -39,5 +39,7 @@ services:
     restart: unless-stopped
     ports:
       - "8090:80"
+      - "18081:18081"
+      - "18082:18082"
     volumes:
       - /dockerProjects/nginx-lb/default.conf:/etc/nginx/conf.d/default.conf:ro

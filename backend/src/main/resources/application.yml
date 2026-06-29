@@ -31,12 +31,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
 
   endpoint:
     health:
       probes:
         enabled: true
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 # Swagger default MediaType 지정
 springdoc:

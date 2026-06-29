@@ -15,9 +15,48 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 mkdir -p /dockerProjects/edge
 mkdir -p /dockerProjects/npm/data
 mkdir -p /dockerProjects/npm/letsencrypt
+mkdir -p /dockerProjects/prometheus/data
+mkdir -p /dockerProjects/grafana/data
+mkdir -p /dockerProjects/grafana/provisioning/datasources
 
 cat > /dockerProjects/edge/docker-compose.yml <<'COMPOSE'
 ${compose_yml}
 COMPOSE
+
+cat > /dockerProjects/prometheus/prometheus.yml <<'PROMETHEUS'
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "spring-backend"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "${app_data_private_ip}:18081"
+        labels:
+          app: "backend"
+          env: "prod"
+          backend_instance: "backend-1"
+      - targets:
+          - "${app_data_private_ip}:18082"
+        labels:
+          app: "backend"
+          env: "prod"
+          backend_instance: "backend-2"
+PROMETHEUS
+
+cat > /dockerProjects/grafana/provisioning/datasources/prometheus.yml <<'GRAFANA_DATASOURCE'
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+GRAFANA_DATASOURCE
 
 docker compose -f /dockerProjects/edge/docker-compose.yml up -d

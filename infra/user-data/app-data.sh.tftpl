@@ -43,6 +43,10 @@ upstream spring_backend {
 server {
     listen 80;
 
+    location ^~ /actuator/prometheus {
+        return 404;
+    }
+
     location / {
         proxy_pass http://spring_backend;
 
@@ -52,6 +56,22 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 18081;
+
+    location /actuator/prometheus {
+        proxy_pass http://backend-1:8080;
+    }
+}
+
+server {
+    listen 18082;
+
+    location /actuator/prometheus {
+        proxy_pass http://backend-2:8080;
     }
 }
 NGINX

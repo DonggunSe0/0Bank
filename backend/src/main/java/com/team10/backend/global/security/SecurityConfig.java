@@ -96,7 +96,8 @@ public class SecurityConfig {
                     auth.requestMatchers(
                             HttpMethod.GET,
                             "/actuator/health",
-                            "/actuator/health/**"
+                            "/actuator/health/**",
+                            "/actuator/prometheus"
                     ).permitAll();
 
                     // H2 Console (dev/test 전용)
