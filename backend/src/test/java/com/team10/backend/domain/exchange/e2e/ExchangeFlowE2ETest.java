@@ -203,6 +203,7 @@ class ExchangeFlowE2ETest {
         assertEquals(100_000L, krwHistory.getAmount());
         assertEquals(200_000L, krwHistory.getBalanceBefore());
         assertEquals(100_000L, krwHistory.getBalanceAfter());
+        assertEquals("환전 주문", krwHistory.getCounterpartyName());
         assertEquals("환전", krwHistory.getMemo());
         assertNotNull(krwHistory.getTransactedAt());
 
@@ -256,8 +257,8 @@ class ExchangeFlowE2ETest {
                 .andExpect(jsonPath("$.toCurrencyCode").value("KRW"))
                 .andExpect(jsonPath("$.fromAmount").value(10.00))
                 .andExpect(jsonPath("$.rate").value(1380.000000))
-                .andExpect(jsonPath("$.fee").value(0.02))
-                .andExpect(jsonPath("$.expectedToAmount").value(13772))
+                .andExpect(jsonPath("$.fee").value(34))
+                .andExpect(jsonPath("$.expectedToAmount").value(13766))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -282,8 +283,8 @@ class ExchangeFlowE2ETest {
                 .andExpect(jsonPath("$.krwAccountId").value(krwAccount.getId()))
                 .andExpect(jsonPath("$.fxWalletId").value(fxWallet.getId()))
                 .andExpect(jsonPath("$.fromAmount").value(10.00))
-                .andExpect(jsonPath("$.toAmount").value(13772))
-                .andExpect(jsonPath("$.fee").value(0.02));
+                .andExpect(jsonPath("$.toAmount").value(13766))
+                .andExpect(jsonPath("$.fee").value(34));
 
         entityManager.clear();
 
@@ -291,7 +292,7 @@ class ExchangeFlowE2ETest {
         Account savedKrwAccount = accountRepository.findById(krwAccount.getId()).orElseThrow();
         FxWallet savedFxWallet = fxWalletRepository.findById(fxWallet.getId()).orElseThrow();
 
-        assertEquals(113_772L, savedKrwAccount.getBalance());
+        assertEquals(113_766L, savedKrwAccount.getBalance());
         assertThat(savedFxWallet.getBalance()).isEqualByComparingTo("10.00");
 
         // then 2. 견적과 완료 주문은 각각 1건씩 저장되어야 한다.
@@ -304,8 +305,8 @@ class ExchangeFlowE2ETest {
         assertEquals(ExchangeOrderStatus.COMPLETED, order.getStatus());
         assertEquals(quoteId, order.getExchangeQuote().getId());
         assertThat(order.getFromAmount()).isEqualByComparingTo("10.00");
-        assertThat(order.getToAmount()).isEqualByComparingTo("13772");
-        assertThat(order.getFee()).isEqualByComparingTo("0.02");
+        assertThat(order.getToAmount()).isEqualByComparingTo("13766");
+        assertThat(order.getFee()).isEqualByComparingTo("34");
         assertNotNull(order.getCompletedAt());
 
         // then 3. 원화 계좌 거래내역과 외화 지갑 원장이 각각 1건씩 저장되어야 한다.
@@ -316,9 +317,10 @@ class ExchangeFlowE2ETest {
         assertEquals(savedKrwAccount.getId(), krwHistory.getAccount().getId());
         assertEquals(TransactionType.EXCHANGE, krwHistory.getType());
         assertEquals(TransactionDirection.IN, krwHistory.getDirection());
-        assertEquals(13_772L, krwHistory.getAmount());
+        assertEquals(13_766L, krwHistory.getAmount());
         assertEquals(100_000L, krwHistory.getBalanceBefore());
-        assertEquals(113_772L, krwHistory.getBalanceAfter());
+        assertEquals(113_766L, krwHistory.getBalanceAfter());
+        assertEquals("환전 주문", krwHistory.getCounterpartyName());
         assertEquals("환전", krwHistory.getMemo());
         assertNotNull(krwHistory.getTransactedAt());
 

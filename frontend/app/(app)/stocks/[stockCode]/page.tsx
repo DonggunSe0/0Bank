@@ -25,7 +25,7 @@ import { createMarketOrder } from '@/lib/api/trades'
 import { ApiRequestError } from '@/lib/api'
 import { createIdempotencyKey } from '@/lib/idempotency'
 import { useOrderbookStream } from '@/lib/hooks/useOrderbookStream'
-import { formatCurrency, formatDate, formatNumber } from '@/lib/format'
+import { formatCurrency, formatDate, formatNumber, maskAccountNumber } from '@/lib/format'
 import type { InvestmentAccount, InvestmentTradeResult, StockDetail } from '@/lib/types'
 
 export default function StockDetailPage() {
@@ -211,6 +211,10 @@ function OrderbookPanel({
   )
 }
 
+function getInvestmentAccountLabel(account: InvestmentAccount) {
+  return `${account.nickname || '투자 계좌'} · ${maskAccountNumber(account.accountNumber)}`
+}
+
 function TradePanel({
   stock,
   streamId,
@@ -232,6 +236,12 @@ function TradePanel({
   const [tradeResult, setTradeResult] = useState<InvestmentTradeResult | null>(null)
 
   const idempotencyKeyRef = useRef<string | null>(null)
+  const idempotencyRequestSignatureRef = useRef<string | null>(null)
+
+  function resetIdempotencyKey() {
+    idempotencyKeyRef.current = null
+    idempotencyRequestSignatureRef.current = null
+  }
 
   useEffect(() => {
     getInvestmentAccounts()
@@ -282,26 +292,30 @@ function TradePanel({
       return
     }
 
-    if (!idempotencyKeyRef.current) {
+    const request = {
+      accountId: parsedAccountId,
+      stockId: stock.id,
+      streamId,
+      tradeType,
+      quantity: parsedQuantity,
+      accountPassword,
+      expectedPrice,
+    }
+    const requestSignature = JSON.stringify(request)
+
+    if (!idempotencyKeyRef.current || idempotencyRequestSignatureRef.current !== requestSignature) {
       idempotencyKeyRef.current = createIdempotencyKey('market-order')
+      idempotencyRequestSignatureRef.current = requestSignature
     }
 
     setSubmitting(true)
     try {
       const result = await createMarketOrder(
-        {
-          accountId: parsedAccountId,
-          stockId: stock.id,
-          streamId,
-          tradeType,
-          quantity: parsedQuantity,
-          accountPassword,
-          expectedPrice,
-        },
+        request,
         idempotencyKeyRef.current,
       )
       setTradeResult(result)
-      idempotencyKeyRef.current = null
+      resetIdempotencyKey()
       setAccountPassword('')
       setQuantity('')
       toast.success(`${tradeType === 'BUY' ? '매수' : '매도'} 체결 완료`)
@@ -358,22 +372,40 @@ function TradePanel({
               <Label htmlFor="accountId">투자 계좌</Label>
               <Select
                 value={accountId}
-                onValueChange={(value) => value && setAccountId(value)}
+                onValueChange={(value) => {
+                  if (!value) return
+                  resetIdempotencyKey()
+                  setAccountId(value)
+                }}
               >
-                <SelectTrigger id="accountId">
-                  <SelectValue placeholder="계좌 선택" />
+                <SelectTrigger id="accountId" className="w-full">
+                  <SelectValue placeholder="계좌 선택">
+                    {(value: string | null) => {
+                      const selectedAccount = accounts.find((account) => String(account.id) === value)
+                      return selectedAccount ? getInvestmentAccountLabel(selectedAccount) : '계좌 선택'
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={String(account.id)}>
-                      {account.nickname || '투자 계좌'} · {formatCurrency(account.cashBalance)}
-                    </SelectItem>
-                  ))}
+                  {accounts.map((account) => {
+                    const label = getInvestmentAccountLabel(account)
+                    return (
+                      <SelectItem key={account.id} value={String(account.id)} label={label}>
+                        {label} · {formatCurrency(account.cashBalance)}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
 
-            <Tabs value={tradeType} onValueChange={(value) => setTradeType(value as 'BUY' | 'SELL')}>
+            <Tabs
+              value={tradeType}
+              onValueChange={(value) => {
+                resetIdempotencyKey()
+                setTradeType(value as 'BUY' | 'SELL')
+              }}
+            >
               <TabsList className="w-full">
                 <TabsTrigger value="BUY" className="flex-1 text-red-600 dark:text-red-400">
                   매수
@@ -391,7 +423,10 @@ function TradePanel({
                     min={1}
                     step={1}
                     value={quantity}
-                    onChange={(event) => setQuantity(event.target.value)}
+                    onChange={(event) => {
+                      resetIdempotencyKey()
+                      setQuantity(event.target.value)
+                    }}
                     placeholder="수량 입력"
                   />
                 </div>
@@ -404,9 +439,10 @@ function TradePanel({
                     inputMode="numeric"
                     maxLength={6}
                     value={accountPassword}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      resetIdempotencyKey()
                       setAccountPassword(event.target.value.replace(/\D/g, ''))
-                    }
+                    }}
                     placeholder="숫자 6자리"
                   />
                 </div>

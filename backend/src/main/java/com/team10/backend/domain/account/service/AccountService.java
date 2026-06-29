@@ -1,5 +1,6 @@
 package com.team10.backend.domain.account.service;
 
+import com.team10.backend.domain.account.dto.req.AccountCloseReq;
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
@@ -41,7 +42,7 @@ public class AccountService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(AccountErrorCode.USER_NOT_FOUND));
 
-        if (!Boolean.TRUE.equals(user.getIdentityVerified())) {
+        if (!user.isIdentityVerificationValid()) {
             throw new BusinessException(AccountErrorCode.IDENTITY_VERIFICATION_REQUIRED);
         }
 
@@ -122,7 +123,7 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountDetailRes closeAccount(Long userId, Long accountId) {
+    public AccountDetailRes closeAccount(Long userId, Long accountId, AccountCloseReq request) {
         Account account = accountRepository.findByIdAndUserIdForUpdate(accountId, userId)
                 .orElseThrow(() -> new
                         BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
@@ -134,6 +135,8 @@ public class AccountService {
         if (!account.getBalance().equals(0L)) {
             throw new BusinessException(AccountErrorCode.ACCOUNT_BALANCE_NOT_ZERO);
         }
+
+        account.verifyPassword(passwordEncoder, request.accountPassword());
 
         account.close();
 

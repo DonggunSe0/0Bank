@@ -179,6 +179,22 @@ resource "aws_security_group" "app_data" {
     security_groups = [aws_security_group.edge.id]
   }
 
+  ingress {
+    description     = "Backend 1 Prometheus metrics"
+    from_port       = 18081
+    to_port         = 18081
+    protocol        = "tcp"
+    security_groups = [aws_security_group.edge.id]
+  }
+
+  ingress {
+    description     = "Backend 2 Prometheus metrics"
+    from_port       = 18082
+    to_port         = 18082
+    protocol        = "tcp"
+    security_groups = [aws_security_group.edge.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -315,7 +331,8 @@ resource "aws_instance" "edge" {
   # EC2 최초 생성 시 Docker 및 NPM을 자동 설치합니다.
   user_data = templatefile("${path.module}/user-data/edge.sh.tftpl",
     {
-      compose_yml = file("${path.module}/compose/edge.docker-compose.yml")
+      compose_yml         = file("${path.module}/compose/edge.docker-compose.yml")
+      app_data_private_ip = aws_instance.app_data.private_ip
     }
   )
 

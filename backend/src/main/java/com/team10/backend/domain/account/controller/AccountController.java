@@ -1,5 +1,6 @@
 package com.team10.backend.domain.account.controller;
 
+import com.team10.backend.domain.account.dto.req.AccountCloseReq;
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
@@ -75,13 +76,14 @@ public class AccountController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "계좌 해지", description = "인증 사용자가 본인 소유의 활성 계좌를 해지합니다. 잔액이 0원인 계좌만 해지할 수 있습니다.")
+    @Operation(summary = "계좌 해지", description = "계좌 비밀번호 검증 후 본인 소유의 활성 계좌를 해지합니다. 잔액이 0원인 계좌만 해지할 수 있습니다.")
     @PostMapping("/{accountId}/close")
     public ResponseEntity<AccountDetailRes> closeAccount(
             @AuthenticationPrincipal Long userId,
-            @PathVariable Long accountId
+            @PathVariable Long accountId,
+            @Valid @RequestBody AccountCloseReq request
     ){
-        AccountDetailRes response = accountService.closeAccount(userId, accountId);
+        AccountDetailRes response = accountService.closeAccount(userId, accountId, request);
         return ResponseEntity.ok(response);
     }
 

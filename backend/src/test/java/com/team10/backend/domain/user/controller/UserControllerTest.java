@@ -54,6 +54,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -274,6 +275,22 @@ class UserControllerTest {
                     .andExpect(jsonPath("$.userId").value(1L))
                     .andExpect(jsonPath("$.ageGroup").value("TWENTIES"))
                     .andExpect(jsonPath("$.region").value("SEOUL"));
+        }
+
+        @Test
+        @DisplayName("필수 필드(ageGroup) 누락 — 400")
+        void missingRequiredField() throws Exception {
+            UserProfileReq req = new UserProfileReq(
+                    null, Region.SEOUL, OccupationStatus.EMPLOYED,
+                    Set.of(FinancialInterest.SAVINGS));
+
+            mockMvc.perform(post("/api/v1/users/me/profile")
+                            .with(auth())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(userProfileService);
         }
     }
 

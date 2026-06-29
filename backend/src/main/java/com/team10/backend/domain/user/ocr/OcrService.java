@@ -10,6 +10,7 @@ import com.team10.backend.domain.user.verification.MockGovernmentVerifyService;
 import com.team10.backend.domain.user.verification.VerificationSessionRecorder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.LocalDate;
 
 /**
@@ -28,17 +30,34 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class OcrService {
 
+    private static final String LOCK_PREFIX = "identity:ocr:lock:";
+    private static final Duration LOCK_TTL = Duration.ofSeconds(35);
+
     private final CodefOcrClient codefOcrClient;
     private final OcrPersistenceService ocrPersistenceService;
     private final MockGovernmentVerifyService mockGovernmentVerifyService;
     private final VerificationSessionRecorder verificationSessionRecorder;
+    private final StringRedisTemplate redisTemplate;
+
+    /** OCR 제출 동시 요청 방지 락(SET NX) — IdentityVerificationService.submitIdCardOcr()에서 접수 시 시도한다. */
+    public boolean tryAcquireLock(Long userId) {
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(LOCK_PREFIX + userId, "1", LOCK_TTL);
+        return Boolean.TRUE.equals(acquired);
+    }
+
+    /** OCR 제출 처리(성공/실패 불문) 완료 후 락 해제. */
+    public void releaseLock(Long userId) {
+        redisTemplate.delete(LOCK_PREFIX + userId);
+    }
 
     @Async("ocrExecutor")
     public void processAsync(Path imagePath, Long verificationId) {
         log.info("[OCR] 1단계 시작 — verificationId={}, thread={}", verificationId, Thread.currentThread().getName());
 
+        IdentityVerification verification = null;
         try {
-            IdentityVerification verification = ocrPersistenceService.loadVerification(verificationId);
+            verification = ocrPersistenceService.loadVerification(verificationId);
             if (verification == null) return;
 
             try {
@@ -63,6 +82,11 @@ public class OcrService {
                 log.error("[OCR] 처리 오류 — verificationId={}", verificationId, e);
             }
         } finally {
+            // 동시 제출 방지 락 — 처리(성공/실패 불문) 완료 후 해제한다. verification을 찾지 못한 경우(세션 없음)는
+            // userId를 알 수 없어 여기서 해제할 수 없지만, LOCK_TTL(35초) 만료로 자연 해소된다.
+            if (verification != null) {
+                releaseLock(verification.getUser().getId());
+            }
             // 앱이 직접 만든 임시파일이므로 처리 성공/실패와 무관하게 항상 정리한다.
             try {
                 Files.deleteIfExists(imagePath);

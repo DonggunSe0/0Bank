@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -71,6 +72,21 @@ public class IdempotencyService {
         staleRecords.forEach(Idempotency::expire);
 
         return staleRecords.size();
+    }
+
+    // PROCESSING이 아닌 종료 상태(SUCCESS/FAILED/EXPIRED)의 멱등키를 보관 기간 이후 삭제한다.
+    @Transactional
+    public int deleteRecordsOlderThan(Duration retention) {
+        LocalDateTime threshold = LocalDateTime.now().minus(retention);
+
+        return idempotencyRepository.deleteExpiredRecords(
+                EnumSet.of(
+                        IdempotencyStatus.SUCCESS,
+                        IdempotencyStatus.FAILED,
+                        IdempotencyStatus.EXPIRED
+                ),
+                threshold
+        );
     }
 
     private <T> IdempotencyReserveResult<T> createProcessing(

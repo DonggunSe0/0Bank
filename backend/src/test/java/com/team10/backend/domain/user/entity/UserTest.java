@@ -4,8 +4,10 @@ import com.team10.backend.domain.user.type.UserStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,6 +48,49 @@ class UserTest {
             user.completeIdentityVerification();
 
             assertThat(user.getIdentityVerified()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("isIdentityVerificationValid")
+    class IsIdentityVerificationValid {
+
+        @Test
+        @DisplayName("인증한 적 없으면 false")
+        void neverVerified_false() {
+            User user = newUser();
+
+            assertThat(user.isIdentityVerificationValid()).isFalse();
+        }
+
+        @Test
+        @DisplayName("방금 완료했으면 true")
+        void justCompleted_true() {
+            User user = newUser();
+
+            user.completeIdentityVerification();
+
+            assertThat(user.isIdentityVerificationValid()).isTrue();
+        }
+
+        @Test
+        @DisplayName("완료 후 30일이 지나면 false (재인증 필요)")
+        void expiredAfter30Days_false() {
+            User user = newUser();
+            user.completeIdentityVerification();
+            ReflectionTestUtils.setField(user, "identityVerifiedAt", LocalDateTime.now().minusDays(31));
+
+            assertThat(user.isIdentityVerificationValid()).isFalse();
+        }
+
+        @Test
+        @DisplayName("완료 후 30일 이내면 true")
+        void within30Days_true() {
+            User user = newUser();
+            user.completeIdentityVerification();
+            ReflectionTestUtils.setField(user, "identityVerifiedAt", LocalDateTime.now().minusDays(29));
+
+            assertThat(user.isIdentityVerificationValid()).isTrue();
         }
     }
 

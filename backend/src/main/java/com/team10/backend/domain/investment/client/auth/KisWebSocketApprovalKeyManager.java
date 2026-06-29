@@ -39,7 +39,5 @@ public class KisWebSocketApprovalKeyManager {
     private void issueApprovalKey() {
         KisWebSocketApprovalKey issuedKey = kisAuthClient.issueWebSocketApprovalKey();
         this.approvalKey = issuedKey.approvalKey();
-
-        log.debug("KIS WebSocket approval key issued");
     }
 }

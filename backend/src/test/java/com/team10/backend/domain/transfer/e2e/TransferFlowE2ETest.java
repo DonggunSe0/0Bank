@@ -20,6 +20,7 @@ import com.team10.backend.global.idempotency.type.IdempotencyStatus;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -564,6 +565,7 @@ class TransferFlowE2ETest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("정상 입금 E2E - API 응답, 계좌 잔액, 입금 거래내역, 멱등성 성공 상태를 검증한다")
     void topUp_success_persistsConsistentState() throws Exception {
         // given. 실제 사용자와 입금 대상 계좌를 DB에 준비한다.
@@ -628,6 +630,7 @@ class TransferFlowE2ETest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("비소유 계좌 입금 E2E - 로그인 사용자가 소유하지 않은 계좌에는 입금하지 않는다")
     void topUp_accountOwnedByAnotherUser_returnsAccountNotFoundWithoutChangingState() throws Exception {
         // given. 실제 계좌 소유자와 공격자 역할의 사용자를 DB에 준비한다.
@@ -672,6 +675,7 @@ class TransferFlowE2ETest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("비활성 계좌 입금 E2E - CLOSED 상태의 계좌에는 입금하지 않는다")
     void topUp_inactiveAccount_returnsAccountNotActiveWithoutChangingState() throws Exception {
         // given. 입금 대상 계좌를 준비하고 CLOSED 상태로 변경한다.
@@ -715,6 +719,7 @@ class TransferFlowE2ETest {
     }
 
     @Test
+    @Disabled("ATM/외부 입금 채널 연동 전까지 사용자 직접 입금 API 비활성화")
     @DisplayName("계좌 ID 미존재 입금 E2E - 존재하지 않는 계좌 ID에는 입금하지 않는다")
     void topUp_accountIdNotFound_returnsAccountNotFoundWithoutPersistingHistory() throws Exception {
         // given. 인증 사용자는 존재하지만 요청의 입금 대상 계좌 ID는 DB에 존재하지 않는다.

@@ -213,6 +213,26 @@ class ExAccountControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @DisplayName("외부기관 거래내역 직접 새로고침 API는 요청 본문 없이 갱신 결과를 반환한다")
+    void refreshTransactionsFromProvider() throws Exception {
+        ExAccountRes accountRes = createAccountRes();
+        ExAccountTransactionRes transactionRes = createTransactionRes();
+        ExAccountDetailRes detail = ExAccountDetailRes.of(accountRes, List.of(transactionRes));
+        ExAccountTransactionRefreshRes response = ExAccountTransactionRefreshRes.of(1, 1, 0, detail);
+
+        when(exAccountTransactionService.refreshTransactionsFromProvider(1L, 10L))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/external-accounts/accounts/{exAccountId}/transactions/refresh/provider", 10L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestedCount").value(1))
+                .andExpect(jsonPath("$.createdCount").value(1))
+                .andExpect(jsonPath("$.detail.transactions[0].counterpartyName").value("스타벅스"));
+
+        verify(exAccountTransactionService).refreshTransactionsFromProvider(1L, 10L);
+    }
+
     private ExAccountRes createAccountRes() {
         return new ExAccountRes(
                 10L,

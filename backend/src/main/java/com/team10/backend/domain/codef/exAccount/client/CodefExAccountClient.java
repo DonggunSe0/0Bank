@@ -5,6 +5,7 @@ import com.team10.backend.domain.codef.exAccount.config.CodefExAccountProperties
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConnectionPayload;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConnectionResult;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountListRequest;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionListRequest;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountClientException;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationException;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationFailure;
@@ -61,7 +62,7 @@ public class CodefExAccountClient {
                         .body(request)
                         .retrieve()
                         .body(String.class);
-                return responseDecoder.decodeData(responseBody);
+                return responseDecoder.decodeTransactionData(responseBody);
             } catch (RestClientResponseException exception) {
                 if (!shouldRetry(exception, attempt)) {
                     throw new CodefExAccountClientException("CODEF 보유계좌 HTTP 요청에 실패했습니다.", exception);
@@ -74,6 +75,36 @@ public class CodefExAccountClient {
         }
 
         throw new CodefExAccountClientException("CODEF 보유계좌 조회에 실패했습니다.");
+    }
+
+    /**
+     * CODEF API로부터 특정 계좌의 거래내역을 요청합니다.
+     */
+    public JsonNode getTransactionList(CodefExAccountTransactionListRequest request) {
+        validateTransactionRequest(request);
+
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                String responseBody = restClient.post()
+                        .uri(properties.bankTransactionPath())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + authClient.getAccessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(request)
+                        .retrieve()
+                        .body(String.class);
+                return responseDecoder.decodeData(responseBody);
+            } catch (RestClientResponseException exception) {
+                if (!shouldRetry(exception, attempt)) {
+                    throw new CodefExAccountClientException("CODEF 거래내역 HTTP 요청에 실패했습니다.", exception);
+                }
+            } catch (ResourceAccessException exception) {
+                if (!canRetry(attempt)) {
+                    throw new CodefExAccountClientException("CODEF 거래내역 요청 시간이 초과되었습니다.", exception);
+                }
+            }
+        }
+
+        throw new CodefExAccountClientException("CODEF 거래내역 조회에 실패했습니다.");
     }
 
     /**
@@ -134,6 +165,18 @@ public class CodefExAccountClient {
                 || request.connectedId() == null
                 || request.connectedId().isBlank()) {
             throw new CodefExAccountClientException("CODEF 보유계좌 요청값이 올바르지 않습니다.");
+        }
+    }
+
+    private void validateTransactionRequest(CodefExAccountTransactionListRequest request) {
+        if (request == null
+                || request.organization() == null
+                || request.organization().isBlank()
+                || request.connectedId() == null
+                || request.connectedId().isBlank()
+                || request.account() == null
+                || request.account().isBlank()) {
+            throw new CodefExAccountClientException("CODEF 거래내역 요청값이 올바르지 않습니다.");
         }
     }
 

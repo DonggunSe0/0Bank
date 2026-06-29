@@ -6,6 +6,7 @@ import static com.team10.backend.domain.transaction.service.TransactionHistorySe
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.team10.backend.domain.transaction.dto.req.TransactionHistorySearchReq;
@@ -48,10 +49,13 @@ public class TransactionHistoryRepositoryImpl implements TransactionHistoryRepos
                 .select(Projections.constructor(
                         TransactionHistorySearchRes.class,
                         transactionHistory.id,
+                        transactionHistory.type,
                         transactionHistory.counterpartyName,
+                        Expressions.nullExpression(String.class),
                         transactionHistory.amount,
                         transactionHistory.balanceAfter,
                         transactionHistory.transactedAt,
+                        transactionHistory.memo,
                         transactionHistory.direction
                 ))
                 .from(transactionHistory)

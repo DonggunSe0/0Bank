@@ -8,9 +8,11 @@ import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConn
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConnectionResult;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountListRequest;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionListRequest;
 import com.team10.backend.domain.codef.exAccount.dto.req.CodefExAccountConnectionCreateReq;
 import com.team10.backend.domain.codef.exAccount.mapper.CodefExAccountConnectionPayloadMapper;
 import com.team10.backend.domain.codef.exAccount.mapper.CodefExAccountSnapshotMapper;
+import com.team10.backend.domain.codef.exAccount.mapper.CodefExAccountTransactionMapper;
 import com.team10.backend.domain.exAccount.entity.value.EncryptedConnectedId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,8 @@ class CodefExAccountGatewayTest {
     private CodefConnectedIdEncryptor connectedIdEncryptor;
     @Mock
     private CodefExAccountSnapshotMapper snapshotMapper;
+    @Mock
+    private CodefExAccountTransactionMapper transactionMapper;
 
     private CodefExAccountGateway gateway;
 
@@ -46,7 +50,8 @@ class CodefExAccountGatewayTest {
                 connectionPayloadMapper,
                 codefExAccountClient,
                 connectedIdEncryptor,
-                snapshotMapper
+                snapshotMapper,
+                transactionMapper
         );
     }
 
@@ -81,6 +86,35 @@ class CodefExAccountGatewayTest {
         assertThat(captor.getValue().connectedId()).isEqualTo("plain-connected-id");
         assertThat(captor.getValue().birthDate()).isEqualTo("950101");
         assertThat(captor.getValue().toString()).doesNotContain("plain-connected-id");
+    }
+
+    @Test
+    void decryptsConnectedIdOnlyForProviderTransactionRequest() throws Exception {
+        EncryptedConnectedId encrypted = new EncryptedConnectedId("ciphertext", "iv", "v1");
+        JsonNode data = new ObjectMapper().readTree("{}");
+        when(connectedIdEncryptor.decrypt(encrypted)).thenReturn("plain-connected-id");
+        when(codefExAccountClient.getTransactionList(any(CodefExAccountTransactionListRequest.class)))
+                .thenReturn(data);
+        when(transactionMapper.toSnapshots("0004", "1234567890", data)).thenReturn(List.of());
+
+        gateway.getTransactionSnapshots(
+                "0004",
+                encrypted,
+                "950101",
+                "1234567890",
+                java.time.LocalDate.of(2026, 6, 1),
+                java.time.LocalDate.of(2026, 6, 30)
+        );
+
+        ArgumentCaptor<CodefExAccountTransactionListRequest> captor =
+                ArgumentCaptor.forClass(CodefExAccountTransactionListRequest.class);
+        verify(codefExAccountClient).getTransactionList(captor.capture());
+        assertThat(captor.getValue().connectedId()).isEqualTo("plain-connected-id");
+        assertThat(captor.getValue().account()).isEqualTo("1234567890");
+        assertThat(captor.getValue().startDate()).isEqualTo("20260601");
+        assertThat(captor.getValue().endDate()).isEqualTo("20260630");
+        assertThat(captor.getValue().toString()).doesNotContain("plain-connected-id");
+        assertThat(captor.getValue().toString()).doesNotContain("1234567890");
     }
 
     private CodefExAccountConnectionCreateReq request() {

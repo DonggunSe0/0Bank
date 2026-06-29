@@ -24,6 +24,7 @@ public enum UserErrorCode implements ErrorCode {
     ONE_WON_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증 시도 횟수를 초과했습니다. 1원 송금을 다시 요청해주세요."),
     ONE_WON_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘 1원 인증 요청 한도를 초과했습니다. 내일 다시 시도해주세요."),
     OCR_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘 신분증 OCR 요청 한도를 초과했습니다. 내일 다시 시도해주세요."),
+    OCR_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "OCR 인증 요청이 이미 처리 중입니다. 잠시 후 다시 시도해주세요."),
     UNSUPPORTED_BANK(HttpStatus.BAD_REQUEST, "지원하지 않는 은행 기관코드입니다."),
     BANK_MAINTENANCE(HttpStatus.SERVICE_UNAVAILABLE, "해당 은행은 현재 점검 중입니다. 잠시 후 다시 시도해주세요."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 Refresh Token입니다."),

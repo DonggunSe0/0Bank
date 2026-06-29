@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BarChart3, Plus } from 'lucide-react'
+import { BarChart3, Plus, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAuth } from '@/contexts/AuthContext'
 import { getInvestmentAccounts } from '@/lib/api/investments'
 import { formatCurrency, maskAccountNumber } from '@/lib/format'
 import type { InvestmentAccount } from '@/lib/types'
@@ -18,9 +19,12 @@ const statusLabel: Record<string, string> = {
 }
 
 export default function InvestmentAccountsPage() {
+  const { user } = useAuth()
   const [accounts, setAccounts] = useState<InvestmentAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const isVerified = user?.identityVerified === true
 
   useEffect(() => {
     getInvestmentAccounts()
@@ -42,10 +46,16 @@ export default function InvestmentAccountsPage() {
           <Button size="sm" variant="outline" nativeButton={false} render={<Link href="/stocks" />}>
             주식 거래
           </Button>
-          <Button size="sm" nativeButton={false} render={<Link href="/investment-accounts/new" />}>
-            <Plus data-icon="inline-start" />
-            개설
-          </Button>
+          {isVerified ? (
+            <Button size="sm" nativeButton={false} render={<Link href="/investment-accounts/new" />}>
+              <Plus data-icon="inline-start" />
+              개설
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" nativeButton={false} render={<Link href="/identity" />}>
+              본인인증
+            </Button>
+          )}
         </div>
       </div>
 
@@ -66,11 +76,25 @@ export default function InvestmentAccountsPage() {
           <CardContent className="py-12 text-center">
             <BarChart3 className="size-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm font-medium text-foreground mb-1">투자 계좌가 없습니다</p>
-            <p className="text-xs text-muted-foreground mb-4">새 투자 계좌를 개설해 보세요.</p>
-            <Button size="sm" nativeButton={false} render={<Link href="/investment-accounts/new" />}>
-              <Plus data-icon="inline-start" />
-              투자 계좌 개설
-            </Button>
+            {isVerified ? (
+              <>
+                <p className="text-xs text-muted-foreground mb-4">새 투자 계좌를 개설해 보세요.</p>
+                <Button size="sm" nativeButton={false} render={<Link href="/investment-accounts/new" />}>
+                  <Plus data-icon="inline-start" />
+                  투자 계좌 개설
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground mb-4">
+                  투자 계좌 개설은 본인인증 완료 회원만 이용할 수 있습니다.
+                </p>
+                <Button size="sm" nativeButton={false} render={<Link href="/identity" />}>
+                  <ShieldAlert data-icon="inline-start" />
+                  본인인증 하러가기
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (

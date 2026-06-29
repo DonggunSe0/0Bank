@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ========================= -->
+    <!-- 로그 출력 형식 -->
+    <!-- ========================= -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>
+
+    <!-- ========================= -->
+    <!-- 콘솔 로그 출력 -->
+    <!-- 개발 중 터미널에서 로그를 보기 위함 -->
+    <!-- ========================= -->
+    <appender name="CONSOLE"
+              class="ch.qos.logback.core.ConsoleAppender">
+
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+
+    </appender>
+
+    <!-- ========================= -->
+    <!-- 파일 로그 출력 -->
+    <!-- ========================= -->
+    <appender name="FILE"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+
+        <!-- 현재 기록 중인 로그 파일 -->
+        <file>logs/app.log</file>
+
+        <!--
+            SizeAndTimeBasedRollingPolicy
+
+            1. 하루마다 새로운 로그 파일 생성
+            2. 하루 로그가 maxFileSize를 넘으면 파일 분할
+            3. maxHistory 기간이 지나면 자동 삭제
+            4. totalSizeCap을 넘으면 오래된 로그부터 삭제
+        -->
+        <rollingPolicy
+                class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+
+            <!--
+                로그 파일 이름
+
+                app-2026-06-26.0.log.gz
+                app-2026-06-26.1.log.gz
+                app-2026-06-27.0.log.gz
+            -->
+            <fileNamePattern>
+                logs/app-%d{yyyy-MM-dd}.%i.log.gz
+            </fileNamePattern>
+
+            <!-- 파일 하나가 100MB를 넘으면 분할 -->
+            <maxFileSize>100MB</maxFileSize>
+
+            <!-- 30일 지난 로그 자동 삭제 -->
+            <maxHistory>30</maxHistory>
+
+            <!-- 전체 로그 용량이 5GB를 넘으면 오래된 로그부터 삭제 -->
+            <totalSizeCap>5GB</totalSizeCap>
+
+        </rollingPolicy>
+
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+
+    </appender>
+
+    <!-- ========================= -->
+    <!-- 로그 레벨 -->
+    <!-- INFO 이상만 출력 -->
+    <!-- Console + File 둘 다 출력 -->
+    <!-- ========================= -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>

@@ -59,6 +59,7 @@ public class InvestmentAccount extends BaseEntity {
             String accountNumber,
             String nickname,
             String accountPasswordHash,
+            Long initialCashBalance,
             CurrencyCode currencyCode
     ) {
         InvestmentAccount account = new InvestmentAccount();
@@ -66,7 +67,7 @@ public class InvestmentAccount extends BaseEntity {
         account.accountNumber = accountNumber;
         account.nickname = nickname;
         account.accountPasswordHash = accountPasswordHash;
-        account.cashBalance = 0L;
+        account.cashBalance = initialCashBalance;
         account.currencyCode = currencyCode;
         account.status = InvestmentAccountStatus.ACTIVE;
         return account;

@@ -107,7 +107,8 @@ public class CodefExAccountSnapshotMapper {
         try {
             return new BigDecimal(value.replace(",", ""));
         } catch (NumberFormatException exception) {
-            throw new CodefExAccountClientException("CODEF 보유계좌 금액 형식이 올바르지 않습니다.", exception);
+            log.warn("[CODEF] 보유계좌 금액 형식이 올바르지 않아 0으로 처리했습니다. fieldName={}", fieldName);
+            return BigDecimal.ZERO;
         }
     }
 
@@ -129,9 +130,13 @@ public class CodefExAccountSnapshotMapper {
             if (value.indexOf('-') >= 0) {
                 return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
             }
+            if ("00000000".equals(value)) {
+                return null;
+            }
             return LocalDate.parse(value, BASIC_DATE);
         } catch (DateTimeException exception) {
-            throw new CodefExAccountClientException("CODEF 보유계좌 날짜 형식이 올바르지 않습니다.", exception);
+            log.warn("[CODEF] 보유계좌 날짜 형식이 올바르지 않아 비워 처리했습니다. fieldName={}", fieldName);
+            return null;
         }
     }
 

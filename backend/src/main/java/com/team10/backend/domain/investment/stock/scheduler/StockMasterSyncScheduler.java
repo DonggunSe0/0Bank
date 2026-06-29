@@ -1,5 +1,7 @@
 package com.team10.backend.domain.investment.stock.scheduler;
 
+import com.team10.backend.global.lock.DistributedLockTemplate;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +17,11 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class StockMasterSyncScheduler {
 
+    private static final String KOSPI_STOCK_MASTER_SYNC_LOCK_KEY = "lock:investment:stock-master:KOSPI";
+    private static final Duration KOSPI_STOCK_MASTER_SYNC_LOCK_LEASE_TIME = Duration.ofMinutes(30);
+
     private final StockMasterSyncRetryRunner stockMasterSyncRetryRunner;
+    private final DistributedLockTemplate distributedLockTemplate;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     /**
@@ -31,7 +37,7 @@ public class StockMasterSyncScheduler {
      */
     @Scheduled(cron = "0 30 8 * * *", zone = "Asia/Seoul")
     public void syncBeforeMarketOpen() {
-        syncSafely("before-market-open");
+        syncScheduledWithDistributedLock("before-market-open");
     }
 
     /**
@@ -39,7 +45,26 @@ public class StockMasterSyncScheduler {
      */
     @Scheduled(cron = "0 50 17 * * *", zone = "Asia/Seoul")
     public void syncAfterMarketClose() {
-        syncSafely("after-market-close");
+        syncScheduledWithDistributedLock("after-market-close");
+    }
+
+    private void syncScheduledWithDistributedLock(String trigger) {
+        boolean executed;
+        try {
+            executed = distributedLockTemplate.tryExecuteWithLock(
+                    KOSPI_STOCK_MASTER_SYNC_LOCK_KEY,
+                    KOSPI_STOCK_MASTER_SYNC_LOCK_LEASE_TIME,
+                    () -> syncSafely(trigger)
+            );
+        } catch (RuntimeException e) {
+            log.warn("KOSPI stock master scheduled sync failed while handling distributed lock. trigger={}", trigger, e);
+            return;
+        }
+
+        if (!executed) {
+            log.info("KOSPI stock master sync skipped because another instance holds distributed lock. trigger={}",
+                    trigger);
+        }
     }
 
     private void syncSafely(String trigger) {

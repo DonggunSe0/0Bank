@@ -148,7 +148,7 @@ public class TransactionHistory extends BaseEntity {
         history.balanceBefore = balanceBefore;
         history.balanceAfter = balanceAfter;
         history.counterpartyAccountNumber = null;
-        history.counterpartyName = null;
+        history.counterpartyName = "환전 주문";
         history.memo = memo;
         history.transactedAt = transactedAt;
         return history;

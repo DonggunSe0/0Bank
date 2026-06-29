@@ -1,12 +1,21 @@
 package com.team10.backend.domain.exAccount.service;
 
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionSnapshot;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountAuthException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountClientException;
+import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountCryptoException;
+import com.team10.backend.domain.codef.exAccount.service.CodefExAccountGateway;
 import com.team10.backend.domain.exAccount.dto.req.ExAccountTransactionSyncReq;
 import com.team10.backend.domain.exAccount.dto.res.ExAccountDetailRes;
 import com.team10.backend.domain.exAccount.dto.res.ExAccountTransactionRefreshRes;
 import com.team10.backend.domain.exAccount.dto.res.ExAccountTransactionRes;
 import com.team10.backend.domain.exAccount.entity.ExAccount;
+import com.team10.backend.domain.exAccount.entity.ExAccountConnection;
 import com.team10.backend.domain.exAccount.entity.ExAccountTransaction;
+import com.team10.backend.domain.exAccount.exception.ExAccountConnectionErrorCode;
 import com.team10.backend.domain.exAccount.exception.ExAccountErrorCode;
+import com.team10.backend.domain.exAccount.repository.ExAccountConnectionRepository;
 import com.team10.backend.domain.exAccount.repository.ExAccountRepository;
 import com.team10.backend.domain.exAccount.repository.ExAccountTransactionRepository;
 import com.team10.backend.global.exception.BusinessException;
@@ -14,9 +23,14 @@ import com.team10.backend.global.exception.GlobalErrorCode;
 import lombok.RequiredArgsConstructor;
 import com.team10.backend.global.lock.DistributedLockTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.Duration;
 
 import java.time.LocalDate;
@@ -30,12 +44,16 @@ import static org.springframework.util.StringUtils.hasText;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class ExAccountTransactionService {
 
     private final ExAccountTransactionRepository transactionRepository;
     private final ExAccountRepository accountRepository;
+    private final ExAccountConnectionRepository connectionRepository;
     private final ExAccountService exAccountService;
+    private final CodefExAccountGateway codefExAccountGateway;
+    private final ExAccountSyncService exAccountSyncService;
     private final DistributedLockTemplate lockTemplate;
     private final TransactionTemplate transactionTemplate;
 
@@ -59,6 +77,7 @@ public class ExAccountTransactionService {
      * @param transactions 외부기관으로부터 신규 수신한 거래내역 동기화 요청 DTO 리스트
      * @return 추가/변경 통계 및 업데이트된 계좌 상세 결과를 담은 갱신 응답 DTO
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ExAccountTransactionRefreshRes refreshTransactions(
             Long userId,
             Long exAccountId,
@@ -99,6 +118,39 @@ public class ExAccountTransactionService {
                     return ExAccountTransactionRefreshRes.of(transactions.size(), createdCount, updatedCount, detail);
                 })
         );
+    }
+
+    /**
+     * 저장된 CODEF 연결정보로 외부기관 거래내역을 직접 조회한 뒤 기존 upsert 경로로 반영합니다.
+     * 원계좌번호는 DB에 저장하지 않고, 보유계좌 재조회 결과를 HMAC 해시로 대조해 메모리 안에서만 사용합니다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public ExAccountTransactionRefreshRes refreshTransactionsFromProvider(Long userId, Long exAccountId) {
+        ExAccount account = accountRepository.findByIdAndUserId(exAccountId, userId)
+                .orElseThrow(() -> new BusinessException(ExAccountErrorCode.EX_ACCOUNT_NOT_FOUND));
+        ExAccountConnection connection = connectionRepository.findByUserIdAndOrganization(userId, account.getOrganization())
+                .orElseThrow(() -> new BusinessException(ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_NOT_FOUND));
+        if (!connection.isActive()) {
+            throw new BusinessException(ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_INACTIVE);
+        }
+
+        String birthDate = account.getUser().getBirthDate().format(DateTimeFormatter.ofPattern("yyMMdd"));
+        CodefExAccountSnapshot snapshot = findCurrentAccountSnapshot(account, connection, birthDate);
+        List<CodefExAccountTransactionSnapshot> snapshots = getTransactionSnapshots(account, connection, birthDate, snapshot.accountNumber());
+        List<ExAccountTransactionSyncReq> transactions = snapshots.stream()
+                .map(this::toSyncRequest)
+                .toList();
+
+        if (transactions.isEmpty()) {
+            return ExAccountTransactionRefreshRes.of(
+                    0,
+                    0,
+                    0,
+                    exAccountService.getAccountDetail(userId, exAccountId)
+            );
+        }
+
+        return refreshTransactions(userId, exAccountId, transactions);
     }
 
     /**
@@ -152,5 +204,85 @@ public class ExAccountTransactionService {
         );
 
         return isNew;
+    }
+
+    private CodefExAccountSnapshot findCurrentAccountSnapshot(
+            ExAccount account,
+            ExAccountConnection connection,
+            String birthDate
+    ) {
+        List<CodefExAccountSnapshot> snapshots;
+        try {
+            snapshots = codefExAccountGateway.getAccountSnapshots(
+                    account.getOrganization(),
+                    connection.encryptedConnectedId(),
+                    birthDate
+            );
+        } catch (CodefExAccountAuthException | CodefExAccountCryptoException exception) {
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_UNAVAILABLE,
+                    exception
+            );
+        } catch (CodefExAccountClientException exception) {
+            log.warn("[CODEF] 보유계좌 응답 처리 실패. userId={}, exAccountId={}, organization={}, reason={}",
+                    account.getUser().getId(), account.getId(), account.getOrganization(), exception.getMessage());
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_INVALID_RESPONSE,
+                    exception
+            );
+        }
+
+        return snapshots.stream()
+                .filter(snapshot -> account.getAccountNumberHash()
+                        .equals(exAccountSyncService.getAccountNumberHash(snapshot.accountNumber())))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ExAccountErrorCode.EX_ACCOUNT_NOT_FOUND));
+    }
+
+    private List<CodefExAccountTransactionSnapshot> getTransactionSnapshots(
+            ExAccount account,
+            ExAccountConnection connection,
+            String birthDate,
+            String accountNumber
+    ) {
+        LocalDate endDate = LocalDate.now(ZoneOffset.UTC);
+        LocalDate startDate = account.getLastTransactionAt() == null
+                ? endDate.minusMonths(3)
+                : account.getLastTransactionAt().minusDays(7);
+        try {
+            return codefExAccountGateway.getTransactionSnapshots(
+                    account.getOrganization(),
+                    connection.encryptedConnectedId(),
+                    birthDate,
+                    accountNumber,
+                    startDate,
+                    endDate
+            );
+        } catch (CodefExAccountAuthException | CodefExAccountCryptoException exception) {
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_UNAVAILABLE,
+                    exception
+            );
+        } catch (CodefExAccountClientException exception) {
+            log.warn("[CODEF] 거래내역 응답 처리 실패. userId={}, exAccountId={}, organization={}, reason={}",
+                    account.getUser().getId(), account.getId(), account.getOrganization(), exception.getMessage());
+            throw new BusinessException(
+                    ExAccountConnectionErrorCode.EX_ACCOUNT_CONNECTION_PROVIDER_INVALID_RESPONSE,
+                    exception
+            );
+        }
+    }
+
+    private ExAccountTransactionSyncReq toSyncRequest(CodefExAccountTransactionSnapshot snapshot) {
+        return new ExAccountTransactionSyncReq(
+                snapshot.transactionKey(),
+                snapshot.transactedAt(),
+                snapshot.direction(),
+                snapshot.amount(),
+                snapshot.balanceAfter(),
+                snapshot.counterpartyName(),
+                snapshot.memo(),
+                snapshot.rawCategory()
+        );
     }
 }

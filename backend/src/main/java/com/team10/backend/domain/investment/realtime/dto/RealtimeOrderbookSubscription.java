@@ -1,4 +1,4 @@
-package com.team10.backend.domain.investment.realtime.repository;
+package com.team10.backend.domain.investment.realtime.dto;
 
 public record RealtimeOrderbookSubscription(
         String streamId,

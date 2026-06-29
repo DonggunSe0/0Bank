@@ -84,7 +84,7 @@ public class KisAuthClient {
             throw new BusinessException(InvestmentErrorCode.KIS_AUTH_FAILED);
         }
 
-        log.debug("KIS WebSocket approval key issued");
+        log.info("KIS WebSocket approval key issued");
 
         return new KisWebSocketApprovalKey(response.approvalKey());
     }

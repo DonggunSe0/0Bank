@@ -27,8 +27,7 @@ public class RealtimeOrderbookSubscriptionLeaseRenewalScheduler {
      * 현재 인스턴스에 연결된 SSE stream의 Redis lease를 주기적으로 연장한다.
      *
      * <p>Redis의 구독 상태는 멀티 인스턴스 환경에서 KIS WebSocket 구독 유지 여부를 판단하는 기준이다.
-     * SSE 연결은 살아있지만 Redis lease가 만료되면 leader가 해당 종목의 구독자가 없다고 판단할 수 있으므로,
-     * 로컬에 살아있는 stream의 lease를 TTL보다 짧은 주기로 갱신한다.
+     * SSE 연결은 살아있지만 Redis lease가 만료되면 leader가 해당 종목의 구독자가 없다고 판단할 수 있으므로, 로컬에 살아있는 stream의 lease를 TTL보다 짧은 주기로 갱신한다.
      */
     @Scheduled(fixedDelayString = "${investment.realtime.stream-lease-renewal.fixed-delay-ms:30000}")
     public void renewLocalStreamLeases() {
@@ -40,7 +39,7 @@ public class RealtimeOrderbookSubscriptionLeaseRenewalScheduler {
         int heartbeatSentCount = emitterRegistry.sendHeartbeatToAll();
         Set<String> aliveStreamIds = emitterRegistry.findAllStreamIds();
         if (aliveStreamIds.isEmpty()) {
-            log.debug("Realtime orderbook stream lease renewal skipped. total={}, heartbeatSent={}, alive=0",
+            log.info("Realtime orderbook stream lease renewal skipped. total={}, heartbeatSent={}, alive=0",
                     streamIds.size(),
                     heartbeatSentCount);
             return;
@@ -68,7 +67,8 @@ public class RealtimeOrderbookSubscriptionLeaseRenewalScheduler {
             }
         }
 
-        log.debug("Realtime orderbook stream lease renewal completed. total={}, heartbeatSent={}, alive={}, renewed={}, closed={}, failed={}",
+        log.info(
+                "Realtime orderbook stream lease renewal completed. total={}, heartbeatSent={}, alive={}, renewed={}, closed={}, failed={}",
                 streamIds.size(),
                 heartbeatSentCount,
                 aliveStreamIds.size(),

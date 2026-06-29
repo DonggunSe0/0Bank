@@ -257,11 +257,9 @@ export default function InvestmentAccountDetailPage() {
 
           <div className="flex flex-col gap-2">
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
-              <DialogTrigger>
-                <Button variant="outline" className="w-full justify-start">
-                  <Edit2 data-icon="inline-start" />
-                  정보 수정
-                </Button>
+              <DialogTrigger render={<Button variant="outline" className="w-full justify-start" />}>
+                <Edit2 data-icon="inline-start" />
+                정보 수정
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -321,14 +319,16 @@ export default function InvestmentAccountDetailPage() {
 
             {account.status === 'ACTIVE' && (
               <AlertDialog>
-                <AlertDialogTrigger>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 data-icon="inline-start" />
-                    투자 계좌 해지
-                  </Button>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+                    />
+                  }
+                >
+                  <Trash2 data-icon="inline-start" />
+                  투자 계좌 해지
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>

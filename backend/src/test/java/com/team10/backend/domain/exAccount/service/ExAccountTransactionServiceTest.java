@@ -7,6 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionSnapshot;
+import com.team10.backend.domain.codef.exAccount.service.CodefExAccountGateway;
 import com.team10.backend.domain.exAccount.type.ExAccountTransactionDirection;
 import com.team10.backend.domain.exAccount.type.ExAccountType;
 import com.team10.backend.domain.exAccount.dto.req.ExAccountLinkReq;
@@ -15,10 +18,13 @@ import com.team10.backend.domain.exAccount.dto.res.ExAccountDetailRes;
 import com.team10.backend.domain.exAccount.dto.res.ExAccountRes;
 import com.team10.backend.domain.exAccount.dto.res.ExAccountTransactionRefreshRes;
 import com.team10.backend.domain.exAccount.entity.ExAccount;
+import com.team10.backend.domain.exAccount.entity.ExAccountConnection;
 import com.team10.backend.domain.exAccount.entity.ExAccountTransaction;
 import com.team10.backend.domain.exAccount.exception.ExAccountErrorCode;
+import com.team10.backend.domain.exAccount.repository.ExAccountConnectionRepository;
 import com.team10.backend.domain.exAccount.repository.ExAccountRepository;
 import com.team10.backend.domain.exAccount.repository.ExAccountTransactionRepository;
+import com.team10.backend.domain.exAccount.entity.value.EncryptedConnectedId;
 import com.team10.backend.domain.user.entity.User;
 import com.team10.backend.global.exception.BusinessException;
 import com.team10.backend.global.exception.GlobalErrorCode;
@@ -48,7 +54,16 @@ class ExAccountTransactionServiceTest {
     private ExAccountRepository accountRepository;
 
     @Mock
+    private ExAccountConnectionRepository connectionRepository;
+
+    @Mock
     private ExAccountService exAccountService;
+
+    @Mock
+    private CodefExAccountGateway codefExAccountGateway;
+
+    @Mock
+    private ExAccountSyncService exAccountSyncService;
 
     @Mock
     private DistributedLockTemplate lockTemplate;
@@ -197,6 +212,54 @@ class ExAccountTransactionServiceTest {
         verify(transactionRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("외부기관 거래내역 새로고침은 보유계좌 재조회에서 원계좌번호를 찾아 거래조회 후 업서트한다")
+    void refreshTransactionsFromProvider() {
+        ExAccountConnection connection = createConnection();
+        CodefExAccountSnapshot snapshot = createAccountSnapshot("1234567890");
+        CodefExAccountTransactionSnapshot transactionSnapshot = new CodefExAccountTransactionSnapshot(
+                "KB-20260618143000-0001",
+                LocalDateTime.of(2026, 6, 18, 14, 30),
+                ExAccountTransactionDirection.OUT,
+                BigDecimal.valueOf(45_000),
+                BigDecimal.valueOf(1_455_000),
+                "스타벅스",
+                "카드 결제",
+                "식비"
+        );
+        ExAccountDetailRes detail = ExAccountDetailRes.of(ExAccountRes.from(account), List.of());
+
+        when(accountRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(account));
+        when(connectionRepository.findByUserIdAndOrganization(1L, "국민은행"))
+                .thenReturn(Optional.of(connection));
+        when(codefExAccountGateway.getAccountSnapshots("국민은행", connection.encryptedConnectedId(), "950101"))
+                .thenReturn(List.of(snapshot));
+        when(exAccountSyncService.getAccountNumberHash("1234567890"))
+                .thenReturn("account-number-hash");
+        when(codefExAccountGateway.getTransactionSnapshots(
+                org.mockito.Mockito.eq("국민은행"),
+                org.mockito.Mockito.eq(connection.encryptedConnectedId()),
+                org.mockito.Mockito.eq("950101"),
+                org.mockito.Mockito.eq("1234567890"),
+                any(),
+                any()
+        )).thenReturn(List.of(transactionSnapshot));
+        when(transactionRepository.findByExAccountIdAndTransactionKey(10L, "KB-20260618143000-0001"))
+                .thenReturn(Optional.empty());
+        when(exAccountService.getAccountDetail(1L, 10L)).thenReturn(detail);
+
+        ExAccountTransactionRefreshRes response =
+                exAccountTransactionService.refreshTransactionsFromProvider(1L, 10L);
+
+        assertThat(response.requestedCount()).isEqualTo(1);
+        assertThat(response.createdCount()).isEqualTo(1);
+        verify(transactionRepository).upsert(
+                org.mockito.Mockito.eq(10L),
+                org.mockito.Mockito.eq("KB-20260618143000-0001"),
+                any(), any(), any(), any(), org.mockito.Mockito.eq("스타벅스"), any(), any(), any(), any()
+        );
+    }
+
     private ExAccountTransactionSyncReq createTransactionSyncReq(String transactionKey, String counterpartyName) {
         return new ExAccountTransactionSyncReq(
                 transactionKey,
@@ -227,6 +290,31 @@ class ExAccountTransactionServiceTest {
         );
         ReflectionTestUtils.setField(account, "id", id);
         return account;
+    }
+
+    private ExAccountConnection createConnection() {
+        ExAccountConnection connection = ExAccountConnection.create(
+                user,
+                "국민은행",
+                new EncryptedConnectedId("ciphertext", "iv", "v1")
+        );
+        ReflectionTestUtils.setField(connection, "id", 20L);
+        return connection;
+    }
+
+    private CodefExAccountSnapshot createAccountSnapshot(String accountNumber) {
+        return new CodefExAccountSnapshot(
+                "국민은행",
+                accountNumber,
+                "KB Star 입출금통장",
+                "생활비 통장",
+                ExAccountType.DEMAND,
+                BigDecimal.valueOf(1_500_000),
+                BigDecimal.valueOf(1_200_000),
+                LocalDate.of(2024, 1, 15),
+                null,
+                LocalDate.of(2026, 6, 18)
+        );
     }
 
     private ExAccountTransaction createTransaction(Long id, String transactionKey, String counterpartyName) {

@@ -2,6 +2,7 @@ package com.team10.backend.domain.account.dto.res;
 
 import com.team10.backend.domain.account.entity.Account;
 import com.team10.backend.domain.account.type.AccountStatus;
+import com.team10.backend.domain.account.type.AccountType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 
@@ -14,6 +15,9 @@ public record AccountSummaryRes(
 
         @Schema(description = "계좌 별칭", example = "생활비 계좌")
         String nickname,
+
+        @Schema(description = "계좌 타입", example = "DEPOSIT")
+        AccountType accountType,
 
         @Schema(description = "계좌 잔액", example = "150000")
         Long balance,
@@ -28,6 +32,7 @@ public record AccountSummaryRes(
                 account.getId(),
                 account.getAccountNumber(),
                 account.getNickname(),
+                account.getAccountType(),
                 account.getBalance(),
                 account.getStatus()
         );

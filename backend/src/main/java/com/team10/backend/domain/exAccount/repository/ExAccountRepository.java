@@ -1,6 +1,7 @@
 package com.team10.backend.domain.exAccount.repository;
 
 import com.team10.backend.domain.exAccount.entity.ExAccount;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,7 @@ import java.util.Optional;
 public interface ExAccountRepository extends JpaRepository<ExAccount, Long> {
     List<ExAccount> findAllByUserId(Long userId);
 
+    @EntityGraph(attributePaths = "user")
     Optional<ExAccount> findByIdAndUserId(Long id, Long userId);
 
     // 같은 사용자 + 같은 기관 + 같은 계좌번호 해시이면 같은 외부 계좌로 본다.

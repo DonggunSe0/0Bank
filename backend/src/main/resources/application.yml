@@ -31,12 +31,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
 
   endpoint:
     health:
       probes:
         enabled: true
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 # Swagger default MediaType 지정
 springdoc:
@@ -53,6 +57,11 @@ exchange-rate:
   sync:
     enabled: true
     fixed-delay-ms: 60000 # 동기화 시간 1분
+idempotency:
+  cleanup-fixed-delay-ms: 60000 # 오래된 PROCESSING 상태 만료 처리 주기: 1분
+  delete-old-records-cron: "0 0 3 * * *" # 보관 기간 지난 종료 상태 레코드 삭제: 매일 새벽 3시
+  stale-processing-timeout-minutes: 10
+  retention-days: 15
 
 kis:
   websocket-max-subscriptions: 41

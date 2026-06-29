@@ -22,6 +22,7 @@ export async function getTransactions(
     amount: number
     balanceAfter?: number
     counterpartyName?: string
+    displayName?: string
     memo?: string
     transactedAt: string
   }>>(
@@ -38,6 +39,7 @@ export async function getTransactions(
       amount: transaction.amount,
       balanceAfter: transaction.balanceAfter,
       counterpartyName: transaction.counterpartyName,
+      displayName: transaction.displayName,
       memo: transaction.memo,
       createdAt: transaction.transactedAt,
     })),
@@ -55,6 +57,7 @@ export async function getTransaction(
     amount: number
     balanceAfter?: number
     counterpartyName?: string
+    displayName?: string
     memo?: string
     transactedAt: string
   }>(
@@ -69,6 +72,7 @@ export async function getTransaction(
     amount: transaction.amount,
     balanceAfter: transaction.balanceAfter,
     counterpartyName: transaction.counterpartyName,
+    displayName: transaction.displayName,
     memo: transaction.memo,
     createdAt: transaction.transactedAt,
   }

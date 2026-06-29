@@ -32,6 +32,8 @@ public class OcrSubmittedEventListener {
                     event.verificationId(),
                     "서버 처리량이 많아 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요."
             );
+            // processAsync가 시작되지 못해 자체적으로 락을 해제하지 못하므로 여기서 직접 해제
+            ocrService.releaseLock(event.userId());
             // processAsync가 시작되지 못해 자체적으로 임시파일을 정리하지 못하므로 여기서 직접 삭제
             try {
                 Files.deleteIfExists(event.tempImagePath());

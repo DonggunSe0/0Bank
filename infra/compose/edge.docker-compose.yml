@@ -12,3 +12,29 @@ services:
     volumes:
       - /dockerProjects/npm/data:/data
       - /dockerProjects/npm/letsencrypt:/etc/letsencrypt
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - /dockerProjects/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /dockerProjects/prometheus/data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: grafana
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - /dockerProjects/grafana/data:/var/lib/grafana
+      - /dockerProjects/grafana/provisioning:/etc/grafana/provisioning:ro

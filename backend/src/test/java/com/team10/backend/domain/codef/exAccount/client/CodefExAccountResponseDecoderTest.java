@@ -41,6 +41,24 @@ class CodefExAccountResponseDecoderTest {
     }
 
     @Test
+    void rejectsTransactionFailureWithTransactionMessage() {
+        String response = """
+                {
+                  "result": {
+                    "code": "CF-99999",
+                    "message": "민감한 기관 원문 메시지"
+                  },
+                  "data": {}
+                }
+                """;
+
+        assertThatThrownBy(() -> decoder.decodeTransactionData(response))
+                .isInstanceOf(CodefExAccountClientException.class)
+                .hasMessage("CODEF 거래내역 조회에 실패했습니다.")
+                .hasMessageNotContaining("민감한 기관 원문 메시지");
+    }
+
+    @Test
     void decodesSuccessfulAccountRegistration() {
         CodefExAccountConnectionResult result = decoder.decodeConnectionResult("""
                 {

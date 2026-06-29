@@ -4,6 +4,8 @@ import static com.team10.backend.domain.investment.config.KisConstants.SEOUL_ZON
 
 import com.team10.backend.domain.investment.marketholiday.service.MarketHolidaySyncService;
 import com.team10.backend.domain.investment.marketholiday.type.MarketType;
+import com.team10.backend.global.lock.DistributedLockTemplate;
+import java.time.Duration;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,25 +21,41 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MarketHolidayScheduler {
 
+    private static final String KRX_MARKET_HOLIDAY_SYNC_LOCK_KEY = "lock:investment:market-holiday:KRX";
+    private static final Duration KRX_MARKET_HOLIDAY_SYNC_LOCK_LEASE_TIME = Duration.ofMinutes(5);
+
     private final MarketHolidaySyncService marketHolidaySyncService;
+    private final DistributedLockTemplate distributedLockTemplate;
 
     @EventListener(ApplicationReadyEvent.class)
     public void syncOnStartup() {
         marketHolidaySyncService.loadCacheFromDatabase(MarketType.KRX);
-        syncSafely("startup");
+        syncWithDistributedLock("startup");
     }
 
     @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
     public void syncDaily() {
-        syncSafely("daily");
+        syncWithDistributedLock("daily");
     }
 
-    private void syncSafely(String trigger) {
+    private void syncWithDistributedLock(String trigger) {
         LocalDate baseDate = LocalDate.now(SEOUL_ZONE);
+        boolean executed;
         try {
-            marketHolidaySyncService.sync(MarketType.KRX, baseDate);
+            executed = distributedLockTemplate.tryExecuteWithLock(
+                    KRX_MARKET_HOLIDAY_SYNC_LOCK_KEY,
+                    KRX_MARKET_HOLIDAY_SYNC_LOCK_LEASE_TIME,
+                    () -> marketHolidaySyncService.sync(MarketType.KRX, baseDate)
+            );
         } catch (RuntimeException e) {
             log.warn("Market holiday sync failed. trigger={}, baseDate={}", trigger, baseDate, e);
+            return;
+        }
+
+        if (!executed) {
+            log.info("Market holiday sync skipped because another instance holds distributed lock. trigger={}, baseDate={}",
+                    trigger,
+                    baseDate);
         }
     }
 }

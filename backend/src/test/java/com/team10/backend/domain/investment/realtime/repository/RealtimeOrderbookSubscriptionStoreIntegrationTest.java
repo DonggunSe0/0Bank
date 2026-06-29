@@ -7,6 +7,7 @@ import static com.team10.backend.domain.investment.realtime.config.RealtimeOrder
 import static com.team10.backend.domain.investment.realtime.config.RealtimeOrderbookRedisConstants.USER_STREAMS_KEY_PREFIX;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.team10.backend.domain.investment.realtime.dto.RealtimeOrderbookSubscription;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;

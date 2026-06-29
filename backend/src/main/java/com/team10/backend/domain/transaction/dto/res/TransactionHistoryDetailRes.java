@@ -39,6 +39,9 @@ public record TransactionHistoryDetailRes(
         @Schema(description = "거래 상대명")
         String counterpartyName,
 
+        @Schema(description = "화면 표시용 거래명")
+        String displayName,
+
         @Schema(description = "거래 메모", nullable = true)
         String memo,
 
@@ -54,6 +57,11 @@ public record TransactionHistoryDetailRes(
                 transactionHistory.getAmount(),
                 transactionHistory.getBalanceAfter(),
                 transactionHistory.getCounterpartyName(),
+                TransactionHistorySearchRes.resolveDisplayName(
+                        transactionHistory.getType(),
+                        transactionHistory.getDirection(),
+                        transactionHistory.getCounterpartyName()
+                ),
                 transactionHistory.getMemo(),
                 transactionHistory.getTransactedAt()
         );

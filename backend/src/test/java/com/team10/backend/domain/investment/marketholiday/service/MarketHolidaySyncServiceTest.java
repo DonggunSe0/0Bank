@@ -14,6 +14,8 @@ import com.team10.backend.domain.investment.client.marketholiday.KisHolidayClien
 import com.team10.backend.domain.investment.client.marketholiday.dto.KisHolidayRow;
 import com.team10.backend.domain.investment.marketholiday.cache.MarketHolidayCache;
 import com.team10.backend.domain.investment.marketholiday.entity.MarketHoliday;
+import com.team10.backend.domain.investment.marketholiday.event.MarketHolidayChangedEvent;
+import com.team10.backend.domain.investment.marketholiday.event.MarketHolidayChangedEventPublisher;
 import com.team10.backend.domain.investment.marketholiday.repository.MarketHolidayRepository;
 import com.team10.backend.domain.investment.marketholiday.type.MarketType;
 import java.time.LocalDate;
@@ -47,6 +49,9 @@ class MarketHolidaySyncServiceTest {
     @Mock
     private TransactionTemplate transactionTemplate;
 
+    @Mock
+    private MarketHolidayChangedEventPublisher eventPublisher;
+
     private MarketHolidaySyncService marketHolidaySyncService;
 
     @BeforeEach
@@ -55,7 +60,8 @@ class MarketHolidaySyncServiceTest {
                 kisHolidayClient,
                 marketHolidayRepository,
                 marketHolidayCache,
-                transactionTemplate
+                transactionTemplate,
+                eventPublisher
         );
         lenient().doAnswer(invocation -> {
             Consumer<TransactionStatus> action = invocation.getArgument(0);
@@ -65,7 +71,7 @@ class MarketHolidaySyncServiceTest {
     }
 
     @Test
-    @DisplayName("KIS 휴장일 응답 중 휴장일만 저장하고 캐시를 교체한다")
+    @DisplayName("KIS 휴장일 응답 중 휴장일만 저장하고 변경 이벤트를 발행한다")
     void sync() {
         LocalDate baseDate = LocalDate.of(2026, 6, 16);
         LocalDate openDate = LocalDate.of(2026, 6, 16);
@@ -92,10 +98,8 @@ class MarketHolidaySyncServiceTest {
                 .extracting(MarketHoliday::getHolidayDate)
                 .containsExactlyInAnyOrder(holiday, duplicatedHoliday);
 
-        verify(marketHolidayCache).replace(
-                eq(MarketType.KRX),
-                eq(Set.of(holiday, duplicatedHoliday))
-        );
+        verifyNoInteractions(marketHolidayCache);
+        verify(eventPublisher).publish(MarketHolidayChangedEvent.changed(MarketType.KRX));
     }
 
     @Test
@@ -108,7 +112,7 @@ class MarketHolidaySyncServiceTest {
         assertThatThrownBy(() -> marketHolidaySyncService.sync(MarketType.KRX, baseDate))
                 .isSameAs(exception);
 
-        verifyNoInteractions(marketHolidayRepository, marketHolidayCache, transactionTemplate);
+        verifyNoInteractions(marketHolidayRepository, marketHolidayCache, transactionTemplate, eventPublisher);
     }
 
     @Test

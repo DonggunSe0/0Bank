@@ -2,6 +2,7 @@ package com.team10.backend.global.security;
 
 import com.team10.backend.global.jwt.JwtProvider;
 import com.team10.backend.global.jwt.TokenBlocklistService;
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -95,7 +96,8 @@ public class SecurityConfig {
                     auth.requestMatchers(
                             HttpMethod.GET,
                             "/actuator/health",
-                            "/actuator/health/**"
+                            "/actuator/health/**",
+                            "/actuator/prometheus"
                     ).permitAll();
 
                     // H2 Console (dev/test 전용)
@@ -105,6 +107,13 @@ public class SecurityConfig {
 
                     // Spring 내부 에러 포워딩 — 막히면 실제 예외가 401/403으로 둔갑함
                     auth.requestMatchers("/error").permitAll();
+
+                    // SSE async dispatch 경로 허용
+                    auth.dispatcherTypeMatchers(
+                            DispatcherType.ASYNC,
+                            DispatcherType.ERROR,
+                            DispatcherType.FORWARD
+                    ).permitAll();
 
                     // 로그아웃은 만료 토큰도 허용 → 필터에서 직접 처리, 여기선 authenticated
                     auth.requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated();

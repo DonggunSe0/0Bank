@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.team10.backend.domain.account.dto.req.AccountCloseReq;
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
@@ -25,6 +26,7 @@ import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import java.lang.reflect.Constructor;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -146,6 +148,21 @@ class AccountServiceTest {
     }
 
     @Test
+    @DisplayName("본인인증 후 30일이 지난 사용자는 재인증 없이는 계좌를 개설할 수 없다")
+    void createAccountWithExpiredIdentityVerification() {
+        AccountCreateReq request = createAccountCreateReq("생활비 계좌", AccountType.DEPOSIT);
+        User expiredUser = createUser(3L, true);
+        ReflectionTestUtils.setField(expiredUser, "identityVerifiedAt", LocalDateTime.now().minusDays(31));
+
+        when(userRepository.findById(3L)).thenReturn(Optional.of(expiredUser));
+
+        assertThatThrownBy(() -> accountService.createAccount(3L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.IDENTITY_VERIFICATION_REQUIRED);
+    }
+
+    @Test
     @DisplayName("계좌번호 생성 최대 시도 횟수를 초과하면 계좌 개설에 실패한다")
     void createAccountWithAccountNumberGenerationFailed() {
         AccountCreateReq request = createAccountCreateReq("생활비 계좌", AccountType.DEPOSIT);
@@ -172,6 +189,7 @@ class AccountServiceTest {
         assertThat(responses.get(0).id()).isEqualTo(1L);
         assertThat(responses.get(0).accountNumber()).isEqualTo("100200300001");
         assertThat(responses.get(0).nickname()).isEqualTo("생활비 계좌");
+        assertThat(responses.get(0).accountType()).isEqualTo(AccountType.DEPOSIT);
         assertThat(responses.get(0).balance()).isZero();
         assertThat(responses.get(0).status()).isEqualTo(AccountStatus.ACTIVE);
     }
@@ -192,6 +210,7 @@ class AccountServiceTest {
         assertThat(responses.get(0).id()).isEqualTo(1L);
         assertThat(responses.get(0).accountNumber()).isEqualTo("100200300001");
         assertThat(responses.get(0).nickname()).isEqualTo("생활비 계좌");
+        assertThat(responses.get(0).accountType()).isEqualTo(AccountType.DEPOSIT);
         assertThat(responses.get(0).status()).isEqualTo(AccountStatus.CLOSED);
     }
 
@@ -400,10 +419,14 @@ class AccountServiceTest {
     @DisplayName("잔액이 0원인 ACTIVE 계좌를 해지한다")
     void closeAccount() {
         Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+
+        AccountCloseReq request = new AccountCloseReq("123456");
 
         when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("123456", account.getAccountPasswordHash())).thenReturn(true);
 
-        AccountDetailRes response = accountService.closeAccount(1L, 1L);
+        AccountDetailRes response = accountService.closeAccount(1L, 1L, request);
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.status()).isEqualTo(AccountStatus.CLOSED);
@@ -415,9 +438,11 @@ class AccountServiceTest {
         Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
         ReflectionTestUtils.setField(account, "status", AccountStatus.CLOSED);
 
+        AccountCloseReq request = new AccountCloseReq("123456");
+
         when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
 
-        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L))
+        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_NOT_ACTIVE);
@@ -429,13 +454,34 @@ class AccountServiceTest {
         Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
         ReflectionTestUtils.setField(account, "balance", 1000L);
 
+        AccountCloseReq request = new AccountCloseReq("123456");
+
         when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
 
-        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L))
+        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_BALANCE_NOT_ZERO);
     }
+
+
+
+    @Test
+    @DisplayName("계좌 비밀번호가 일치하지 않으면 해지할 수 없다")
+    void closeAccountWithPasswordMismatch() {
+        Account account = createAccount(1L, verifiedUser, "100200300001", "생활비 계좌");
+        ReflectionTestUtils.setField(account, "accountPasswordHash", "encoded-password");
+        AccountCloseReq request = new AccountCloseReq("000000");
+
+        when(accountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("000000", account.getAccountPasswordHash())).thenReturn(false);
+
+        assertThatThrownBy(() -> accountService.closeAccount(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.ACCOUNT_PASSWORD_MISMATCH);
+    }
+
 
     @Test
     @DisplayName("사용자 ID와 계좌 ID로 내 계좌 상세를 조회한다")
@@ -478,6 +524,10 @@ class AccountServiceTest {
         ReflectionTestUtils.setField(user, "phoneNumber", "01012345678");
         ReflectionTestUtils.setField(user, "birthDate", LocalDate.of(1995, 1, 1));
         ReflectionTestUtils.setField(user, "identityVerified", identityVerified);
+        if (Boolean.TRUE.equals(identityVerified)) {
+            // isIdentityVerificationValid()가 identityVerifiedAt도 함께 확인하므로 같이 세팅
+            ReflectionTestUtils.setField(user, "identityVerifiedAt", LocalDateTime.now());
+        }
         return user;
     }
 

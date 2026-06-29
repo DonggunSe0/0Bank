@@ -24,6 +24,13 @@ public class CodefBankTransferService implements BankTransferService {
     // inPrintType=9: 고객사 직접 입력 — inPrintContent에 지정한 코드를 입금자명으로 사용
     private static final String IN_PRINT_TYPE_CUSTOM = "9";
 
+    // 로그 마스킹 — 길이와 무관하게 중간 최소 MIN_MASK_LENGTH자리는 항상 가린다.
+    // (ExAccountSyncService.maskAccountNumber와 동일한 컨벤션. 기존엔 최소 마스킹 길이 보장이 없어서
+    //  10~11자리 계좌번호(국내 은행 흔한 자릿수)는 거의 또는 전혀 마스킹되지 않는 문제가 있었다.)
+    private static final int MAX_VISIBLE_PREFIX_LENGTH = 6;
+    private static final int MAX_VISIBLE_SUFFIX_LENGTH = 4;
+    private static final int MIN_MASK_LENGTH = 3;
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final CodefBankTransferExchange codefBankTransferExchange;
@@ -68,16 +75,28 @@ public class CodefBankTransferService implements BankTransferService {
     }
 
     /**
-     * 로그용 계좌번호 마스킹 (앞 최대 6자리 + 뒤 4자리만 노출, 나머지는 '*').
-     * {@code ExAccountCandidateRes.maskAccountNumber}와 동일한 표시 방식 — 기존 마스킹 컨벤션을 따른다.
+     * 로그용 계좌번호 마스킹 (앞 최대 {@value #MAX_VISIBLE_PREFIX_LENGTH}자리 + 뒤 최대
+     * {@value #MAX_VISIBLE_SUFFIX_LENGTH}자리만 노출, 중간은 최소 {@value #MIN_MASK_LENGTH}자리를
+     * 항상 '*' 로 가린다). 짧은 계좌번호도 전체 노출되지 않도록 길이에 따라 노출 구간을 줄인다.
      */
     private static String maskAccountNumber(String accountNumber) {
-        if (accountNumber == null || accountNumber.length() <= 4) {
-            return accountNumber;
+        if (accountNumber == null) {
+            return null;
         }
-        int prefixLength = Math.min(6, accountNumber.length() - 4);
+        int length = accountNumber.length();
+        if (length <= MAX_VISIBLE_SUFFIX_LENGTH) {
+            return "*".repeat(length);
+        }
+
+        int suffixLength = Math.min(MAX_VISIBLE_SUFFIX_LENGTH, length - MIN_MASK_LENGTH);
+        int prefixLength = Math.min(
+                MAX_VISIBLE_PREFIX_LENGTH,
+                length - suffixLength - MIN_MASK_LENGTH
+        );
         String prefix = accountNumber.substring(0, prefixLength);
-        String suffix = accountNumber.substring(accountNumber.length() - 4);
-        return prefix + "*".repeat(accountNumber.length() - prefixLength - 4) + suffix;
+        String suffix = accountNumber.substring(length - suffixLength);
+        int maskLength = length - prefixLength - suffixLength;
+
+        return prefix + "*".repeat(maskLength) + suffix;
     }
 }

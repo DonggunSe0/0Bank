@@ -216,6 +216,24 @@ class IdempotencyServiceTest {
         verify(idempotencyRepository).findStaleProcessing(any());
     }
 
+    @Test
+    @DisplayName("SUCCESS, FAILED, EXPIRED 레코드 중 보관 기간이 지난 레코드를 삭제한다")
+    void deleteRecordsOlderThan_deletesTerminalRecordsPastRetention() {
+        when(idempotencyRepository.deleteExpiredRecords(any(), any())).thenReturn(3);
+
+        int deletedCount = idempotencyService.deleteRecordsOlderThan(Duration.ofDays(15));
+
+        assertEquals(3, deletedCount);
+        verify(idempotencyRepository).deleteExpiredRecords(
+                eq(java.util.EnumSet.of(
+                        IdempotencyStatus.SUCCESS,
+                        IdempotencyStatus.FAILED,
+                        IdempotencyStatus.EXPIRED
+                )),
+                any(LocalDateTime.class)
+        );
+    }
+
     private Idempotency processing(
             User user,
             IdempotencyOperationType operationType,

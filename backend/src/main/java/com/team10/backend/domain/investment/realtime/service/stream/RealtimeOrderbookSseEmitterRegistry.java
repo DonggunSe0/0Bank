@@ -2,6 +2,7 @@ package com.team10.backend.domain.investment.realtime.service.stream;
 
 import com.team10.backend.domain.investment.realtime.config.RealtimeOrderbookSseConstants;
 import com.team10.backend.domain.investment.realtime.dto.RealtimeOrderbookSnapshot;
+import com.team10.backend.domain.investment.realtime.dto.RealtimeOrderbookSseConnection;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
@@ -101,6 +102,7 @@ public class RealtimeOrderbookSseEmitterRegistry {
         });
         emitter.onError(error -> cleanup(registration));
 
+        log.info("SSE Register success: stream {} with stock code {}", streamId, stockCode);
         return registration.toConnection();
     }
 
@@ -155,6 +157,7 @@ public class RealtimeOrderbookSseEmitterRegistry {
 
         cleanup(registration);
         registration.emitter().complete();
+        log.info("SSE Close success: stream {} with stock code {}", streamId, registration.stockCode);
         return true;
     }
 

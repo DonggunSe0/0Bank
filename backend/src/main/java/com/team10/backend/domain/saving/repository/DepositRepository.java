@@ -2,9 +2,7 @@ package com.team10.backend.domain.saving.repository;
 
 import com.team10.backend.domain.saving.entity.Deposit;
 import com.team10.backend.domain.saving.type.DepositStatus;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -50,20 +48,6 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
             @Param("userId") Long userId
     );
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-      select d
-      from Deposit d
-      join fetch d.withdrawAccount
-      join fetch d.savingAccount
-      where d.status = :status
-      and d.maturityDate <= :today
-      """)
-    List<Deposit> findAllByStatusAndMaturityDateLessThanEqualWithAccount(
-            @Param("status") DepositStatus status,
-            @Param("today") LocalDate today
-    );
-
     @Query("""
       select d.id
       from Deposit d
@@ -75,7 +59,6 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
             @Param("today") LocalDate today
     );
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select d
         from Deposit d
@@ -83,11 +66,10 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
         join fetch d.savingAccount
         where d.id = :depositId
         """)
-    Optional<Deposit> findByIdWithAccountForUpdate(
+    Optional<Deposit> findByIdWithAccount(
             @Param("depositId") Long depositId
     );
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
       select d
       from Deposit d
@@ -96,7 +78,7 @@ public interface DepositRepository extends JpaRepository<Deposit, Long> {
       where d.id = :depositId
       and d.user.id = :userId
       """)
-    Optional<Deposit> findByIdAndUserIdWithAccountForUpdate(
+    Optional<Deposit> findByIdAndUserIdWithAccount(
             @Param("depositId") Long depositId,
             @Param("userId") Long userId
     );

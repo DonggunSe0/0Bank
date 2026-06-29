@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.team10.backend.domain.account.dto.req.AccountCloseReq;
 import com.team10.backend.domain.account.dto.req.AccountCreateReq;
 import com.team10.backend.domain.account.dto.req.AccountNicknameUpdateReq;
 import com.team10.backend.domain.account.dto.req.AccountPasswordChangeReq;
@@ -215,15 +216,33 @@ class AccountControllerTest {
                 LocalDateTime.of(2026, 6, 8, 16, 0)
         );
 
-        when(accountService.closeAccount(1L, 1L)).thenReturn(response);
+        AccountCloseReq request = new AccountCloseReq("123456");
 
-        mockMvc.perform(post("/api/v1/accounts/{accountId}/close", 1L))
+        when(accountService.closeAccount(eq(1L), eq(1L), any(AccountCloseReq.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/accounts/{accountId}/close", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.status").value("CLOSED"));
 
-        verify(accountService).closeAccount(1L, 1L);
+        verify(accountService).closeAccount(eq(1L), eq(1L), any(AccountCloseReq.class));
     }
+
+
+
+    @Test
+    @DisplayName("계좌 해지 API는 계좌 비밀번호가 숫자 6자리가 아니면 400을 반환한다")
+    void closeAccountWithInvalidPassword() throws Exception {
+        AccountCloseReq request = new AccountCloseReq("123");
+
+        mockMvc.perform(post("/api/v1/accounts/{accountId}/close", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
 
     @Test
     @DisplayName("내 계좌 목록 조회 API는 인증 사용자의 계좌 목록을 반환한다")
@@ -232,6 +251,7 @@ class AccountControllerTest {
                 1L,
                 "100200300001",
                 "생활비 계좌",
+                AccountType.DEPOSIT,
                 150000L,
                 AccountStatus.ACTIVE
         );
@@ -243,6 +263,7 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$[0].id").value(1L))
                 .andExpect(jsonPath("$[0].accountNumber").value("100200300001"))
                 .andExpect(jsonPath("$[0].nickname").value("생활비 계좌"))
+                .andExpect(jsonPath("$[0].accountType").value("DEPOSIT"))
                 .andExpect(jsonPath("$[0].balance").value(150000L))
                 .andExpect(jsonPath("$[0].status").value("ACTIVE"));
 
@@ -256,6 +277,7 @@ class AccountControllerTest {
                 1L,
                 "100200300001",
                 "생활비 계좌",
+                AccountType.DEPOSIT,
                 0L,
                 AccountStatus.CLOSED
         );
@@ -267,6 +289,7 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$[0].id").value(1L))
                 .andExpect(jsonPath("$[0].accountNumber").value("100200300001"))
                 .andExpect(jsonPath("$[0].nickname").value("생활비 계좌"))
+                .andExpect(jsonPath("$[0].accountType").value("DEPOSIT"))
                 .andExpect(jsonPath("$[0].status").value("CLOSED"));
 
         verify(accountService).getClosedAccounts(1L);

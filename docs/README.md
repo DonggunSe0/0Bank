@@ -9,6 +9,7 @@
 - [API 명세서 - 표 형태 요약본](./api-spec-table.md)
 - [2026-06-21 외부 계좌 민감정보 보호 작업 정리](../backend/docs/2026-06-21-external-account-security-work.md)
 - [CODEF account-inquiry 외부계좌 연동 13단계 실행 계획](./codef-account-inquiry-13-step-plan.md)
+- [Log Rotation 도입 이유 및 설정 소개](./logging/log-rotation.md)
 
 ## MVP 우선순위
 

@@ -47,15 +47,38 @@ class TransactionHistoryControllerTest {
     @MockitoBean
     private TransactionHistoryService transactionHistoryService;
 
+
+    @Test
+    @DisplayName("거래 상대명이 없는 내부 거래는 표시용 거래명만 채워 반환한다")
+    void internalTransactionUsesDisplayNameWithoutChangingCounterpartyName() {
+        TransactionHistorySearchRes response = new TransactionHistorySearchRes(
+                1L,
+                TransactionType.SAVING_INSTALLMENT_SIGNUP,
+                null,
+                null,
+                100_000L,
+                900_000L,
+                LocalDateTime.of(2026, 6, 26, 11, 4),
+                "적금 가입 출금",
+                TransactionDirection.OUT
+        );
+
+        assertThat(response.displayName()).isEqualTo("적금 가입");
+        assertThat(response.counterpartyName()).isNull();
+    }
+
     @Test
     @DisplayName("다건 조회 성공 시 Page 응답 구조를 반환한다")
     void getTransactionHistoriesSucceedsAndReturnsPageStructure() throws Exception {
         TransactionHistorySearchRes response = new TransactionHistorySearchRes(
                 1L,
+                TransactionType.TRANSFER,
+                "홍길동",
                 "홍길동",
                 5_000L,
                 95_000L,
                 LocalDateTime.of(2026, 6, 9, 12, 30),
+                "점심값",
                 TransactionDirection.OUT
         );
         given(transactionHistoryService.getTransactionHistories(
@@ -74,10 +97,13 @@ class TransactionHistoryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].transactionHistoryId").value(1))
+                .andExpect(jsonPath("$.content[0].type").value("TRANSFER"))
                 .andExpect(jsonPath("$.content[0].counterpartyName").value("홍길동"))
+                .andExpect(jsonPath("$.content[0].displayName").value("홍길동"))
                 .andExpect(jsonPath("$.content[0].amount").value(5000))
                 .andExpect(jsonPath("$.content[0].balanceAfter").value(95000))
                 .andExpect(jsonPath("$.content[0].transactedAt").value("2026-06-09T12:30:00"))
+                .andExpect(jsonPath("$.content[0].memo").value("점심값"))
                 .andExpect(jsonPath("$.content[0].direction").value("OUT"))
                 .andExpect(jsonPath("$.pageable.pageNumber").value(0))
                 .andExpect(jsonPath("$.pageable.pageSize").value(20))
@@ -176,6 +202,7 @@ class TransactionHistoryControllerTest {
                 5_000L,
                 95_000L,
                 "홍길동",
+                "홍길동",
                 "점심값",
                 LocalDateTime.of(2026, 6, 9, 12, 30)
         );
@@ -190,6 +217,7 @@ class TransactionHistoryControllerTest {
                 .andExpect(jsonPath("$.amount").value(5000))
                 .andExpect(jsonPath("$.balanceAfter").value(95000))
                 .andExpect(jsonPath("$.counterpartyName").value("홍길동"))
+                .andExpect(jsonPath("$.displayName").value("홍길동"))
                 .andExpect(jsonPath("$.memo").value("점심값"))
                 .andExpect(jsonPath("$.transactedAt").value("2026-06-09T12:30:00"));
 

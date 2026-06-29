@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation'
 import {
   BarChart3,
   Building2,
-  ClipboardList,
   CreditCard,
+  ArrowRightLeft,
   LayoutDashboard,
   LogOut,
   PiggyBank,
@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
   { href: '/identity', label: '본인인증', icon: ShieldCheck },
   { href: '/accounts', label: '계좌', icon: CreditCard },
   { href: '/transfer', label: '송금', icon: Send },
-  { href: '/transactions', label: '거래내역', icon: ClipboardList },
+  { href: '/exchange', label: '환전', icon: ArrowRightLeft },
   { href: '/savings', label: '예적금', icon: PiggyBank },
   { href: '/investment-accounts', label: '투자계좌', icon: BarChart3 },
   { href: '/stocks', label: '주식', icon: TrendingUp },

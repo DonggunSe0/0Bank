@@ -126,6 +126,24 @@ public class ExAccountController {
     }
 
     @Operation(
+            summary = "외부기관 거래내역 직접 새로고침",
+            description = "저장된 CODEF 연결정보로 외부기관 거래내역을 조회하고 선택한 외부 계좌의 거래내역을 저장하거나 갱신합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "외부기관 거래내역 새로고침 성공"),
+            @ApiResponse(responseCode = "404", description = "외부 계좌 또는 연결정보를 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "재인증이 필요한 연결정보")
+    })
+    @PostMapping("/accounts/{exAccountId}/transactions/refresh/provider")
+    public ResponseEntity<ExAccountTransactionRefreshRes> refreshTransactionsFromProvider(
+            @AuthenticationPrincipal Long userId,
+            @Parameter(description = "거래내역을 새로고침할 외부 계좌 ID", example = "10")
+            @PathVariable Long exAccountId
+    ) {
+        return ResponseEntity.ok(exAccountTransactionService.refreshTransactionsFromProvider(userId, exAccountId));
+    }
+
+    @Operation(
             summary = "외부 계좌 연동",
             description = "사용자가 연동 대기 세션(토큰)과 선택한 계좌 인덱스 목록을 제출하여, 해당 외부 계좌들을 연동하여 DB에 저장합니다."
     )

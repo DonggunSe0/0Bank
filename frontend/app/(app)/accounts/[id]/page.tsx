@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Edit2, KeyRound, Trash2 } from 'lucide-react'
+import {
+  ArrowDownLeft,
+  ArrowLeft,
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  Edit2,
+  KeyRound,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,14 +46,29 @@ import {
   getAccount,
   updateAccountNickname,
 } from '@/lib/api/accounts'
-import { formatCurrency, formatDate } from '@/lib/format'
-import type { Account } from '@/lib/types'
+import { getTransactions } from '@/lib/api/transactions'
+import { getTransactionCategoryLabel, getTransactionDisplayName } from '@/lib/transaction-display'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/format'
+import type { Account, PageResponse, Transaction } from '@/lib/types'
 import { ApiRequestError } from '@/lib/api'
 
-const statusLabel: Record<string, string> = {
-  ACTIVE: '정상',
-  SUSPENDED: '정지',
-  CLOSED: '해지',
+const accountTypeLabel: Record<string, string> = {
+  DEPOSIT: '입출금',
+  SAVING_DEPOSIT: '예금',
+  SAVING_INSTALLMENT: '적금',
+}
+
+function getAccountTypeLabel(accountType?: string) {
+  if (!accountType) return '계좌'
+  return accountTypeLabel[accountType] ?? accountType
+}
+
+const emptyTransactionPage: PageResponse<Transaction> = {
+  content: [],
+  totalPages: 0,
+  totalElements: 0,
+  number: 0,
+  size: 0,
 }
 
 export default function AccountDetailPage() {
@@ -56,11 +81,16 @@ export default function AccountDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
   const [closeLoading, setCloseLoading] = useState(false)
+  const [closeAccountPassword, setCloseAccountPassword] = useState('')
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [transactionPage, setTransactionPage] = useState<PageResponse<Transaction>>(emptyTransactionPage)
+  const [transactionsLoading, setTransactionsLoading] = useState(true)
+  const [transactionsError, setTransactionsError] = useState('')
+  const [currentPage, setCurrentPage] = useState(0)
 
   useEffect(() => {
     if (!user) return
@@ -77,6 +107,25 @@ export default function AccountDetailPage() {
     }
     load()
   }, [id, user])
+
+  useEffect(() => {
+    setCurrentPage(0)
+    setTransactionPage(emptyTransactionPage)
+    setTransactionsError('')
+  }, [id])
+
+  useEffect(() => {
+    if (!user || !id) return
+    setTransactionsLoading(true)
+    setTransactionsError('')
+    getTransactions(id, { page: currentPage })
+      .then(setTransactionPage)
+      .catch(() => {
+        setTransactionPage(emptyTransactionPage)
+        setTransactionsError('거래내역을 불러오지 못했습니다.')
+      })
+      .finally(() => setTransactionsLoading(false))
+  }, [id, user, currentPage])
 
   async function handleNicknameUpdate() {
     if (!user || !account) return
@@ -129,9 +178,13 @@ export default function AccountDetailPage() {
 
   async function handleClose() {
     if (!user || !account) return
+    if (!/^\d{6}$/.test(closeAccountPassword)) {
+      toast.error('계좌 비밀번호 숫자 6자리를 입력해 주세요.')
+      return
+    }
     setCloseLoading(true)
     try {
-      await closeAccount(account.id)
+      await closeAccount(account.id, closeAccountPassword)
       toast.success('계좌가 해지되었습니다.')
       router.push('/accounts')
     } catch (err) {
@@ -176,8 +229,8 @@ export default function AccountDetailPage() {
                     {formatCurrency(account.balance)}
                   </p>
                 </div>
-                <Badge variant="secondary" className="text-xs">
-                  {statusLabel[account.status] ?? account.status}
+                <Badge variant="default" className="text-xs">
+                  {getAccountTypeLabel(account.accountType)}
                 </Badge>
               </div>
               <div>
@@ -200,7 +253,7 @@ export default function AccountDetailPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">계좌 유형</span>
                 <span className="text-sm font-medium text-foreground">
-                  {account.accountType === 'DEPOSIT' ? '입출금' : account.accountType}
+                  {getAccountTypeLabel(account.accountType)}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -211,6 +264,117 @@ export default function AccountDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Transactions */}
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">거래내역</h2>
+                <p className="text-sm text-muted-foreground">총 {transactionPage.totalElements}건</p>
+              </div>
+              {transactionsError && <Badge variant="destructive" className="text-xs">오류</Badge>}
+            </div>
+
+            {transactionsError && (
+              <Card className="border-destructive/30">
+                <CardContent className="py-3 text-sm text-destructive">{transactionsError}</CardContent>
+              </Card>
+            )}
+
+            <Card className="border-border">
+              <CardContent className="pt-4 flex flex-col gap-0">
+                {transactionsLoading ? (
+                  <div className="flex flex-col gap-3">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-14 w-full" />
+                    ))}
+                  </div>
+                ) : transactionPage.content.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <p className="text-sm text-muted-foreground">거래 내역이 없습니다.</p>
+                  </div>
+                ) : (
+                  transactionPage.content.map((txn, i) => (
+                    <div key={txn.id}>
+                      {i > 0 && <Separator className="my-0" />}
+                      <div className="flex items-center justify-between gap-3 py-3.5">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className={`size-9 rounded-full flex items-center justify-center shrink-0 ${
+                              txn.direction === 'IN'
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-red-50 text-red-600'
+                            }`}
+                          >
+                            {txn.direction === 'IN' ? (
+                              <ArrowDownLeft className="size-4" />
+                            ) : (
+                              <ArrowUpRight className="size-4" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {getTransactionDisplayName(txn)}
+                              </p>
+                              <Badge variant={txn.direction === 'IN' ? 'default' : 'secondary'} className="h-4 shrink-0 text-xs">
+                                {getTransactionCategoryLabel(txn)}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatDateTime(txn.createdAt)}</p>
+                            {txn.memo && (
+                              <p className="truncate text-xs text-muted-foreground">{txn.memo}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p
+                            className={`text-sm font-bold tabular-nums ${
+                              txn.direction === 'IN' ? 'text-green-700' : 'text-foreground'
+                            }`}
+                          >
+                            {txn.direction === 'IN' ? '+' : '-'}
+                            {formatCurrency(txn.amount)}
+                          </p>
+                          {txn.balanceAfter != null && (
+                            <p className="text-xs text-muted-foreground">
+                              잔액 {formatCurrency(txn.balanceAfter)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            {transactionPage.totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                  disabled={currentPage === 0}
+                  aria-label="이전 페이지"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {currentPage + 1} / {transactionPage.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(transactionPage.totalPages - 1, p + 1))}
+                  disabled={currentPage >= transactionPage.totalPages - 1}
+                  aria-label="다음 페이지"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
+          </section>
 
           {/* Actions */}
           <div className="flex flex-col gap-2">
@@ -308,14 +472,16 @@ export default function AccountDetailPage() {
             {/* Close account */}
             {account.status === 'ACTIVE' && (
               <AlertDialog>
-                <AlertDialogTrigger>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 data-icon="inline-start" />
-                    계좌 해지
-                  </Button>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+                    />
+                  }
+                >
+                  <Trash2 data-icon="inline-start" />
+                  계좌 해지
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
@@ -324,10 +490,25 @@ export default function AccountDetailPage() {
                       이 작업은 되돌릴 수 없습니다. 계좌를 해지하면 더 이상 사용할 수 없습니다.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="closeAccountPassword">계좌 비밀번호</Label>
+                    <Input
+                      id="closeAccountPassword"
+                      type="password"
+                      inputMode="numeric"
+                      value={closeAccountPassword}
+                      onChange={(e) => setCloseAccountPassword(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                      placeholder="숫자 6자리"
+                      maxLength={6}
+                    />
+                  </div>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>취소</AlertDialogCancel>
+                    <AlertDialogCancel onClick={() => setCloseAccountPassword('')}>취소</AlertDialogCancel>
                     <AlertDialogAction
-                      onClick={handleClose}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        handleClose()
+                      }}
                       disabled={closeLoading}
                       className="bg-destructive hover:bg-destructive/90"
                     >

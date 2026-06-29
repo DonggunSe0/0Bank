@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.team10.backend.domain.investment.realtime.config.RealtimeOrderbookSseConstants;
 import com.team10.backend.domain.investment.realtime.dto.RealtimeOrderbookLevel;
 import com.team10.backend.domain.investment.realtime.dto.RealtimeOrderbookSnapshot;
+import com.team10.backend.domain.investment.realtime.dto.RealtimeOrderbookSseConnection;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;

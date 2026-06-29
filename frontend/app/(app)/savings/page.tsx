@@ -522,15 +522,17 @@ function SavingCard({ id, type, title, bankName, amount, status, progressRate, o
           <Button size="sm" variant="outline" onClick={() => run('preview')} disabled={loading}>이자조회</Button>
           <Button size="sm" variant="outline" onClick={() => run('maturity')} disabled={loading || status !== 'ACTIVE'}>만기</Button>
           <AlertDialog>
-            <AlertDialogTrigger>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="w-full text-destructive hover:text-destructive"
-                disabled={loading || status !== 'ACTIVE'}
-              >
-                해지
-              </Button>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full text-destructive hover:text-destructive"
+                  disabled={loading || status !== 'ACTIVE'}
+                />
+              }
+            >
+              해지
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { BarChart3, Search, Star, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,6 +23,20 @@ import { formatNumber } from '@/lib/format'
 import type { PageResponse, StockSummary } from '@/lib/types'
 
 const SEARCH_DEBOUNCE_MS = 400
+const MAX_WATCHLIST_COUNT = 20
+const WATCHLIST_LIMIT_EXCEEDED_MESSAGE =
+  '관심 종목은 최대 20개까지 등록할 수 있습니다. 기존 관심 종목을 해제한 뒤 다시 등록해 주세요.'
+
+function getWatchlistErrorMessage(err: unknown) {
+  if (err instanceof ApiRequestError) {
+    if (err.code === 'WATCHLIST_LIMIT_EXCEEDED') {
+      return WATCHLIST_LIMIT_EXCEEDED_MESSAGE
+    }
+    return err.message
+  }
+
+  return '관심 종목 처리에 실패했습니다.'
+}
 
 export default function StocksPage() {
   const [keyword, setKeyword] = useState('')
@@ -87,6 +102,12 @@ export default function StocksPage() {
   }, [loadRanking, loadWatchlists])
 
   async function handleToggleWatchlist(stock: StockSummary, isWatchlisted: boolean) {
+    if (!isWatchlisted && watchlists.length >= MAX_WATCHLIST_COUNT) {
+      setWatchlistError(WATCHLIST_LIMIT_EXCEEDED_MESSAGE)
+      toast.error(WATCHLIST_LIMIT_EXCEEDED_MESSAGE)
+      return
+    }
+
     try {
       if (isWatchlisted) {
         await removeWatchlist(stock.id)
@@ -95,9 +116,11 @@ export default function StocksPage() {
         const added = await addWatchlist(stock.id)
         setWatchlists((prev) => [...prev, added])
       }
+      setWatchlistError('')
     } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : '관심 종목 처리에 실패했습니다.'
+      const message = getWatchlistErrorMessage(err)
       setWatchlistError(message)
+      toast.error(message)
     }
   }
 

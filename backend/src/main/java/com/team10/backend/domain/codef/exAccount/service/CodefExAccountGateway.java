@@ -7,13 +7,18 @@ import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConn
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConnectionResult;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountListRequest;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountSnapshot;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionListRequest;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionSnapshot;
 import com.team10.backend.domain.codef.exAccount.dto.req.CodefExAccountConnectionCreateReq;
 import com.team10.backend.domain.codef.exAccount.mapper.CodefExAccountConnectionPayloadMapper;
 import com.team10.backend.domain.codef.exAccount.mapper.CodefExAccountSnapshotMapper;
+import com.team10.backend.domain.codef.exAccount.mapper.CodefExAccountTransactionMapper;
 import com.team10.backend.domain.exAccount.entity.value.EncryptedConnectedId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -27,6 +32,7 @@ public class CodefExAccountGateway {
     private final CodefExAccountClient codefExAccountClient;
     private final CodefConnectedIdEncryptor connectedIdEncryptor;
     private final CodefExAccountSnapshotMapper snapshotMapper;
+    private final CodefExAccountTransactionMapper transactionMapper;
 
     /**
      * CODEF API에 사용자의 기관 인증 정보를 전송하여 계정을 등록하고, 발급된 connectedId를 암호화하여 반환합니다.
@@ -60,5 +66,33 @@ public class CodefExAccountGateway {
         );
         JsonNode data = codefExAccountClient.getAccountList(request);
         return snapshotMapper.toSnapshots(organization, data);
+    }
+
+    /**
+     * 특정 계좌의 거래내역을 CODEF에서 조회해 내부 스냅샷으로 변환합니다.
+     */
+    public List<CodefExAccountTransactionSnapshot> getTransactionSnapshots(
+            String organization,
+            EncryptedConnectedId encryptedConnectedId,
+            String birthDate,
+            String accountNumber,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        String connectedId = connectedIdEncryptor.decrypt(encryptedConnectedId);
+        CodefExAccountTransactionListRequest request = CodefExAccountTransactionListRequest.of(
+                organization,
+                connectedId,
+                birthDate,
+                accountNumber,
+                formatDate(startDate),
+                formatDate(endDate)
+        );
+        JsonNode data = codefExAccountClient.getTransactionList(request);
+        return transactionMapper.toSnapshots(organization, accountNumber, data);
+    }
+
+    private String formatDate(LocalDate date) {
+        return date == null ? "" : date.format(DateTimeFormatter.BASIC_ISO_DATE);
     }
 }

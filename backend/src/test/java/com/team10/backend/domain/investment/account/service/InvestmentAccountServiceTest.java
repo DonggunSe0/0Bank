@@ -26,6 +26,7 @@ import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class InvestmentAccountServiceTest {
+
+    private static final Long INITIAL_CASH_BALANCE = 5_000_000L;
 
     @Mock
     private InvestmentAccountRepository investmentAccountRepository;
@@ -80,7 +83,7 @@ class InvestmentAccountServiceTest {
         assertThat(responses.get(0).id()).isEqualTo(1L);
         assertThat(responses.get(0).accountNumber()).isEqualTo("1234567890-12");
         assertThat(responses.get(0).nickname()).isEqualTo("모의투자 계좌");
-        assertThat(responses.get(0).cashBalance()).isZero();
+        assertThat(responses.get(0).cashBalance()).isEqualTo(INITIAL_CASH_BALANCE);
         assertThat(responses.get(0).currencyCode()).isEqualTo(CurrencyCode.KRW);
         assertThat(responses.get(0).status()).isEqualTo(InvestmentAccountStatus.ACTIVE);
     }
@@ -98,7 +101,7 @@ class InvestmentAccountServiceTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.accountNumber()).isEqualTo("1234567890-12");
         assertThat(response.nickname()).isEqualTo("모의투자 계좌");
-        assertThat(response.cashBalance()).isZero();
+        assertThat(response.cashBalance()).isEqualTo(INITIAL_CASH_BALANCE);
         assertThat(response.currencyCode()).isEqualTo(CurrencyCode.KRW);
         assertThat(response.status()).isEqualTo(InvestmentAccountStatus.ACTIVE);
     }
@@ -135,7 +138,7 @@ class InvestmentAccountServiceTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.accountNumber()).matches("\\d{10}-\\d{2}");
         assertThat(response.nickname()).isEqualTo("모의투자 계좌");
-        assertThat(response.cashBalance()).isZero();
+        assertThat(response.cashBalance()).isEqualTo(INITIAL_CASH_BALANCE);
         assertThat(response.currencyCode()).isEqualTo(CurrencyCode.KRW);
         assertThat(response.status()).isEqualTo(InvestmentAccountStatus.ACTIVE);
 
@@ -167,6 +170,22 @@ class InvestmentAccountServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(unverifiedUser));
 
         assertThatThrownBy(() -> investmentAccountService.createAccount(2L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(InvestmentErrorCode.IDENTITY_VERIFICATION_REQUIRED);
+    }
+
+    @Test
+    @DisplayName("본인인증 후 30일이 지난 사용자는 재인증 없이는 투자 계좌를 개설할 수 없다")
+    void createAccountWithExpiredIdentityVerification() {
+        InvestmentAccountCreateReq request =
+                new InvestmentAccountCreateReq("모의투자 계좌", "123456", CurrencyCode.KRW);
+        User expiredUser = createUser(3L, true);
+        ReflectionTestUtils.setField(expiredUser, "identityVerifiedAt", LocalDateTime.now().minusDays(31));
+
+        when(userRepository.findById(3L)).thenReturn(Optional.of(expiredUser));
+
+        assertThatThrownBy(() -> investmentAccountService.createAccount(3L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(InvestmentErrorCode.IDENTITY_VERIFICATION_REQUIRED);
@@ -319,6 +338,7 @@ class InvestmentAccountServiceTest {
     void closeAccount() {
         InvestmentAccount account = createInvestmentAccount(1L, verifiedUser, "모의투자 계좌");
         InvestmentAccountCloseReq request = new InvestmentAccountCloseReq("123456");
+        ReflectionTestUtils.setField(account, "cashBalance", 0L);
 
         when(investmentAccountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("123456", "encoded-password")).thenReturn(true);
@@ -352,7 +372,6 @@ class InvestmentAccountServiceTest {
     @DisplayName("예수금이 남아 있으면 투자 계좌를 해지할 수 없다")
     void closeAccountWithCashBalance() {
         InvestmentAccount account = createInvestmentAccount(1L, verifiedUser, "모의투자 계좌");
-        ReflectionTestUtils.setField(account, "cashBalance", 1000L);
         InvestmentAccountCloseReq request = new InvestmentAccountCloseReq("123456");
 
         when(investmentAccountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
@@ -372,6 +391,7 @@ class InvestmentAccountServiceTest {
     void closeAccountWithHolding() {
         InvestmentAccount account = createInvestmentAccount(1L, verifiedUser, "모의투자 계좌");
         InvestmentAccountCloseReq request = new InvestmentAccountCloseReq("123456");
+        ReflectionTestUtils.setField(account, "cashBalance", 0L);
 
         when(investmentAccountRepository.findByIdAndUserIdForUpdate(1L, 1L)).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("123456", "encoded-password")).thenReturn(true);
@@ -412,6 +432,10 @@ class InvestmentAccountServiceTest {
         );
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "identityVerified", identityVerified);
+        if (identityVerified) {
+            // isIdentityVerificationValid()가 identityVerifiedAt도 함께 확인하므로 같이 세팅
+            ReflectionTestUtils.setField(user, "identityVerifiedAt", LocalDateTime.now());
+        }
         return user;
     }
 
@@ -421,10 +445,10 @@ class InvestmentAccountServiceTest {
                 "1234567890-12",
                 nickname,
                 "encoded-password",
+                INITIAL_CASH_BALANCE,
                 CurrencyCode.KRW
         );
         ReflectionTestUtils.setField(account, "id", id);
         return account;
     }
-
 }

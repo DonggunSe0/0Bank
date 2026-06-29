@@ -67,37 +67,52 @@ public class IdentityVerificationService {
 
     @Transactional
     public OcrAcceptedRes submitIdCardOcr(Long userId, MultipartFile imageFile) {
-        validateImage(imageFile);
-        checkOcrDailyLimit(userId);
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-
-        if (Boolean.TRUE.equals(user.getIdentityVerified())) {
-            throw new BusinessException(UserErrorCode.IDENTITY_ALREADY_VERIFIED);
+        // 동시 요청 방지 — 같은 유저가 거의 동시에 두 번 제출하면 진행 중인 인증 세션이 여러 개 생겨
+        // 서로 다른 OCR 비동기 처리가 같은 유저의 최신 세션 상태를 번갈아 덮어쓸 수 있음
+        if (!ocrService.tryAcquireLock(userId)) {
+            throw new BusinessException(UserErrorCode.OCR_REQUEST_IN_PROGRESS);
         }
 
-        IdentityVerification verification = IdentityVerification.startOcr(user);
-        IdentityVerification saved = identityVerificationRepository.save(verification);
-
-        // 커밋 후(OcrSubmittedEventListener)에는 Tomcat이 멀티파트 임시파일을 이미 삭제하므로,
-        // 앱이 직접 관리하는 임시파일로 복사해 비동기 처리가 끝날 때까지 보존한다.
-        Path tempImagePath;
+        boolean kickedOff = false;
         try {
-            tempImagePath = Files.createTempFile("ocr-", ".tmp");
-            imageFile.transferTo(tempImagePath);
-        } catch (IOException e) {
-            throw new BusinessException(UserErrorCode.OCR_IMAGE_REQUIRED);
+            validateImage(imageFile);
+            checkOcrDailyLimit(userId);
+
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+
+            if (user.isIdentityVerificationValid()) {
+                throw new BusinessException(UserErrorCode.IDENTITY_ALREADY_VERIFIED);
+            }
+
+            IdentityVerification verification = IdentityVerification.startOcr(user);
+            IdentityVerification saved = identityVerificationRepository.save(verification);
+
+            // 커밋 후(OcrSubmittedEventListener)에는 Tomcat이 멀티파트 임시파일을 이미 삭제하므로,
+            // 앱이 직접 관리하는 임시파일로 복사해 비동기 처리가 끝날 때까지 보존한다.
+            Path tempImagePath;
+            try {
+                tempImagePath = Files.createTempFile("ocr-", ".tmp");
+                imageFile.transferTo(tempImagePath);
+            } catch (IOException e) {
+                throw new BusinessException(UserErrorCode.OCR_IMAGE_REQUIRED);
+            }
+
+            // afterCommit() 콜백 직접 등록 대신 이벤트 발행 — 실제 처리는 OcrSubmittedEventListener(AFTER_COMMIT)가 담당
+            eventPublisher.publishEvent(new OcrSubmittedEvent(tempImagePath, saved.getId(), userId));
+
+            kickedOff = true;
+            return new OcrAcceptedRes(
+                    saved.getId(),
+                    saved.getStatus(),
+                    "신분증 OCR 접수가 완료되었습니다. 처리 결과는 잠시 후 확인하실 수 있습니다."
+            );
+        } finally {
+            // 비동기 처리에 정상적으로 넘긴 경우엔 락 해제를 OcrService.processAsync()의 finally로 위임한다.
+            if (!kickedOff) {
+                ocrService.releaseLock(userId);
+            }
         }
-
-        // afterCommit() 콜백 직접 등록 대신 이벤트 발행 — 실제 처리는 OcrSubmittedEventListener(AFTER_COMMIT)가 담당
-        eventPublisher.publishEvent(new OcrSubmittedEvent(tempImagePath, saved.getId()));
-
-        return new OcrAcceptedRes(
-                saved.getId(),
-                saved.getStatus(),
-                "신분증 OCR 접수가 완료되었습니다. 처리 결과는 잠시 후 확인하실 수 있습니다."
-        );
     }
 
     /** 1원 송금 요청 접수(비동기 처리, kickedOff 락 해제 위임). */

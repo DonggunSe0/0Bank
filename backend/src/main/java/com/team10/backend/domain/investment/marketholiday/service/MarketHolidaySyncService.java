@@ -4,6 +4,8 @@ import com.team10.backend.domain.investment.client.marketholiday.KisHolidayClien
 import com.team10.backend.domain.investment.client.marketholiday.dto.KisHolidayRow;
 import com.team10.backend.domain.investment.marketholiday.cache.MarketHolidayCache;
 import com.team10.backend.domain.investment.marketholiday.entity.MarketHoliday;
+import com.team10.backend.domain.investment.marketholiday.event.MarketHolidayChangedEvent;
+import com.team10.backend.domain.investment.marketholiday.event.MarketHolidayChangedEventPublisher;
 import com.team10.backend.domain.investment.marketholiday.repository.MarketHolidayRepository;
 import com.team10.backend.domain.investment.marketholiday.type.MarketType;
 import java.time.LocalDate;
@@ -24,6 +26,7 @@ public class MarketHolidaySyncService {
     private final MarketHolidayRepository marketHolidayRepository;
     private final MarketHolidayCache marketHolidayCache;
     private final TransactionTemplate transactionTemplate;
+    private final MarketHolidayChangedEventPublisher eventPublisher;
 
     public void sync(MarketType marketType, LocalDate baseDate) {
 
@@ -45,8 +48,8 @@ public class MarketHolidaySyncService {
             marketHolidayRepository.saveAll(holidays);
         });
 
-        /** 메모리 캐시 업데이트 */
-        marketHolidayCache.replace(marketType, holidayDates);
+        /** 모든 인스턴스가 DB 기준으로 로컬 캐시를 갱신하도록 이벤트 발행 */
+        eventPublisher.publish(MarketHolidayChangedEvent.changed(marketType));
 
         log.info("Market holidays synced. marketType={}, baseDate={}, holidayCount={}",
                 marketType, baseDate, holidayDates.size());

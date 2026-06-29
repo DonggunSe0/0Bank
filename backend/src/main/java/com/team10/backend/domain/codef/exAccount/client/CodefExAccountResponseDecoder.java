@@ -26,11 +26,19 @@ public class CodefExAccountResponseDecoder {
     }
 
     public JsonNode decodeData(String responseBody) {
-        JsonNode root = parseResponse(responseBody, "CODEF 보유계좌");
+        return decodeData(responseBody, "CODEF 보유계좌");
+    }
+
+    public JsonNode decodeTransactionData(String responseBody) {
+        return decodeData(responseBody, "CODEF 거래내역");
+    }
+
+    private JsonNode decodeData(String responseBody, String operation) {
+        JsonNode root = parseResponse(responseBody, operation);
         String resultCode = root.path("result").path("code").asText();
         JsonNode data = root.path("data");
         if (!SUCCESS_CODE.equals(resultCode) || data.isMissingNode() || data.isNull()) {
-            throw new CodefExAccountClientException("CODEF 보유계좌 조회에 실패했습니다.");
+            throw new CodefExAccountClientException(operation + " 조회에 실패했습니다.");
         }
         return data;
     }

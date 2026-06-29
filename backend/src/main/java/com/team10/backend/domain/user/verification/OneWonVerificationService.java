@@ -37,6 +37,10 @@ public class OneWonVerificationService {
     private final RedisScript<Long> incrWithExpireIfNewScript;
     // RedisScriptConfig에서 공용으로 정의 — LoginAttemptService의 실패 카운터와 동일한 스크립트
     private final RedisScript<Long> incrAndExpireScript;
+    // RedisScriptConfig에서 공용으로 정의 — RefreshTokenService.validateAndConsume()과 동일한 패턴.
+    // GET 후 비교, 별도 DEL로 분리하면 동일한 정확한 코드로 거의 동시에 두 번 요청 시 둘 다 DEL 전에
+    // GET을 읽어 둘 다 MATCHED 판정을 받는 race가 생길 수 있어, 원자적 compare-and-delete로 처리한다.
+    private final RedisScript<Long> getAndDeleteIfMatchScript;
 
     /** 1원 인증 시작 동시 요청 방지 락(SET NX). */
     public boolean tryAcquireStartLock(Long userId) {
@@ -90,33 +94,35 @@ public class OneWonVerificationService {
     public VerifyResult verify(Long verificationId, String inputCode) {
         String key = KEY_PREFIX + verificationId;
         String attemptKey = ATTEMPT_PREFIX + verificationId;
-        String stored = redisTemplate.opsForValue().get(key);
 
-        if (stored == null) {
+        // 원자적 compare-and-delete — 동일한 정확한 코드로 거의 동시에 두 번 요청해도
+        // 단 하나의 요청만 MATCHED(1)를 받는다(나머지는 0).
+        Long matched = redisTemplate.execute(getAndDeleteIfMatchScript, List.of(key), inputCode);
+        if (Long.valueOf(1L).equals(matched)) {
+            redisTemplate.delete(attemptKey);
+            log.info("[1원 인증] 코드 일치 — verificationId={}", verificationId);
+            return VerifyResult.MATCHED;
+        }
+
+        // 매치 실패 — 키가 아예 없으면(만료) EXPIRED, 존재하지만 값이 다르면 MISMATCH로 구분
+        if (!Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
             log.warn("[1원 인증] 코드 만료 또는 없음 — verificationId={}", verificationId);
             return VerifyResult.EXPIRED;
         }
 
-        if (!stored.equals(inputCode)) {
-            Long attempts = redisTemplate.execute(
-                    incrAndExpireScript,
-                    List.of(attemptKey),
-                    String.valueOf(TTL.toSeconds())
-            );
-            log.warn("[1원 인증] 코드 불일치 — verificationId={}, attempts={}", verificationId, attempts);
+        Long attempts = redisTemplate.execute(
+                incrAndExpireScript,
+                List.of(attemptKey),
+                String.valueOf(TTL.toSeconds())
+        );
+        log.warn("[1원 인증] 코드 불일치 — verificationId={}, attempts={}", verificationId, attempts);
 
-            if (attempts != null && attempts >= MAX_ATTEMPTS) {
-                redisTemplate.delete(key);
-                redisTemplate.delete(attemptKey);
-                log.warn("[1원 인증] 시도 횟수 초과 — verificationId={}, 코드 폐기", verificationId);
-                return VerifyResult.LOCKED;
-            }
-            return VerifyResult.MISMATCH;
+        if (attempts != null && attempts >= MAX_ATTEMPTS) {
+            redisTemplate.delete(key);
+            redisTemplate.delete(attemptKey);
+            log.warn("[1원 인증] 시도 횟수 초과 — verificationId={}, 코드 폐기", verificationId);
+            return VerifyResult.LOCKED;
         }
-
-        redisTemplate.delete(key);
-        redisTemplate.delete(attemptKey);
-        log.info("[1원 인증] 코드 일치 — verificationId={}", verificationId);
-        return VerifyResult.MATCHED;
+        return VerifyResult.MISMATCH;
     }
 }

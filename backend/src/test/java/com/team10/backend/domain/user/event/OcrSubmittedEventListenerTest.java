@@ -47,7 +47,7 @@ class OcrSubmittedEventListenerTest {
     @Test
     @DisplayName("정상 처리 — ocrService.processAsync 호출, 거부 처리 로직은 동작하지 않음")
     void handlesNormally() {
-        OcrSubmittedEvent event = new OcrSubmittedEvent(imagePath, 10L);
+        OcrSubmittedEvent event = new OcrSubmittedEvent(imagePath, 10L, 5L);
 
         listener.handle(event);
 
@@ -56,15 +56,16 @@ class OcrSubmittedEventListenerTest {
     }
 
     @Test
-    @DisplayName("스레드풀 포화로 OCR 작업 거부 → FAILED로 별도 트랜잭션 기록 + 임시파일 삭제")
+    @DisplayName("스레드풀 포화로 OCR 작업 거부 → FAILED로 별도 트랜잭션 기록 + 락 해제 + 임시파일 삭제")
     void handlesRejectedExecution() {
-        OcrSubmittedEvent event = new OcrSubmittedEvent(imagePath, 10L);
+        OcrSubmittedEvent event = new OcrSubmittedEvent(imagePath, 10L, 5L);
         doThrow(new RejectedExecutionException("queue full"))
                 .when(ocrService).processAsync(imagePath, 10L);
 
         listener.handle(event);
 
         verify(verificationSessionRecorder).markFailedInNewTransaction(eq(10L), anyString());
+        verify(ocrService).releaseLock(5L);
         assertThat(Files.exists(imagePath)).isFalse();
     }
 }

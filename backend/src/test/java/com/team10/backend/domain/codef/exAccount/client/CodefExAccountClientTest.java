@@ -6,6 +6,7 @@ import com.team10.backend.domain.codef.exAccount.config.CodefExAccountProperties
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConnectionPayload;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountConnectionResult;
 import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountListRequest;
+import com.team10.backend.domain.codef.exAccount.dto.internal.CodefExAccountTransactionListRequest;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountClientException;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationException;
 import com.team10.backend.domain.codef.exAccount.exception.CodefExAccountRegistrationFailure;
@@ -40,6 +41,7 @@ class CodefExAccountClientTest {
     private static final String BASE_URL = "https://development.codef.io";
     private static final String ACCOUNT_CREATE_PATH = "/v1/account/create";
     private static final String ACCOUNT_LIST_PATH = "/v1/kr/bank/p/account/account-list";
+    private static final String TRANSACTION_LIST_PATH = "/v1/kr/bank/p/account/transaction-list";
 
     private MockRestServiceServer server;
     private CodefExAccountClient client;
@@ -130,6 +132,45 @@ class CodefExAccountClientTest {
 
         assertThat(result.connectedId()).isEqualTo("issued-connected-id");
         assertThat(result.toString()).doesNotContain("issued-connected-id");
+        server.verify();
+    }
+
+    @Test
+    void requestsTransactionListWithConnectedIdAndAccountAndDecodesResponse() {
+        String response = URLEncoder.encode("""
+                {
+                  "result": {"code": "CF-00000", "message": "성공"},
+                  "data": {
+                    "resTrHistoryList": [{
+                      "resAccountTrDate": "20260618",
+                      "resAccountIn": "1000"
+                    }]
+                  }
+                }
+                """, StandardCharsets.UTF_8);
+        server.expect(requestTo(BASE_URL + TRANSACTION_LIST_PATH))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer account-access-token"))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("""
+                        {
+                          "organization": "0020",
+                          "connectedId": "3Lj7J-OvQ",
+                          "birthDate": "990101",
+                          "account": "1234567890",
+                          "startDate": "20260601",
+                          "endDate": "20260630",
+                          "orderBy": "1"
+                        }
+                        """))
+                .andRespond(withSuccess(response, MediaType.TEXT_PLAIN));
+
+        JsonNode data = client.getTransactionList(
+                CodefExAccountTransactionListRequest.of(
+                        "0020", "3Lj7J-OvQ", "990101", "1234567890", "20260601", "20260630"));
+
+        assertThat(data.path("resTrHistoryList").get(0).path("resAccountIn").asText())
+                .isEqualTo("1000");
         server.verify();
     }
 
@@ -251,7 +292,7 @@ class CodefExAccountClientTest {
                 BASE_URL,
                 ACCOUNT_CREATE_PATH,
                 ACCOUNT_LIST_PATH,
-                "/v1/kr/bank/p/account/transaction-list"
+                TRANSACTION_LIST_PATH
         );
     }
 }

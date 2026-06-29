@@ -129,10 +129,13 @@ class TransactionHistoryRepositoryTest {
 
         TransactionHistorySearchRes first = result.getContent().getFirst();
         assertThat(first.transactionHistoryId()).isEqualTo(juneOneDepositId);
+        assertThat(first.type()).isEqualTo(TransactionType.DEPOSIT);
         assertThat(first.counterpartyName()).isEqualTo("김입금");
+        assertThat(first.displayName()).isEqualTo("김입금");
         assertThat(first.amount()).isEqualTo(1_000L);
         assertThat(first.balanceAfter()).isEqualTo(101_000L);
         assertThat(first.transactedAt()).isEqualTo(LocalDateTime.of(2026, 6, 1, 9, 0));
+        assertThat(first.memo()).isEqualTo("김입금 메모");
         assertThat(first.direction()).isEqualTo(TransactionDirection.IN);
     }
 

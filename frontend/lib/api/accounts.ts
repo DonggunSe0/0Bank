@@ -32,9 +32,13 @@ export async function updateAccountNickname(
   )
 }
 
-export async function closeAccount(accountId: string | number): Promise<Account> {
+export async function closeAccount(
+  accountId: string | number,
+  accountPassword: string,
+): Promise<Account> {
   return apiFetch<Account>(`/api/v1/accounts/${accountId}/close`, {
     method: 'POST',
+    body: JSON.stringify({ accountPassword }),
   })
 }
 
@@ -108,6 +112,23 @@ export interface ExternalAccount {
   status: string
 }
 
+export interface ExternalAccountTransaction {
+  id: number
+  exAccountId: number
+  transactedAt: string
+  direction: 'IN' | 'OUT'
+  amount: number
+  balanceAfter?: number
+  counterpartyName?: string
+  memo?: string
+  rawCategory?: string
+}
+
+export interface ExternalAccountDetail {
+  account: ExternalAccount
+  transactions: ExternalAccountTransaction[]
+}
+
 export interface ExternalCandidateListResponse {
   candidateToken: string
   expiresInSeconds: number
@@ -117,6 +138,13 @@ export interface ExternalCandidateListResponse {
 export interface ExternalLinkRequest {
   candidateToken: string
   selectedIndexes: number[]
+}
+
+export interface ExternalTransactionRefreshResult {
+  requestedCount: number
+  createdCount: number
+  updatedCount: number
+  detail: ExternalAccountDetail
 }
 
 /**
@@ -150,6 +178,15 @@ export async function getExternalAccounts(): Promise<ExternalAccount[]> {
 }
 
 /**
+ * 연동 완료된 외부 계좌 상세 및 해당 계좌 거래내역 조회
+ */
+export async function getExternalAccount(
+  accountId: string | number,
+): Promise<ExternalAccountDetail> {
+  return apiFetch<ExternalAccountDetail>(`/api/v1/external-accounts/accounts/${accountId}`)
+}
+
+/**
  * 3단계: 일회용 토큰과 인덱스를 전송하여 실제 계좌 영속화 연동
  */
 export async function linkExternalAccounts(
@@ -159,4 +196,39 @@ export async function linkExternalAccounts(
     method: 'POST',
     body: JSON.stringify(data),
   })
+}
+
+/**
+ * 저장된 기관 연결 정보로 외부 계좌 스냅샷을 다시 조회하고 현재 계좌 정보를 갱신한다.
+ */
+export async function refreshExternalAccountInfo(
+  account: ExternalAccount,
+): Promise<ExternalAccount> {
+  const candidates = await getExternalCandidates(account.organization)
+  const matched = candidates.accounts.find(
+    (candidate) => candidate.accountNoMasked === account.accountNoMasked,
+  )
+
+  if (!matched) {
+    throw new Error('외부기관 조회 결과에서 현재 계좌를 찾을 수 없습니다.')
+  }
+
+  const refreshed = await linkExternalAccounts({
+    candidateToken: candidates.candidateToken,
+    selectedIndexes: [matched.index],
+  })
+
+  return refreshed.find((item) => item.id === account.id) ?? refreshed[0]
+}
+
+/**
+ * 저장된 외부기관 연결 정보로 해당 외부 계좌 거래내역을 직접 조회하고 갱신한다.
+ */
+export async function refreshExternalAccountTransactions(
+  accountId: string | number,
+): Promise<ExternalTransactionRefreshResult> {
+  return apiFetch<ExternalTransactionRefreshResult>(
+    `/api/v1/external-accounts/accounts/${accountId}/transactions/refresh/provider`,
+    { method: 'POST' },
+  )
 }

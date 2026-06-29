@@ -1,4 +1,4 @@
-package com.team10.backend.domain.investment.realtime.service.stream;
+package com.team10.backend.domain.investment.realtime.dto;
 
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 

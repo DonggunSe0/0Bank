@@ -42,6 +42,7 @@ import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Optional;
@@ -91,10 +92,11 @@ class IdentityVerificationServiceTest {
     class SubmitIdCardOcr {
 
         @Test
-        @DisplayName("정상 접수 — OCR_PENDING 상태와 세션 ID 반환, OcrSubmittedEvent 발행")
+        @DisplayName("정상 접수 — OCR_PENDING 상태와 세션 ID 반환, OcrSubmittedEvent 발행, 락은 비동기 처리에 넘겨 유지된다")
         void success() {
             MockMultipartFile image = jpegFile(1024);
 
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
             when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
                     .thenReturn(1L);
             when(userRepository.findById(1L)).thenReturn(Optional.of(user));
@@ -113,62 +115,98 @@ class IdentityVerificationServiceTest {
             verify(eventPublisher).publishEvent(eventCaptor.capture());
             OcrSubmittedEvent event = eventCaptor.getValue();
             assertThat(event.verificationId()).isEqualTo(10L);
+            assertThat(event.userId()).isEqualTo(1L);
             assertThat(event.tempImagePath()).exists();
+
+            // 실제 OCR 처리는 비동기로 이뤄지므로, 중복 방지 락은 여기서 해제하지 않고 비동기 처리 쪽(OcrService.processAsync)에 넘긴다
+            verify(ocrService, never()).releaseLock(1L);
 
             // 어설션 실패 여부와 무관하게 항상 정리되도록 outer cleanUpTempFile()에 위임
             createdTempPath = event.tempImagePath();
         }
 
         @Test
-        @DisplayName("이미지 없음 → OCR_IMAGE_REQUIRED")
+        @DisplayName("이미 처리 중(락 획득 실패) → OCR_REQUEST_IN_PROGRESS")
+        void lockAlreadyHeld() {
+            MockMultipartFile image = jpegFile(1024);
+
+            when(ocrService.tryAcquireLock(1L)).thenReturn(false);
+
+            assertThatThrownBy(() -> service.submitIdCardOcr(1L, image))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(UserErrorCode.OCR_REQUEST_IN_PROGRESS);
+
+            // 락을 아예 얻지 못했으므로 해제도 시도하지 않는다 — 그 외 어떤 처리도 진행되지 않아야 한다
+            verify(ocrService, never()).releaseLock(any());
+            verifyNoInteractions(userRepository, identityVerificationRepository, eventPublisher);
+        }
+
+        @Test
+        @DisplayName("이미지 없음 → OCR_IMAGE_REQUIRED, 락 해제")
         void noImage() {
             MockMultipartFile empty = new MockMultipartFile("image", new byte[0]);
+
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
 
             assertThatThrownBy(() -> service.submitIdCardOcr(1L, empty))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.OCR_IMAGE_REQUIRED);
+
+            verify(ocrService).releaseLock(1L);
         }
 
         @Test
-        @DisplayName("10MB 초과 → OCR_IMAGE_TOO_LARGE")
+        @DisplayName("10MB 초과 → OCR_IMAGE_TOO_LARGE, 락 해제")
         void tooLarge() {
             MockMultipartFile large = new MockMultipartFile(
                     "image", "test.jpg", "image/jpeg", new byte[11 * 1024 * 1024]);
 
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
+
             assertThatThrownBy(() -> service.submitIdCardOcr(1L, large))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.OCR_IMAGE_TOO_LARGE);
+
+            verify(ocrService).releaseLock(1L);
         }
 
         @Test
-        @DisplayName("지원하지 않는 이미지 타입 → OCR_IMAGE_INVALID_TYPE")
+        @DisplayName("지원하지 않는 이미지 타입 → OCR_IMAGE_INVALID_TYPE, 락 해제")
         void invalidType() {
             MockMultipartFile gif = new MockMultipartFile(
                     "image", "test.gif", "image/gif", new byte[1024]);
 
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
+
             assertThatThrownBy(() -> service.submitIdCardOcr(1L, gif))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.OCR_IMAGE_INVALID_TYPE);
+
+            verify(ocrService).releaseLock(1L);
         }
 
         @Test
-        @DisplayName("일일 한도(5회) 초과 → OCR_DAILY_LIMIT_EXCEEDED")
+        @DisplayName("일일 한도(5회) 초과 → OCR_DAILY_LIMIT_EXCEEDED, 락 해제")
         void dailyLimitExceeded() {
             MockMultipartFile image = jpegFile(1024);
 
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
             when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
                     .thenReturn(6L);
 
             assertThatThrownBy(() -> service.submitIdCardOcr(1L, image))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.OCR_DAILY_LIMIT_EXCEEDED);
+
+            verify(ocrService).releaseLock(1L);
         }
 
         @Test
-        @DisplayName("사용자 없음 → USER_NOT_FOUND")
+        @DisplayName("사용자 없음 → USER_NOT_FOUND, 락 해제")
         void userNotFound() {
             MockMultipartFile image = jpegFile(1024);
 
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
             when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
                     .thenReturn(1L);
             when(userRepository.findById(1L)).thenReturn(Optional.empty());
@@ -176,14 +214,17 @@ class IdentityVerificationServiceTest {
             assertThatThrownBy(() -> service.submitIdCardOcr(1L, image))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.USER_NOT_FOUND);
+
+            verify(ocrService).releaseLock(1L);
         }
 
         @Test
-        @DisplayName("이미 본인인증 완료 → IDENTITY_ALREADY_VERIFIED")
+        @DisplayName("이미 본인인증 완료 → IDENTITY_ALREADY_VERIFIED, 락 해제")
         void alreadyVerified() {
             MockMultipartFile image = jpegFile(1024);
             User alreadyVerified = createUser(1L, true);
 
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
             when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
                     .thenReturn(1L);
             when(userRepository.findById(1L)).thenReturn(Optional.of(alreadyVerified));
@@ -191,6 +232,35 @@ class IdentityVerificationServiceTest {
             assertThatThrownBy(() -> service.submitIdCardOcr(1L, image))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.IDENTITY_ALREADY_VERIFIED);
+
+            verify(ocrService).releaseLock(1L);
+        }
+
+        @Test
+        @DisplayName("본인인증 후 30일이 지나 만료 → 재인증(OCR 재접수) 허용")
+        void expiredVerification_allowsResubmission() {
+            MockMultipartFile image = jpegFile(1024);
+            User expiredUser = createUser(1L, true);
+            ReflectionTestUtils.setField(expiredUser, "identityVerifiedAt", LocalDateTime.now().minusDays(31));
+
+            when(ocrService.tryAcquireLock(1L)).thenReturn(true);
+            when(redisTemplate.execute(any(RedisScript.class), anyList(), any()))
+                    .thenReturn(1L);
+            when(userRepository.findById(1L)).thenReturn(Optional.of(expiredUser));
+            when(identityVerificationRepository.save(any())).thenAnswer(inv -> {
+                IdentityVerification v = inv.getArgument(0);
+                ReflectionTestUtils.setField(v, "id", 11L);
+                return v;
+            });
+
+            OcrAcceptedRes res = service.submitIdCardOcr(1L, image);
+
+            assertThat(res.status()).isEqualTo(VerificationStatus.OCR_PENDING);
+            verify(ocrService, never()).releaseLock(1L);
+
+            ArgumentCaptor<OcrSubmittedEvent> eventCaptor = ArgumentCaptor.forClass(OcrSubmittedEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            createdTempPath = eventCaptor.getValue().tempImagePath();
         }
 
     }
@@ -463,6 +533,10 @@ class IdentityVerificationServiceTest {
             ReflectionTestUtils.setField(u, "phoneNumber", "01012345678");
             ReflectionTestUtils.setField(u, "birthDate", LocalDate.of(1995, 1, 1));
             ReflectionTestUtils.setField(u, "identityVerified", identityVerified);
+            if (identityVerified) {
+                // isIdentityVerificationValid()가 identityVerifiedAt도 함께 확인하므로 같이 세팅
+                ReflectionTestUtils.setField(u, "identityVerifiedAt", LocalDateTime.now());
+            }
             return u;
         } catch (Exception e) {
             throw new IllegalStateException("User 생성 실패", e);

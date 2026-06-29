@@ -3,9 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Building2,
   BarChart3,
-  ClipboardList,
   CreditCard,
   LayoutDashboard,
   PiggyBank,
@@ -18,7 +16,6 @@ const navItems = [
   { href: '/dashboard', label: '홈', icon: LayoutDashboard },
   { href: '/accounts', label: '계좌', icon: CreditCard },
   { href: '/transfer', label: '송금', icon: Send },
-  { href: '/transactions', label: '거래', icon: ClipboardList },
   { href: '/savings', label: '예적금', icon: PiggyBank },
   { href: '/investment-accounts', label: '투자', icon: BarChart3 },
   { href: '/stocks', label: '주식', icon: TrendingUp },
