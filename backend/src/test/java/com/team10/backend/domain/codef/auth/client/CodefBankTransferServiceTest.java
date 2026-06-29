@@ -163,7 +163,7 @@ class CodefBankTransferServiceTest {
 
             String logs = logMessages();
             assertThat(logs).doesNotContain("12345678901");
-            assertThat(logs).contains("123456*8901"); // prefix(6)+*+suffix(4) — 계좌번호 "12345678901"의 마스킹 결과
+            assertThat(logs).contains("1234***8901"); // prefix(4)+***+suffix(4) — 11자리라 최소 마스킹(3자리) 보장이 적용된 결과
             assertThat(logs).contains("verificationCode=9999"); // 인증코드는 계좌번호와 별개로 그대로 노출되어야 함
         }
 
@@ -178,7 +178,7 @@ class CodefBankTransferServiceTest {
 
             String logs = logMessages();
             assertThat(logs).doesNotContain("12345678901");
-            assertThat(logs).contains("123456*8901");
+            assertThat(logs).contains("1234***8901");
         }
 
         @Test
@@ -192,7 +192,7 @@ class CodefBankTransferServiceTest {
 
             String logs = logMessages();
             assertThat(logs).doesNotContain("12345678901");
-            assertThat(logs).contains("123456*8901");
+            assertThat(logs).contains("1234***8901");
         }
     }
 }

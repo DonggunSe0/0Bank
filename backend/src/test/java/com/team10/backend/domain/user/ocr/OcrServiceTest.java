@@ -24,6 +24,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,19 +43,37 @@ class OcrServiceTest {
     @Mock OcrPersistenceService ocrPersistenceService;
     @Mock MockGovernmentVerifyService mockGovernmentVerifyService;
     @Mock VerificationSessionRecorder verificationSessionRecorder;
+    @Mock StringRedisTemplate redisTemplate;
 
     @InjectMocks
     OcrService ocrService;
 
+    private static final String LOCK_PREFIX = "identity:ocr:lock:";
+
     /**
-     * OCR 결과("홍길동", "901201-1234567")와 이름·생년월일(1990-12-01)이 일치하는 계정을 가진
-     * verification mock을 만든다. 본인 명의 대조를 통과시켜야 하는 기존 테스트(행안부 단계 검증)에서 쓴다.
+     * OCR 결과("홍길동", "901201-1234567")와 이름·생년월일(1990-12-01)이 일치하는 계정(userId=1L)을 가진
+     * verification mock을 만든다. 본인 명의 대조를 통과시켜야 하는 기존 테스트(행안부 단계 검증)와,
+     * processAsync 종료 후 락 해제(verification.getUser().getId() 필요) 테스트에서 함께 쓴다.
      */
     private IdentityVerification verificationWithMatchingUser() {
         IdentityVerification verification = mock(IdentityVerification.class);
         User user = mock(User.class);
+        when(user.getId()).thenReturn(1L);
         when(user.getName()).thenReturn("홍길동");
         when(user.getBirthDate()).thenReturn(LocalDate.of(1990, 12, 1));
+        when(verification.getUser()).thenReturn(user);
+        return verification;
+    }
+
+    /**
+     * OCR 추출 자체가 예외로 끝나는 테스트(matchesAccountHolder까지 도달하지 않음)용 — finally의
+     * 락 해제(verification.getUser().getId())에만 필요한 최소 stub. 이름·생년월일 stub은 쓰이지 않아
+     * strict stubs(UnnecessaryStubbingException) 대상이 되므로 verificationWithMatchingUser()와 분리한다.
+     */
+    private IdentityVerification verificationWithUserId() {
+        IdentityVerification verification = mock(IdentityVerification.class);
+        User user = mock(User.class);
+        when(user.getId()).thenReturn(1L);
         when(verification.getUser()).thenReturn(user);
         return verification;
     }
@@ -86,10 +105,12 @@ class OcrServiceTest {
             verifyNoInteractions(codefOcrClient);
             verify(ocrPersistenceService, never()).saveOcrSuccess(any(), any());
             verify(ocrPersistenceService, never()).saveFailure(any(), any());
+            // userId를 알 수 없는 세션이므로 락 해제 자체가 시도되지 않는다(TTL 만료로 자연 해소)
+            verifyNoInteractions(redisTemplate);
         }
 
         @Test
-        @DisplayName("OCR 성공 + 행안부 인증 성공 → saveGovSuccess 호출")
+        @DisplayName("OCR 성공 + 행안부 인증 성공 → saveGovSuccess 호출, 동시 제출 방지 락 해제")
         void ocrSuccess_govVerified() {
             IdentityVerification verification = verificationWithMatchingUser();
             when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
@@ -103,6 +124,7 @@ class OcrServiceTest {
             verify(ocrPersistenceService).saveOcrSuccess(10L, result);
             verify(ocrPersistenceService).saveGovSuccess(10L);
             verify(ocrPersistenceService, never()).saveFailure(any(), any());
+            verify(redisTemplate).delete(LOCK_PREFIX + 1L);
         }
 
         @Test
@@ -155,9 +177,10 @@ class OcrServiceTest {
         }
 
         @Test
-        @DisplayName("OCR 추출 실패 → saveFailure(이미지 처리 중 오류) — 예외 메시지는 DB에 남지 않는다")
+        @DisplayName("OCR 추출 실패 → saveFailure(이미지 처리 중 오류) — 예외 메시지는 DB에 남지 않는다, 락은 해제된다")
         void ocrExtractionFails_savesFailure() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithUserId();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             when(codefOcrClient.extractIdCard(any()))
                     .thenThrow(new BusinessException(UserErrorCode.OCR_FAILED));
 
@@ -166,6 +189,8 @@ class OcrServiceTest {
             // 고정 메시지만 저장되어야 함 — 예외 메시지(e.getMessage())가 그대로 DB에 평문 저장되면 안 된다
             verify(ocrPersistenceService).saveFailure(eq(10L), eq("이미지 처리 중 오류가 발생했습니다."));
             verifyNoInteractions(mockGovernmentVerifyService);
+            // 처리 실패로 끝나도 동시 제출 방지 락은 반드시 해제되어야 한다
+            verify(redisTemplate).delete(LOCK_PREFIX + 1L);
         }
 
         @Test
@@ -272,7 +297,8 @@ class OcrServiceTest {
         @Test
         @DisplayName("OCR 처리 오류 로그 — 예외 메시지는 DB(failureReason)에는 남지 않고 로그(error)에만 남는다")
         void ocrExtractionFails_exceptionMessageOnlyInLogNotInDb() {
-            when(ocrPersistenceService.loadVerification(10L)).thenReturn(mock(IdentityVerification.class));
+            IdentityVerification verification = verificationWithUserId();
+            when(ocrPersistenceService.loadVerification(10L)).thenReturn(verification);
             when(codefOcrClient.extractIdCard(any()))
                     .thenThrow(new BusinessException(UserErrorCode.OCR_FAILED));
 

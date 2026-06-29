@@ -26,6 +26,7 @@ import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import java.lang.reflect.Constructor;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -141,6 +142,21 @@ class AccountServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(unverifiedUser));
 
         assertThatThrownBy(() -> accountService.createAccount(2L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AccountErrorCode.IDENTITY_VERIFICATION_REQUIRED);
+    }
+
+    @Test
+    @DisplayName("본인인증 후 30일이 지난 사용자는 재인증 없이는 계좌를 개설할 수 없다")
+    void createAccountWithExpiredIdentityVerification() {
+        AccountCreateReq request = createAccountCreateReq("생활비 계좌", AccountType.DEPOSIT);
+        User expiredUser = createUser(3L, true);
+        ReflectionTestUtils.setField(expiredUser, "identityVerifiedAt", LocalDateTime.now().minusDays(31));
+
+        when(userRepository.findById(3L)).thenReturn(Optional.of(expiredUser));
+
+        assertThatThrownBy(() -> accountService.createAccount(3L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.IDENTITY_VERIFICATION_REQUIRED);
@@ -508,6 +524,10 @@ class AccountServiceTest {
         ReflectionTestUtils.setField(user, "phoneNumber", "01012345678");
         ReflectionTestUtils.setField(user, "birthDate", LocalDate.of(1995, 1, 1));
         ReflectionTestUtils.setField(user, "identityVerified", identityVerified);
+        if (Boolean.TRUE.equals(identityVerified)) {
+            // isIdentityVerificationValid()가 identityVerifiedAt도 함께 확인하므로 같이 세팅
+            ReflectionTestUtils.setField(user, "identityVerifiedAt", LocalDateTime.now());
+        }
         return user;
     }
 

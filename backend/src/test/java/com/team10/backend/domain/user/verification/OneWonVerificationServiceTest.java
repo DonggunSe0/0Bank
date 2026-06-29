@@ -49,7 +49,18 @@ class OneWonVerificationServiceTest {
                 "return v",
                 Long.class
         );
-        service = new OneWonVerificationService(redisTemplate, incrWithExpireIfNewScript, incrAndExpireScript);
+        RedisScript<Long> getAndDeleteIfMatchScript = RedisScript.of(
+                "local stored = redis.call('GET', KEYS[1])\n" +
+                "if stored == ARGV[1] then\n" +
+                "  redis.call('DEL', KEYS[1])\n" +
+                "  return 1\n" +
+                "else\n" +
+                "  return 0\n" +
+                "end",
+                Long.class
+        );
+        service = new OneWonVerificationService(
+                redisTemplate, incrWithExpireIfNewScript, incrAndExpireScript, getAndDeleteIfMatchScript);
     }
 
     @Nested
@@ -165,8 +176,9 @@ class OneWonVerificationServiceTest {
         @Test
         @DisplayName("저장된 코드가 없으면 EXPIRED")
         void noStoredCode_returnsExpired() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(KEY_PREFIX + 10L)).thenReturn(null);
+            when(redisTemplate.execute(any(RedisScript.class), eq(List.of(KEY_PREFIX + 10L)), any(Object[].class)))
+                    .thenReturn(0L);
+            when(redisTemplate.hasKey(KEY_PREFIX + 10L)).thenReturn(false);
 
             OneWonVerificationService.VerifyResult result = service.verify(10L, "1234");
 
@@ -174,23 +186,24 @@ class OneWonVerificationServiceTest {
         }
 
         @Test
-        @DisplayName("입력 코드가 일치하면 MATCHED, 코드/시도 키를 모두 삭제한다")
-        void matches_returnsMatchedAndDeletesKeys() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(KEY_PREFIX + 10L)).thenReturn("1234");
+        @DisplayName("입력 코드가 일치하면 MATCHED, 시도 카운터 키를 삭제한다(코드 키는 스크립트가 원자적으로 삭제)")
+        void matches_returnsMatchedAndDeletesAttemptKey() {
+            when(redisTemplate.execute(any(RedisScript.class), eq(List.of(KEY_PREFIX + 10L)), any(Object[].class)))
+                    .thenReturn(1L);
 
             OneWonVerificationService.VerifyResult result = service.verify(10L, "1234");
 
             assertThat(result).isEqualTo(OneWonVerificationService.VerifyResult.MATCHED);
-            verify(redisTemplate).delete(KEY_PREFIX + 10L);
             verify(redisTemplate).delete(ATTEMPT_PREFIX + 10L);
+            verify(redisTemplate, never()).delete(KEY_PREFIX + 10L);
         }
 
         @Test
         @DisplayName("불일치 + 시도 횟수 한도 미달 → MISMATCH")
         void mismatchUnderLimit_returnsMismatch() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(KEY_PREFIX + 10L)).thenReturn("1234");
+            when(redisTemplate.execute(any(RedisScript.class), eq(List.of(KEY_PREFIX + 10L)), any(Object[].class)))
+                    .thenReturn(0L);
+            when(redisTemplate.hasKey(KEY_PREFIX + 10L)).thenReturn(true);
             when(redisTemplate.execute(any(RedisScript.class), eq(List.of(ATTEMPT_PREFIX + 10L)), any(Object[].class)))
                     .thenReturn(3L);
 
@@ -203,8 +216,9 @@ class OneWonVerificationServiceTest {
         @Test
         @DisplayName("불일치 + 시도 횟수 한도 도달 → LOCKED, 코드/시도 키를 폐기한다")
         void mismatchReachesLimit_returnsLockedAndDeletesKeys() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(KEY_PREFIX + 10L)).thenReturn("1234");
+            when(redisTemplate.execute(any(RedisScript.class), eq(List.of(KEY_PREFIX + 10L)), any(Object[].class)))
+                    .thenReturn(0L);
+            when(redisTemplate.hasKey(KEY_PREFIX + 10L)).thenReturn(true);
             when(redisTemplate.execute(any(RedisScript.class), eq(List.of(ATTEMPT_PREFIX + 10L)), any(Object[].class)))
                     .thenReturn(5L);
 

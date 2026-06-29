@@ -109,7 +109,7 @@ public class InvestmentAccountService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 
-        if (!Boolean.TRUE.equals(user.getIdentityVerified())) {
+        if (!user.isIdentityVerificationValid()) {
             throw new BusinessException(InvestmentErrorCode.IDENTITY_VERIFICATION_REQUIRED);
         }
 

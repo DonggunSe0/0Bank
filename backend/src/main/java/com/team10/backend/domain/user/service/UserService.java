@@ -229,7 +229,7 @@ public class UserService {
                 user.getName(),
                 user.getPhoneNumber(),
                 user.getBirthDate(),
-                user.getIdentityVerified(),
+                user.isIdentityVerificationValid(),
                 user.getCreatedAt()
         );
     }

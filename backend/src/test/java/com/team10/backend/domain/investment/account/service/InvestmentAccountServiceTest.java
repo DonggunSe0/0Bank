@@ -26,6 +26,7 @@ import com.team10.backend.domain.user.exception.UserErrorCode;
 import com.team10.backend.domain.user.repository.UserRepository;
 import com.team10.backend.global.exception.BusinessException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -169,6 +170,22 @@ class InvestmentAccountServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(unverifiedUser));
 
         assertThatThrownBy(() -> investmentAccountService.createAccount(2L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(InvestmentErrorCode.IDENTITY_VERIFICATION_REQUIRED);
+    }
+
+    @Test
+    @DisplayName("본인인증 후 30일이 지난 사용자는 재인증 없이는 투자 계좌를 개설할 수 없다")
+    void createAccountWithExpiredIdentityVerification() {
+        InvestmentAccountCreateReq request =
+                new InvestmentAccountCreateReq("모의투자 계좌", "123456", CurrencyCode.KRW);
+        User expiredUser = createUser(3L, true);
+        ReflectionTestUtils.setField(expiredUser, "identityVerifiedAt", LocalDateTime.now().minusDays(31));
+
+        when(userRepository.findById(3L)).thenReturn(Optional.of(expiredUser));
+
+        assertThatThrownBy(() -> investmentAccountService.createAccount(3L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(InvestmentErrorCode.IDENTITY_VERIFICATION_REQUIRED);
@@ -415,6 +432,10 @@ class InvestmentAccountServiceTest {
         );
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "identityVerified", identityVerified);
+        if (identityVerified) {
+            // isIdentityVerificationValid()가 identityVerifiedAt도 함께 확인하므로 같이 세팅
+            ReflectionTestUtils.setField(user, "identityVerifiedAt", LocalDateTime.now());
+        }
         return user;
     }
 
