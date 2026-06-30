@@ -52,7 +52,7 @@ public class YoungPolicyController {
     }
 
     // DB에 저장된 청년 정책 상세 조회
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9]+}")
     @Operation(summary = "청년정책 상세 조회", description = "DB에 저장된 청년정책을 ID로 조회합니다.")
     public ResponseEntity<YoungPolicyDetailRes> getPolicy(
             @Parameter(description = "청년정책 ID", example = "1")

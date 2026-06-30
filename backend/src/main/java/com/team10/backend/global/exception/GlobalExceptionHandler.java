@@ -12,6 +12,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
@@ -106,6 +107,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         log.warn("[TYPE_MISMATCH] param='{}', value='{}' — {}", e.getName(), e.getValue(), e.getMessage());
         return ResponseEntity.badRequest().body(ErrorResponse.from(GlobalErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("[METHOD_NOT_ALLOWED] method='{}' — {}", e.getMethod(), e.getMessage());
+        return ResponseEntity
+                .status(GlobalErrorCode.METHOD_NOT_ALLOWED.getStatus())
+                .body(ErrorResponse.from(GlobalErrorCode.METHOD_NOT_ALLOWED));
     }
 
     // 예상치 못한 예외는 내부 정보를 노출하지 않고 500으로 처리

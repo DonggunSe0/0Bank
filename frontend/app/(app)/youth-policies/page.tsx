@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CalendarDays, ExternalLink, MapPin, Search, Sparkles } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -97,6 +97,8 @@ export default function YouthPoliciesPage() {
   const [query, setQuery] = useState('')
   const [userRegion, setUserRegion] = useState('')
   const [searched, setSearched] = useState(false)
+  const [recommendSearched, setRecommendSearched] = useState(false)
+  const recommendResultRef = useRef<HTMLDivElement>(null)
   const userAge = calculateAge(user?.birthDate)
   const categoryOptions = Array.from(
     new Set([
@@ -135,6 +137,7 @@ export default function YouthPoliciesPage() {
       })
       setPolicies(result.content)
       setRecommendedPolicies([])
+      setRecommendSearched(false)
       setSearched(true)
     } catch {
       setError('청년정책 검색에 실패했습니다.')
@@ -152,6 +155,8 @@ export default function YouthPoliciesPage() {
     }
 
     setRecommending(true)
+    setRecommendSearched(false)
+    setRecommendedPolicies([])
     try {
       const effectiveAge = parseNumber(age) ?? userAge
       const effectiveRegion = region || userRegion
@@ -162,12 +167,19 @@ export default function YouthPoliciesPage() {
         query: query.trim(),
       })
       setRecommendedPolicies(result.recommendedPolicies)
+      setRecommendSearched(true)
     } catch {
       setError('맞춤 정책 추천에 실패했습니다.')
+      setRecommendSearched(false)
     } finally {
       setRecommending(false)
     }
   }
+
+  useEffect(() => {
+    if (!recommendSearched) return
+    recommendResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [recommendSearched])
 
   async function resetFilters() {
     setError('')
@@ -177,6 +189,7 @@ export default function YouthPoliciesPage() {
     setKeyword('')
     setSearched(false)
     setRecommendedPolicies([])
+    setRecommendSearched(false)
     setLoading(true)
     try {
       const result = await getYouthPolicies()
@@ -313,7 +326,7 @@ export default function YouthPoliciesPage() {
       )}
 
       {recommendedPolicies.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div ref={recommendResultRef} className="flex flex-col gap-3 scroll-mt-20">
           <div>
             <h2 className="text-base font-semibold text-foreground">추천 정책</h2>
             <p className="text-xs text-muted-foreground mt-0.5">입력한 조건과 고민을 기준으로 추천된 정책입니다.</p>
@@ -326,6 +339,17 @@ export default function YouthPoliciesPage() {
             />
           ))}
         </div>
+      )}
+
+      {recommendSearched && recommendedPolicies.length === 0 && (
+        <Card ref={recommendResultRef} className="border-border scroll-mt-20">
+          <CardContent className="py-8 text-center">
+            <p className="text-sm font-medium text-foreground">추천 가능한 정책이 없습니다.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              나이, 지역, 카테고리 조건을 줄이거나 고민 내용을 다른 키워드로 입력해 주세요.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       <div>

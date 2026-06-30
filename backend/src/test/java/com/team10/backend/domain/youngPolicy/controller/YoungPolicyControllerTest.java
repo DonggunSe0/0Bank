@@ -88,6 +88,13 @@ class YoungPolicyControllerTest {
     }
 
     @Test
+    @DisplayName("추천 경로는 상세 조회 ID로 매칭하지 않는다")
+    void getRecommendPath_doesNotMatchDetailRoute() throws Exception {
+        mockMvc.perform(get("/api/v1/youth-policies/recommend"))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
     @DisplayName("청년 정책 동기화 API는 외부 호출 없이 service mock 결과를 반환한다")
     void syncPolicies_returnsMockedSyncResult() throws Exception {
         YoungPolicySyncRes response = new YoungPolicySyncRes(1, 1, 0, 0);

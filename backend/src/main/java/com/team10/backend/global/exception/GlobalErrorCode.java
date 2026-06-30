@@ -17,6 +17,7 @@ public enum GlobalErrorCode implements ErrorCode {
     IDEMPOTENCY_REQUEST_PROCESSING(HttpStatus.CONFLICT, "같은 키 요청이 아직 처리 중입니다."),
     IDEMPOTENCY_REQUEST_FAILED(HttpStatus.CONFLICT, "같은 키 요청은 이미 실패 처리되었습니다."),
     IDEMPOTENCY_REQUEST_EXPIRED(HttpStatus.CONFLICT, "만료된 멱등성 요청입니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final HttpStatus status;
