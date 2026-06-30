@@ -9,7 +9,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
 import java.util.List;
@@ -17,89 +16,80 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/** {@link LoginAttemptService}의 로그인 실패 관리(5회 → 30분 잠금) 검증. UserServiceTest는 Mock이라 실제 임계값/TTL 로직은 여기서 확인한다. */
+/**
+ * {@link LoginAttemptService}의 로그인 실패 관리(5회 → 30분 잠금) 검증.
+ * UserServiceTest는 Mock이라 실제 임계값/예약 로직은 여기서 확인한다.
+ *
+ * checkAndRecordAttempt()는 "확인(GET)"과 "기록(INCR)"을 하나의 Redis 스크립트
+ * (checkAndIncrIfBelowLimitScript)로 묶어 원자적으로 처리한다. 이 스크립트 자체는 Lua라서
+ * 여기서는 redisTemplate.execute()의 반환값을 스텁해 서비스가 그 반환값에 맞게 반응하는지만
+ * 검증한다 — 스크립트가 실제로 그 값을 내놓는지는 통합 테스트/k6(05-login-lockout-race.js)의 영역.
+ */
 @ExtendWith(MockitoExtension.class)
 class LoginAttemptServiceTest {
 
     private static final String FAIL_KEY_PREFIX = "login:fail:";
     private static final String EMAIL = "test@test.com";
+    private static final String MAX_FAIL_COUNT_ARG = "5";
+    private static final String LOCK_SECONDS_ARG = "1800";
 
     @Mock StringRedisTemplate redisTemplate;
-    @Mock ValueOperations<String, String> valueOperations;
-    @Mock RedisScript<Long> incrAndExpireScript;
+    @Mock RedisScript<Long> checkAndIncrIfBelowLimitScript;
 
     LoginAttemptService service;
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        service = new LoginAttemptService(redisTemplate, incrAndExpireScript);
+        service = new LoginAttemptService(redisTemplate, checkAndIncrIfBelowLimitScript);
     }
 
     @Nested
-    @DisplayName("checkAndThrowIfLocked")
-    class CheckAndThrowIfLocked {
+    @DisplayName("checkAndRecordAttempt")
+    class CheckAndRecordAttempt {
 
         @Test
-        @DisplayName("실패 기록 없음(null) → 통과")
-        void noRecord_doesNotThrow() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(FAIL_KEY_PREFIX + EMAIL)).thenReturn(null);
+        @DisplayName("스크립트가 양수(예약된 새 카운트)를 반환하면 통과")
+        void scriptReturnsPositiveCount_doesNotThrow() {
+            stubScript(3L);
 
-            assertThatCode(() -> service.checkAndThrowIfLocked(EMAIL)).doesNotThrowAnyException();
+            assertThatCode(() -> service.checkAndRecordAttempt(EMAIL)).doesNotThrowAnyException();
         }
 
         @Test
-        @DisplayName("실패 횟수가 임계값(5) 미만 → 통과")
-        void underThreshold_doesNotThrow() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(FAIL_KEY_PREFIX + EMAIL)).thenReturn("4");
+        @DisplayName("스크립트가 -1(이미 임계값 이상이라 증가 안 함)을 반환하면 LOGIN_LOCKED")
+        void scriptReturnsSentinel_throwsLoginLocked() {
+            stubScript(-1L);
 
-            assertThatCode(() -> service.checkAndThrowIfLocked(EMAIL)).doesNotThrowAnyException();
-        }
-
-        @Test
-        @DisplayName("실패 횟수가 정확히 임계값(5) → LOGIN_LOCKED")
-        void atThreshold_throwsLoginLocked() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(FAIL_KEY_PREFIX + EMAIL)).thenReturn("5");
-
-            assertThatThrownBy(() -> service.checkAndThrowIfLocked(EMAIL))
+            assertThatThrownBy(() -> service.checkAndRecordAttempt(EMAIL))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.LOGIN_LOCKED);
         }
 
         @Test
-        @DisplayName("실패 횟수가 임계값을 초과 → LOGIN_LOCKED (방어적 처리)")
-        void overThreshold_throwsLoginLocked() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.get(FAIL_KEY_PREFIX + EMAIL)).thenReturn("7");
+        @DisplayName("스크립트 실행 결과가 null이면(연결 문제 등) 방어적으로 LOGIN_LOCKED")
+        void scriptReturnsNull_throwsLoginLockedDefensively() {
+            stubScript(null);
 
-            assertThatThrownBy(() -> service.checkAndThrowIfLocked(EMAIL))
+            assertThatThrownBy(() -> service.checkAndRecordAttempt(EMAIL))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.LOGIN_LOCKED);
         }
-    }
-
-    @Nested
-    @DisplayName("recordFailure")
-    class RecordFailure {
 
         @Test
-        @DisplayName("이메일별 키로 INCR+EXPIRE 스크립트를 실행하고, TTL은 잠금 시간(30분=1800초)과 같다")
-        void executesIncrAndExpireScript_withLockDurationTtl() {
-            when(redisTemplate.execute(eq(incrAndExpireScript), eq(List.of(FAIL_KEY_PREFIX + EMAIL)), any(String.class)))
-                    .thenReturn(1L);
+        @DisplayName("이메일별 키로 스크립트를 실행하고, 임계값(5)·잠금시간(1800초)을 인자로 넘긴다")
+        void executesScript_withMaxFailCountAndLockDurationArgs() {
+            stubScript(1L);
 
-            service.recordFailure(EMAIL);
+            service.checkAndRecordAttempt(EMAIL);
 
             verify(redisTemplate).execute(
-                    eq(incrAndExpireScript),
+                    eq(checkAndIncrIfBelowLimitScript),
                     eq(List.of(FAIL_KEY_PREFIX + EMAIL)),
-                    eq("1800"));
+                    eq(MAX_FAIL_COUNT_ARG),
+                    eq(LOCK_SECONDS_ARG));
         }
     }
 
@@ -117,27 +107,25 @@ class LoginAttemptServiceTest {
     }
 
     @Test
-    @DisplayName("시나리오: 4회 실패까지는 통과, 5회째부터 잠긴다")
-    void scenario_locksExactlyAtFifthFailure() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-        for (int fail = 1; fail <= 4; fail++) {
-            when(valueOperations.get(FAIL_KEY_PREFIX + EMAIL)).thenReturn(String.valueOf(fail));
-            assertThat(catchLockedOrNull()).isNull();
+    @DisplayName("시나리오: 1~5번째 시도는 예약되고, 6번째(스크립트가 이미 5 이상으로 보고 -1 반환)부터 잠긴다")
+    void scenario_locksFromSixthAttempt() {
+        for (long count = 1; count <= 5; count++) {
+            stubScript(count);
+            assertThatCode(() -> service.checkAndRecordAttempt(EMAIL)).doesNotThrowAnyException();
         }
 
-        when(valueOperations.get(FAIL_KEY_PREFIX + EMAIL)).thenReturn("5");
-        assertThatThrownBy(() -> service.checkAndThrowIfLocked(EMAIL))
+        stubScript(-1L);
+        assertThatThrownBy(() -> service.checkAndRecordAttempt(EMAIL))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(UserErrorCode.LOGIN_LOCKED);
     }
 
-    private BusinessException catchLockedOrNull() {
-        try {
-            service.checkAndThrowIfLocked(EMAIL);
-            return null;
-        } catch (BusinessException e) {
-            return e;
-        }
+    private void stubScript(Long returnValue) {
+        when(redisTemplate.execute(
+                eq(checkAndIncrIfBelowLimitScript),
+                eq(List.of(FAIL_KEY_PREFIX + EMAIL)),
+                eq(MAX_FAIL_COUNT_ARG),
+                eq(LOCK_SECONDS_ARG)))
+                .thenReturn(returnValue);
     }
 }

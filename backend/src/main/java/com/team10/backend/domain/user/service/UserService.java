@@ -120,16 +120,14 @@ public class UserService {
     }
 
     public LoginRes login(LoginReq request) {
-        loginAttemptService.checkAndThrowIfLocked(request.email());
+        // 실패 슬롯을 원자적으로 먼저 예약(잠금이면 즉시 예외) — 이 예약 자체가 실패 기록을 겸하므로
+        // 아래 두 실패 분기에서 별도로 기록할 필요가 없다. 성공 시에만 clearFailures()로 되돌린다.
+        loginAttemptService.checkAndRecordAttempt(request.email());
 
         User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> {
-                    loginAttemptService.recordFailure(request.email());
-                    return new BusinessException(UserErrorCode.INVALID_CREDENTIALS);
-                });
+                .orElseThrow(() -> new BusinessException(UserErrorCode.INVALID_CREDENTIALS));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            loginAttemptService.recordFailure(request.email());
             throw new BusinessException(UserErrorCode.INVALID_CREDENTIALS);
         }
 

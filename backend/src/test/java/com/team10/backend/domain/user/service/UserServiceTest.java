@@ -243,7 +243,7 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("이메일 없음 → INVALID_CREDENTIALS + 실패 횟수 증가")
+        @DisplayName("이메일 없음 → INVALID_CREDENTIALS (실패 슬롯은 호출 전에 이미 원자적으로 예약됨)")
         void emailNotFound() {
             LoginReq req = new LoginReq("none@test.com", "Password1!");
 
@@ -253,11 +253,11 @@ class UserServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.INVALID_CREDENTIALS);
 
-            verify(loginAttemptService).recordFailure("none@test.com");
+            verify(loginAttemptService).checkAndRecordAttempt("none@test.com");
         }
 
         @Test
-        @DisplayName("비밀번호 불일치 → INVALID_CREDENTIALS + 실패 횟수 증가")
+        @DisplayName("비밀번호 불일치 → INVALID_CREDENTIALS (실패 슬롯은 호출 전에 이미 원자적으로 예약됨)")
         void wrongPassword() {
             LoginReq req = new LoginReq("test@test.com", "WrongPass1!");
 
@@ -268,7 +268,7 @@ class UserServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode").isEqualTo(UserErrorCode.INVALID_CREDENTIALS);
 
-            verify(loginAttemptService).recordFailure("test@test.com");
+            verify(loginAttemptService).checkAndRecordAttempt("test@test.com");
         }
 
         @Test
@@ -277,7 +277,7 @@ class UserServiceTest {
             LoginReq req = new LoginReq("test@test.com", "Password1!");
 
             doThrow(new BusinessException(UserErrorCode.LOGIN_LOCKED))
-                    .when(loginAttemptService).checkAndThrowIfLocked("test@test.com");
+                    .when(loginAttemptService).checkAndRecordAttempt("test@test.com");
 
             assertThatThrownBy(() -> userService.login(req))
                     .isInstanceOf(BusinessException.class)
