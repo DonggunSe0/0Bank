@@ -81,6 +81,8 @@ const defaultCategoryOptions = [
   '참여･기반',
 ]
 
+type RecommendStatus = 'idle' | 'success' | 'empty'
+
 export default function YouthPoliciesPage() {
   const { user } = useAuth()
   const router = useRouter()
@@ -97,8 +99,9 @@ export default function YouthPoliciesPage() {
   const [query, setQuery] = useState('')
   const [userRegion, setUserRegion] = useState('')
   const [searched, setSearched] = useState(false)
-  const [recommendSearched, setRecommendSearched] = useState(false)
+  const [recommendStatus, setRecommendStatus] = useState<RecommendStatus>('idle')
   const recommendResultRef = useRef<HTMLDivElement>(null)
+  const recommendRequestSeq = useRef(0)
   const userAge = calculateAge(user?.birthDate)
   const categoryOptions = Array.from(
     new Set([
@@ -137,7 +140,8 @@ export default function YouthPoliciesPage() {
       })
       setPolicies(result.content)
       setRecommendedPolicies([])
-      setRecommendSearched(false)
+      setRecommendStatus('idle')
+      recommendRequestSeq.current += 1
       setSearched(true)
     } catch {
       setError('청년정책 검색에 실패했습니다.')
@@ -155,8 +159,10 @@ export default function YouthPoliciesPage() {
     }
 
     setRecommending(true)
-    setRecommendSearched(false)
+    setRecommendStatus('idle')
     setRecommendedPolicies([])
+    const requestSeq = recommendRequestSeq.current + 1
+    recommendRequestSeq.current = requestSeq
     try {
       const effectiveAge = parseNumber(age) ?? userAge
       const effectiveRegion = region || userRegion
@@ -166,20 +172,29 @@ export default function YouthPoliciesPage() {
         category,
         query: query.trim(),
       })
-      setRecommendedPolicies(result.recommendedPolicies)
-      setRecommendSearched(true)
+      if (recommendRequestSeq.current !== requestSeq) return
+
+      const nextRecommendedPolicies = Array.isArray(result.recommendedPolicies)
+        ? result.recommendedPolicies
+        : []
+      setRecommendedPolicies(nextRecommendedPolicies)
+      setRecommendStatus(nextRecommendedPolicies.length > 0 ? 'success' : 'empty')
     } catch {
+      if (recommendRequestSeq.current !== requestSeq) return
+
       setError('맞춤 정책 추천에 실패했습니다.')
-      setRecommendSearched(false)
+      setRecommendStatus('idle')
     } finally {
-      setRecommending(false)
+      if (recommendRequestSeq.current === requestSeq) {
+        setRecommending(false)
+      }
     }
   }
 
   useEffect(() => {
-    if (!recommendSearched) return
+    if (recommendStatus === 'idle') return
     recommendResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [recommendSearched])
+  }, [recommendStatus])
 
   async function resetFilters() {
     setError('')
@@ -189,7 +204,8 @@ export default function YouthPoliciesPage() {
     setKeyword('')
     setSearched(false)
     setRecommendedPolicies([])
-    setRecommendSearched(false)
+    setRecommendStatus('idle')
+    recommendRequestSeq.current += 1
     setLoading(true)
     try {
       const result = await getYouthPolicies()
@@ -325,7 +341,7 @@ export default function YouthPoliciesPage() {
         </Alert>
       )}
 
-      {recommendedPolicies.length > 0 && (
+      {recommendStatus === 'success' && (
         <div ref={recommendResultRef} className="flex flex-col gap-3 scroll-mt-20">
           <div>
             <h2 className="text-base font-semibold text-foreground">추천 정책</h2>
@@ -341,7 +357,7 @@ export default function YouthPoliciesPage() {
         </div>
       )}
 
-      {recommendSearched && recommendedPolicies.length === 0 && (
+      {recommendStatus === 'empty' && (
         <Card ref={recommendResultRef} className="border-border scroll-mt-20">
           <CardContent className="py-8 text-center">
             <p className="text-sm font-medium text-foreground">추천 가능한 정책이 없습니다.</p>
