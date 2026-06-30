@@ -26,8 +26,6 @@ spring:
 
 logging:
   level:
-    org.hibernate.orm.jdbc.bind: TRACE
-    org.hibernate.orm.jdbc.extract: TRACE
     com.team10.backend.domain.user.ocr: DEBUG
 
 cors:
