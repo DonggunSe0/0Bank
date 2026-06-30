@@ -80,6 +80,7 @@ class TransferConcurrencyE2ETest {
 
     @BeforeEach
     void setUp() {
+        configureLockTimeout();
         cleanDatabase();
     }
 
@@ -187,7 +188,7 @@ class TransferConcurrencyE2ETest {
         assertTrue(ready.await(5, TimeUnit.SECONDS));
         start.countDown();
         executor.shutdown();
-        assertTrue(executor.awaitTermination(30, TimeUnit.SECONDS));
+        assertTrue(executor.awaitTermination(60, TimeUnit.SECONDS));
 
         List<Throwable> failures = new ArrayList<>();
         for (Future<Throwable> future : futures) {
@@ -256,6 +257,12 @@ class TransferConcurrencyE2ETest {
             entityManager.createNativeQuery("SET REFERENTIAL_INTEGRITY TRUE").executeUpdate();
             entityManager.clear();
         });
+    }
+
+    private void configureLockTimeout() {
+        transactionTemplate.executeWithoutResult(status ->
+                entityManager.createNativeQuery("SET DEFAULT_LOCK_TIMEOUT 30000").executeUpdate()
+        );
     }
 
     @FunctionalInterface

@@ -1,7 +1,6 @@
 package com.team10.backend.domain.transfer.service;
 
 import com.team10.backend.domain.account.entity.Account;
-import com.team10.backend.domain.account.exception.AccountErrorCode;
 import com.team10.backend.domain.account.repository.AccountRepository;
 import com.team10.backend.domain.account.type.AccountType;
 import com.team10.backend.domain.transaction.entity.TransactionHistory;
@@ -15,7 +14,6 @@ import com.team10.backend.domain.transfer.repository.TransferRepository;
 import com.team10.backend.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +27,6 @@ public class TransferBusinessService {
     private final TransactionHistoryRepository transactionHistoryRepository;
     private final TransferRepository transferRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public TopUpRes executeTopUp(Long userId, Long accountId, Long amount, String memo) {
@@ -76,10 +73,9 @@ public class TransferBusinessService {
             Long userId,
             Long senderAccountId,
             String receiverAccountNumber,
-            String accountPassword,
-            Long amount, String memo
+            Long amount,
+            String memo
     ) {
-
         // amount 1원 이상 확인
         if (amount == null || amount < 1L) throw new BusinessException(TransferErrorCode.INVALID_INPUT_VALUE);
 
@@ -100,8 +96,6 @@ public class TransferBusinessService {
         validateDepositAccount(senderAccount);
         // 받는 계좌도 입출금계좌만 가능
         validateDepositAccount(receiverAccount);
-        // 출금 계좌 비밀번호 일치 여부 확인
-        validateAccountPassword(senderAccount, accountPassword);
 
         // 이전 잔액 캡쳐
         Long senderBalanceBefore = senderAccount.getBalance();
@@ -151,22 +145,6 @@ public class TransferBusinessService {
         transactionHistoryRepository.save(receiverHistory);
 
         return TransferRes.from(transfer, transferredAt);
-    }
-
-    private void validateAccountPassword(Account senderAccount, String accountPassword) {
-        try {
-            senderAccount.verifyPassword(passwordEncoder, accountPassword);
-        } catch (BusinessException e) {
-            if (e.getErrorCode() == AccountErrorCode.ACCOUNT_PASSWORD_NOT_SET) {
-                throw new BusinessException(TransferErrorCode.ACCOUNT_PASSWORD_NOT_SET);
-            }
-
-            if (e.getErrorCode() == AccountErrorCode.ACCOUNT_PASSWORD_MISMATCH) {
-                throw new BusinessException(TransferErrorCode.ACCOUNT_PASSWORD_MISMATCH);
-            }
-
-            throw e;
-        }
     }
 
     private LockedTransferAccounts lockTransferAccounts(

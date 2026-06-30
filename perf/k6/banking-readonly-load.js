@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
-import { baseUrl, jsonHeaders, login, pickAccountId } from './lib/banking.js';
+import { baseUrl, buildAccountActors, jsonHeaders, login, pick } from './lib/banking.js';
 
 // 로그인 비용을 제외하고 인증 이후 조회 API만 반복 호출하는 부하 테스트입니다.
 //
@@ -42,15 +42,24 @@ export const options = {
 const readonlyJourneyFailureRate = new Rate('banking_readonly_journey_failed');
 
 export function setup() {
-  // 전체 테스트 시작 전에 한 번만 로그인합니다.
+  // 전체 테스트 시작 전에 테스트 사용자별로 한 번씩 로그인합니다.
   // 조회 API 병목을 보기 위한 스크립트라 iteration마다 로그인하지 않습니다.
+  const actors = buildAccountActors();
+  if (actors.length === 0) {
+    throw new Error('TEST_EMAIL or TEST_EMAILS must be set for banking-readonly-load.js.');
+  }
+
   return {
-    token: login({ api: 'setup-auth-login' }),
+    actors: actors.map((actor) => ({
+      token: login({ api: 'setup-auth-login' }, { email: actor.email }),
+      accountIds: actor.accountIds,
+    })),
   };
 }
 
 export default function (data) {
-  const authHeaders = { headers: jsonHeaders(data.token) };
+  const actor = data.actors[(__VU + __ITER) % data.actors.length];
+  const authHeaders = { headers: jsonHeaders(actor.token) };
 
   const me = group('1. get current user', () => http.get(
     `${baseUrl}/api/v1/users/me`,
@@ -74,7 +83,7 @@ export default function (data) {
     'accounts status is 200': (r) => r.status === 200,
   });
 
-  const accountId = pickAccountId();
+  const accountId = pick(actor.accountIds);
   if (accountId) {
     const transactions = group('3. get account transactions', () => http.get(
       `${baseUrl}/api/v1/accounts/${accountId}/transactions?page=0&sortDirection=DESC`,

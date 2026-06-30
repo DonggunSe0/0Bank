@@ -4,9 +4,7 @@
 --   2. 외부 주식 API로 적재된 실제 stocks 데이터 존재
 --
 -- 이 파일은 가짜 stocks 데이터를 생성하지 않습니다.
--- 아래 stock_code 값은 확정값이 아니라 확인/교체가 필요한 후보값입니다.
--- AWS/DB 담당자는 EC2 MySQL의 실제 stocks.stock_code 값을 확인한 뒤,
--- 존재하지 않는 코드가 있으면 실제 존재하는 코드로 교체해야 합니다.
+-- 아래 stock_code 값은 EC2 MySQL의 실제 stocks.stock_code 기준으로 확인한 값입니다.
 
 SET @k6_account_password_hash = '$2y$10$JLOUv1hc6oGsQYLvePh8FOBuoWZRgbRnUgdwdY3pl81J9TmopxBTO';
 
@@ -32,17 +30,16 @@ SELECT
   s.id,
   NOW(6)
 FROM (
-  -- 확인 필요(AWS/DB): 아래 stock_code가 EC2 MySQL에 없으면 실제 존재하는 stocks.stock_code로 교체하세요.
-  SELECT '005930' AS stock_code, 71000.00 AS average_price, 100 AS quantity
-  UNION ALL SELECT '000660', 160000.00, 50
-  UNION ALL SELECT '035420', 210000.00, 30
-  UNION ALL SELECT '035720', 52000.00, 80
-  UNION ALL SELECT '005380', 240000.00, 25
-  UNION ALL SELECT '068270', 180000.00, 40
-  UNION ALL SELECT '373220', 420000.00, 15
-  UNION ALL SELECT '207940', 850000.00, 10
-  UNION ALL SELECT '051910', 360000.00, 20
-  UNION ALL SELECT '006400', 390000.00, 18
+  SELECT '000150' AS stock_code, 50603.00 AS average_price, 100 AS quantity
+  UNION ALL SELECT '000120', 32145.00, 80
+  UNION ALL SELECT '000140', 5883.00, 120
+  UNION ALL SELECT '000880', 214514.00, 40
+  UNION ALL SELECT '005830', 71054.00, 70
+  UNION ALL SELECT '010950', 89427.00, 60
+  UNION ALL SELECT '015760', 243985.00, 30
+  UNION ALL SELECT '016360', 71227.00, 70
+  UNION ALL SELECT '017670', 43923.00, 90
+  UNION ALL SELECT '0204S0', 10000.00, 50
 ) seed
 JOIN stocks s ON s.stock_code = seed.stock_code
 JOIN (
@@ -56,10 +53,9 @@ ON DUPLICATE KEY UPDATE
   updated_at = NOW(6);
 
 -- 실행 후 확인용 쿼리입니다.
--- matched_stock_count가 expected_stock_count보다 작으면,
--- 위 stock_code 후보와 perf/k6/.env.local의 STOCK_CODES 값을 실제 존재하는 코드로 바꿔야 합니다.
+-- matched_stock_count가 expected_stock_count보다 작으면 위 stock_code 값을 다시 확인해야 합니다.
 SELECT
   10 AS expected_stock_count,
   COUNT(*) AS matched_stock_count
 FROM stocks
-WHERE stock_code IN ('005930', '000660', '035420', '035720', '005380', '068270', '373220', '207940', '051910', '006400');
+WHERE stock_code IN ('000150', '000120', '000140', '000880', '005830', '010950', '015760', '016360', '017670', '0204S0');

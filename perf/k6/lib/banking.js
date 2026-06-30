@@ -4,10 +4,15 @@ import { check } from 'k6';
 export const baseUrl = __ENV.BASE_URL || 'http://localhost:8080';
 export const email = __ENV.TEST_EMAIL;
 export const password = __ENV.TEST_PASSWORD;
+export const testEmails = (__ENV.TEST_EMAILS || __ENV.TEST_EMAIL || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 export const accountIds = (__ENV.ACCOUNT_IDS || __ENV.ACCOUNT_ID || '')
   .split(',')
   .map((id) => id.trim())
   .filter(Boolean);
+const accountsPerUser = Number(__ENV.ACCOUNTS_PER_USER || 2);
 
 export function jsonHeaders(token) {
   const headers = {
@@ -27,6 +32,21 @@ export function pickAccountId() {
   }
 
   return accountIds[Math.floor(Math.random() * accountIds.length)];
+}
+
+export function pick(values) {
+  if (!values || values.length === 0) {
+    return null;
+  }
+
+  return values[Math.floor(Math.random() * values.length)];
+}
+
+export function buildAccountActors() {
+  return testEmails.map((testEmail, index) => ({
+    email: testEmail,
+    accountIds: accountIds.slice(index * accountsPerUser, (index + 1) * accountsPerUser),
+  }));
 }
 
 export function login(tags = { api: 'auth-login' }, credentials = {}) {

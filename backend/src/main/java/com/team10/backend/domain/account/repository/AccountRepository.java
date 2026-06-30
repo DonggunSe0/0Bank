@@ -20,6 +20,18 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     Optional<Account> findByIdAndUserId(Long accountId, Long userId);
 
+    @Query("""
+            select new com.team10.backend.domain.account.repository.AccountTransferVerification(
+                a.id,
+                a.accountType,
+                a.status,
+                a.accountPasswordHash
+            )
+            from Account a
+            where a.id = :accountId and a.user.id = :userId
+            """)
+    Optional<AccountTransferVerification> findTransferVerificationByIdAndUserId(Long accountId, Long userId);
+
     boolean existsByAccountNumber(String accountNumber);
 
     Optional<Account> findByAccountNumber(String accountNumber);

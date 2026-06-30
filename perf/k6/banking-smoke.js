@@ -3,9 +3,10 @@ import { check, group, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 import {
   baseUrl,
+  buildAccountActors,
   jsonHeaders,
   login as requestLogin,
-  pickAccountId,
+  pick,
 } from './lib/banking.js';
 
 // 로그인 이후 실제 인증 API를 짧게 확인하는 스모크 테스트입니다.
@@ -32,17 +33,20 @@ const loginTrend = new Trend('banking_login_duration');
 // 여정 단위 실패율입니다. HTTP 개별 요청 실패율과 별도로 사용자 플로우 실패를 봅니다.
 const journeyFailureRate = new Rate('banking_journey_failed');
 
-function login() {
+const actors = buildAccountActors();
+
+function login(actor) {
   const startedAt = Date.now();
-  const token = requestLogin({ api: 'auth-login' });
+  const token = requestLogin({ api: 'auth-login' }, actor ? { email: actor.email } : {});
   loginTrend.add(Date.now() - startedAt);
 
   return token;
 }
 
 export default function () {
+  const actor = actors.length > 0 ? actors[(__VU + __ITER) % actors.length] : null;
   // k6의 각 iteration은 "로그인 -> 내 정보 조회 -> 계좌 목록 조회" 순서로 실행됩니다.
-  const token = group('1. login', () => login());
+  const token = group('1. login', () => login(actor));
   const authHeaders = { headers: jsonHeaders(token) };
 
   const me = group('2. get current user', () => http.get(
@@ -69,7 +73,7 @@ export default function () {
 
   // ACCOUNT_ID 또는 ACCOUNT_IDS를 넘긴 경우에만 거래내역 조회를 추가합니다.
   // 테스트 데이터가 없을 때도 기본 smoke가 가능하도록 선택 처리합니다.
-  const accountId = pickAccountId();
+  const accountId = actor ? pick(actor.accountIds) : null;
   if (accountId) {
     const transactions = group('4. get account transactions', () => http.get(
       `${baseUrl}/api/v1/accounts/${accountId}/transactions?page=0&sortDirection=DESC`,

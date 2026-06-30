@@ -36,19 +36,18 @@ docker exec -i mysql mysql -u root -p snaptix < 04_k6_young_policies.sql
 
 ## AWS/DB 담당자 확인 필요
 
-`03_k6_investment.sql`의 주식 코드는 아직 확정값이 아닙니다. 아래 값은 k6 투자 테스트를 작성하기 위한 후보값이며, EC2 MySQL의 실제 `stocks.stock_code`에 존재하는지 확인해야 합니다.
+`03_k6_investment.sql`의 주식 코드는 EC2 MySQL의 실제 `stocks.stock_code`를 기준으로 반영했습니다.
 
 ```text
-확인/교체 필요:
-005930,000660,035420,035720,005380,068270,373220,207940,051910,006400
+000150,000120,000140,000880,005830,010950,015760,016360,017670,0204S0
 ```
 
 AWS/DB 담당자는 아래를 확인합니다.
 
 | 확인 항목 | 확인 방법 | 조치 |
 |---|---|---|
-| `stocks.stock_code` 존재 여부 | `03_k6_investment.sql` 실행 후 `matched_stock_count` 확인 | `10`보다 작으면 실제 존재하는 종목 코드로 SQL의 `stock_code` 후보를 교체 |
-| k6 env의 `STOCK_CODES` | SQL에 최종 반영한 종목 코드와 비교 | `perf/k6/.env.local`의 `STOCK_CODES`에도 같은 코드 반영 |
+| `stocks.stock_code` 존재 여부 | `03_k6_investment.sql` 실행 후 `matched_stock_count` 확인 | `10`보다 작으면 `stocks` 데이터 적재 상태 또는 코드 오타 확인 |
+| k6 env의 `STOCK_CODES` | SQL에 반영한 종목 코드와 비교 | `perf/k6/.env.local`의 `STOCK_CODES`에도 같은 코드 반영 |
 | 보유종목 생성 여부 | `investment_holdings`에 `investment_account_id` 900001, 900002 데이터 생성 확인 | 생성 건수가 부족하면 종목 코드 또는 주식 마스터 적재 상태 확인 |
 
 `04_k6_young_policies.sql`은 데이터를 생성하지 않고, 실제 적재된 청년정책 중 k6 테스트에 쓸 만한 정책을 조회합니다. 고정된 상세 조회 대상이 필요하면 조회 결과의 `id` 값을 k6 env의 `POLICY_IDS`에 넣습니다.
@@ -57,7 +56,7 @@ AWS/DB 담당자는 아래를 확인합니다.
 
 MacBook/IntelliJ 터미널에서 EC2 서버를 대상으로 k6를 실행할 때 `perf/k6/.env.local`에 아래 값을 넣습니다.
 
-`TEST_EMAIL`/`SENDER_ACCOUNT_ID`/`RECEIVER_ACCOUNT_NUMBER`는 단일 사용자 이체 테스트용이고, `TEST_EMAILS`/`SENDER_ACCOUNT_IDS`/`RECEIVER_ACCOUNT_NUMBERS`는 20명/20개 출금 계좌로 분산 이체 부하를 줄 때 사용합니다.
+`TEST_EMAIL`/`KRW_ACCOUNT_ID`/`FX_WALLET_ID`/`SENDER_ACCOUNT_ID`/`RECEIVER_ACCOUNT_NUMBER`는 단일 사용자 테스트용이고, `TEST_EMAILS`와 전체 `ACCOUNT_IDS`는 여러 사용자 계좌 조회 흐름에 사용합니다. `KRW_ACCOUNT_IDS`/`FX_WALLET_IDS`는 20명/20개 계좌로 분산 환전 부하를 줄 때 사용하고, `SENDER_ACCOUNT_IDS`/`RECEIVER_ACCOUNT_NUMBERS`는 20명/20개 출금 계좌로 분산 이체 부하를 줄 때 사용합니다.
 
 ```bash
 export BASE_URL=https://api.0bank.shop
@@ -65,17 +64,20 @@ export BASE_URL=https://api.0bank.shop
 export TEST_EMAIL=k6-user1@0bank.test
 export TEST_EMAILS=k6-user1@0bank.test,k6-user2@0bank.test,k6-user3@0bank.test,k6-user4@0bank.test,k6-user5@0bank.test,k6-user6@0bank.test,k6-user7@0bank.test,k6-user8@0bank.test,k6-user9@0bank.test,k6-user10@0bank.test,k6-user11@0bank.test,k6-user12@0bank.test,k6-user13@0bank.test,k6-user14@0bank.test,k6-user15@0bank.test,k6-user16@0bank.test,k6-user17@0bank.test,k6-user18@0bank.test,k6-user19@0bank.test,k6-user20@0bank.test
 export TEST_PASSWORD='Password1!'
-export ACCOUNT_IDS=900001,900002,900003,900004,900005,900006,900007,900008,900009,900010
+export ACCOUNT_IDS=900001,900002,900003,900004,900005,900006,900007,900008,900009,900010,900011,900012,900013,900014,900015,900016,900017,900018,900019,900020,900021,900022,900023,900024,900025,900026,900027,900028,900029,900030,900031,900032,900033,900034,900035,900036,900037,900038,900039,900040
+export ACCOUNTS_PER_USER=2
 
 export KRW_ACCOUNT_ID=900001
 export FX_WALLET_ID=900001
+export KRW_ACCOUNT_IDS=900001,900003,900005,900007,900009,900011,900013,900015,900017,900019,900021,900023,900025,900027,900029,900031,900033,900035,900037,900039
+export FX_WALLET_IDS=900001,900002,900003,900004,900005,900006,900007,900008,900009,900010,900011,900012,900013,900014,900015,900016,900017,900018,900019,900020
 export EXCHANGE_FROM=KRW
 export EXCHANGE_TO=USD
 export EXCHANGE_AMOUNT=1000
 
 export INVESTMENT_ACCOUNT_IDS=900001
-# 실제 EC2 stocks.stock_code 확인 후 아래 값을 교체하세요.
-export STOCK_CODES=005930,000660,035420,035720
+# EC2 MySQL의 실제 stocks.stock_code 기준입니다.
+export STOCK_CODES=000150,000120,000140,000880,005830,010950,015760,016360,017670,0204S0
 export STOCK_KEYWORDS=삼성,현대,카카오
 
 export SENDER_ACCOUNT_ID=900001
@@ -111,6 +113,7 @@ TARGET_VUS=2 k6 run perf/k6/policy-recommend.js
 source perf/k6/.env.local
 
 TARGET_VUS=1 k6 run perf/k6/exchange-load.js
+TARGET_VUS=5 RUN_EXCHANGE_ORDER=true k6 run perf/k6/exchange-distributed-load.js
 TARGET_VUS=1 k6 run perf/k6/transfer-load.js
 ```
 
@@ -118,4 +121,5 @@ TARGET_VUS=1 k6 run perf/k6/transfer-load.js
 
 - `transfer-load.js`는 실제 송금 데이터와 거래내역을 생성합니다.
 - `exchange-load.js`에서 `RUN_EXCHANGE_ORDER=true`를 추가하면 실제 환전 주문이 생성됩니다.
+- `exchange-distributed-load.js`는 `TEST_EMAILS`, `KRW_ACCOUNT_IDS`, `FX_WALLET_IDS`를 같은 순서로 매핑해 여러 사용자 환전 주문을 생성합니다.
 - BCrypt 기준 평문 비밀번호는 사용자 `Password1!`, 계좌 `123456`입니다.
