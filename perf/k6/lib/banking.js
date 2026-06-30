@@ -29,14 +29,17 @@ export function pickAccountId() {
   return accountIds[Math.floor(Math.random() * accountIds.length)];
 }
 
-export function login(tags = { api: 'auth-login' }) {
-  if (!email || !password) {
+export function login(tags = { api: 'auth-login' }, credentials = {}) {
+  const loginEmail = credentials.email || email;
+  const loginPassword = credentials.password || password;
+
+  if (!loginEmail || !loginPassword) {
     throw new Error('TEST_EMAIL and TEST_PASSWORD are required.');
   }
 
   const res = http.post(
     `${baseUrl}/api/v1/auth/login`,
-    JSON.stringify({ email, password }),
+    JSON.stringify({ email: loginEmail, password: loginPassword }),
     {
       headers: jsonHeaders(),
       tags,

@@ -6,8 +6,18 @@ import { baseUrl, jsonHeaders, login } from './lib/banking.js';
 // 계좌 이체 API의 동시성과 멱등성 동작을 확인하는 테스트입니다.
 // 실제 송금 데이터가 생성되므로 반드시 테스트 전용 계좌와 작은 금액으로만 실행하세요.
 const targetVus = Number(__ENV.TARGET_VUS || 2);
-const senderAccountId = __ENV.SENDER_ACCOUNT_ID;
-const receiverAccountNumber = __ENV.RECEIVER_ACCOUNT_NUMBER;
+const testEmails = (__ENV.TEST_EMAILS || __ENV.TEST_EMAIL || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const senderAccountIds = (__ENV.SENDER_ACCOUNT_IDS || __ENV.SENDER_ACCOUNT_ID || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const receiverAccountNumbers = (__ENV.RECEIVER_ACCOUNT_NUMBERS || __ENV.RECEIVER_ACCOUNT_NUMBER || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 const accountPassword = __ENV.ACCOUNT_PASSWORD;
 const amount = Number(__ENV.TRANSFER_AMOUNT || 1);
 const memo = __ENV.TRANSFER_MEMO || 'k6 transfer load test';
@@ -46,15 +56,22 @@ const journeyFailureRate = new Rate('transfer_journey_failed');
 
 export function setup() {
   const missing = [];
-  if (!senderAccountId) missing.push('SENDER_ACCOUNT_ID');
-  if (!receiverAccountNumber) missing.push('RECEIVER_ACCOUNT_NUMBER');
+  if (testEmails.length === 0) missing.push('TEST_EMAIL or TEST_EMAILS');
+  if (senderAccountIds.length === 0) missing.push('SENDER_ACCOUNT_ID or SENDER_ACCOUNT_IDS');
+  if (receiverAccountNumbers.length === 0) missing.push('RECEIVER_ACCOUNT_NUMBER or RECEIVER_ACCOUNT_NUMBERS');
   if (!accountPassword) missing.push('ACCOUNT_PASSWORD');
 
   if (missing.length > 0) {
     throw new Error(`${missing.join(', ')} must be set for transfer-load.js.`);
   }
 
-  return { token: login({ api: 'setup-auth-login' }) };
+  return {
+    actors: testEmails.map((testEmail, index) => ({
+      token: login({ api: 'setup-auth-login' }, { email: testEmail }),
+      senderAccountId: senderAccountIds[index % senderAccountIds.length],
+    })),
+    receiverAccountNumbers,
+  };
 }
 
 function idempotencyKey() {
@@ -66,11 +83,13 @@ function idempotencyKey() {
 }
 
 export default function (data) {
+  const actor = data.actors[(__VU + __ITER) % data.actors.length];
+  const receiverAccountNumber = data.receiverAccountNumbers[(__VU + __ITER) % data.receiverAccountNumbers.length];
   const startedAt = Date.now();
   const transfer = group('1. create transfer', () => http.post(
     `${baseUrl}/api/v1/transfers`,
     JSON.stringify({
-      senderAccountId: Number(senderAccountId),
+      senderAccountId: Number(actor.senderAccountId),
       receiverAccountNumber,
       accountPassword,
       amount,
@@ -78,7 +97,7 @@ export default function (data) {
     }),
     {
       headers: {
-        ...jsonHeaders(data.token),
+        ...jsonHeaders(actor.token),
         'Idempotency-Key': idempotencyKey(),
       },
       tags: { api: 'transfer-create' },
