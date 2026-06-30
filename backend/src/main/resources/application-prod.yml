@@ -39,3 +39,6 @@ logging:
 
 cors:
   allowed-origins: https://0bank.shop , https://www.0bank.shop
+
+openapi:
+  server-url: https://api.0bank.shop

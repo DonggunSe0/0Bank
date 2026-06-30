@@ -5,18 +5,25 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import java.util.List;
 import org.springdoc.core.models.GroupedOpenApi;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 @Configuration
 public class OpenApiConfig {
+
+    @Value("${openapi.server-url:}")
+    private String serverUrl;
 
     @Bean
     public OpenAPI openAPI() {
         String schemeName = "bearerAuth";
 
-        return new OpenAPI()
+        OpenAPI openAPI = new OpenAPI()
                 .info(new Info()
                         .title("MoneyStory API")
                         .version("v1"))
@@ -27,6 +34,12 @@ public class OpenApiConfig {
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("JWT")));
+
+        if (StringUtils.hasText(serverUrl)) {
+            openAPI.servers(List.of(new Server().url(serverUrl)));
+        }
+
+        return openAPI;
     }
 
     @Bean
